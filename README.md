@@ -1,5 +1,5 @@
 # Percephone
-Percephone is a tool to analyze calcium imaging recordings in combination with behavioral task data 
+Percephone is a tool to analyze calcium imaging recordings in combination with behavioral data obtained with a perceptual decision-making task
 
 # Requirements:
   - Python 3.6 or more
