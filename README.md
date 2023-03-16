@@ -6,7 +6,7 @@ Percephone is a tool to analyze calcium imaging recordings in combination with b
   - the versions of the differents python dependencies are avaible in the requirements.txt
 
 # Documentation:
-All the documentation can be found
+Documentation is available [here](https://percephone.readthedocs.io/en/latest/)
 
 # Authors
 Ourania Semelidou & Théo Gauvrit
