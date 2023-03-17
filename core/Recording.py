@@ -3,7 +3,6 @@
 Delta F over F and corrections-> Alexandre Cornier in spiflash
 Recordings class to centralize all the signal and information about behaviour"""
 import time
-
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -27,7 +26,7 @@ class Recordings:
         self.time_range = np.linspace(0, self.n_frame / self.sampling_rate, self.n_frame)
 
     def add_delta_f_over_f(self, f_, f_neu):
-        print("Computaion of the Delta F over F...")
+        print("Computating Delta F over F.")
         first_percentile = np.nanpercentile(f_, 1, axis=1)
         F_bkg_corrected = f_ - first_percentile[:, np.newaxis]
         Fneu_bkg_corrected = f_neu - first_percentile[:, np.newaxis]
@@ -48,16 +47,16 @@ class Recordings:
         self.delta_f_over_f = np.divide(np.subtract(F_smoothed, abs(F0)), abs(F0))
         # self.delta_f_over_f = abs(F0)
 
-    def get_trial(self):
+    def get_trials(self):
         pass
         # trial = Trials()
         # return trial
 
-    def plot_trial(self, units, timing=None):
+    def plot_trials(self, units, timing=None):
         if timing is None:
             timing = [0, 2000]
         timing = np.multiply(timing, self.sampling_rate)
-        print("Plotting units traces...")
+        print("Plotting units traces.")
         fig, ax = plt.subplots(1, 1, figsize=(13, 8))
         for i, unit in tqdm(enumerate(units)):
             to_plot = np.subtract(self.delta_f_over_f[unit, timing[0]:timing[1]].T, np.mean(self.delta_f_over_f[unit,
@@ -67,8 +66,8 @@ class Recordings:
         plt.ylabel(r'$\Delta F/F$ [fold]')
         plt.show()
 
-    def get_heat_map(self):
-        print("Plotting of the heatmap...")
+    def plot_heat_map(self):
+        print("Plotting heatmap.")
         fig, ax = plt.subplots(1, 1, figsize=(20, 12))
         ax.pcolormesh(self.time_range, np.arange(len(self.delta_f_over_f)), self.delta_f_over_f, vmin=0, vmax=7,
                       cmap="Blues")
@@ -85,7 +84,7 @@ if __name__ == '__main__':
     F = np.load('../data/F.npy', allow_pickle=True)
     F_neu = np.load('../data/Fneu.npy', allow_pickle=True)
     recording = Recordings(F, F_neu, None, 30)
-    recording.get_heat_map()
-    recording.plot_trial([0, 2, 21, 15, 12, 1, 5, 8, 9])
+    recording.plot_heat_map()
+    recording.plot_trials([0, 2, 21, 15, 12, 1, 5, 8, 9])
     print("--- End ---")
     print("--- %s seconds ---" % round(time.time() - start_time, 2))
