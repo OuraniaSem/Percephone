@@ -19,7 +19,7 @@ class Recording:
         f = np.load(input_path + 'F.npy', allow_pickle=True)
         fneu = np.load(input_path + 'Fneu.npy', allow_pickle=True)
         iscell = np.load(input_path + 'iscell.npy', allow_pickle=True)
-        self.compute_df_f(f, fneu,iscell, input_path + 'df_f_inh.npy')
+        self.compute_df_f(f, fneu,iscell, input_path + 'df_f.npy')
 
     def compute_df_f(self, f_, f_neu, is_cell, save_path):
         """
@@ -97,11 +97,24 @@ class RecordingStimulusOnly(Recording):
 
     def synchronization_no_iti(self):
         """
+        Get the stimulus time and amplitude from the analog file
+
+        Note
+        -------
         Define stimulus delivery based on the analog
         Stimulus = when analog[1]>=0.184
         First find the first peak for each stimulus (stimuli every 500ms)
         Then find the stimulus onset when amplitude is >0.184
+
+        Parameters
+        -------
+        input file
+
+        Output
+        ------
+        csv file with the stimulus amplitude and time (stimulus starting time) in ms
         """
+
         print('Obtaining time and amplitude from analog.')
         analog_trace = self.analog[:, 1]
         stim_peak_indx, stim_properties = ss.find_peaks(analog_trace, prominence=0.15, distance=200)
@@ -151,6 +164,24 @@ class RecordingAmplDet(Recording):
             self.synchronization_with_iti(starting_trial)
 
     def synchronization_with_iti(self, starting_trial):
+        """
+        Update the analog file with information on stimulus time, reward time and timeout time
+
+        Note
+        -------
+        Get the ITI2, stimulus and reward time from the excel
+        Synchronize the ITI2 from the excel with the ITI from the analog
+
+
+        Parameters
+        -------
+        excel file, analog file, starting trial for the recording (relative to the behavioral trials)
+
+        Output
+        ------
+        Updated analog file (csv) with the stimulus, timeout, reward time
+        """
+
         # get the ITI2, reward, timeout and stimulus from the xls
         data_iti = self.xls[self.xls[0] == 'STATE'][self.xls[4] == 'ITI2']
         data_reward = self.xls[self.xls[0] == 'STATE'][self.xls[4] == 'Reward']
@@ -171,7 +202,7 @@ class RecordingAmplDet(Recording):
         self.analog.columns = ['t', 'stimulus', 't_iti', 'iti']
         self.analog['reward'] = 0
         self.analog['timeout'] = 0
-        self.analog['stimulus_xls'] = 0
+        self.analog['stimulus_xls'] = 888
 
         # Get the ITI2 from the analog file, as the first "1" value in the digital input of the analog file
         index_iti_final = []
@@ -189,6 +220,7 @@ class RecordingAmplDet(Recording):
         reward_to_analog = []
         timeout_to_analog = []
         stimulus_to_analog = []
+        ampl_recording = []
         end_protocol = len(index_iti_final) + starting_trial
 
         # Get lists for the reward, timeout and stimulus from the xls calculations for the trials that were recorded
@@ -197,9 +229,11 @@ class RecordingAmplDet(Recording):
                 reward_to_analog.append(reward_time_to_ITI[icount])  #index (ms*10)
                 timeout_to_analog.append(timeout_time_to_ITI[icount])
                 stimulus_to_analog.append(stimulus_time_to_ITI[icount])
+                ampl_recording.append(self.json[icount]["amp"])
+        ampl_recording_iter = iter(ampl_recording)
 
         for icount_time in range(len(index_iti_final)):
-            ITI_time_analog = round(self.analog.at[index_iti_final[icount_time], 't'])
+            ITI_time_analog = self.analog.at[index_iti_final[icount_time], 't'] #round?
             reward_time_analog = ITI_time_analog + reward_to_analog[icount_time]
             timeout_time_analog = ITI_time_analog + timeout_to_analog[icount_time]
             stimulus_time_analog = ITI_time_analog + stimulus_to_analog[icount_time]
@@ -210,12 +244,20 @@ class RecordingAmplDet(Recording):
                 self.analog.at[index_reward[0], 'reward'] = 2
             if len(index_timeout) != 0:
                 self.analog.at[index_timeout[0], 'timeout'] = 3
+                if len(index_stimulus) == 0:
+                    timeout_trial =next(ampl_recording_iter)
             if len(index_stimulus) != 0:
-                self.analog.at[index_stimulus[0], 'stimulus_xls'] = 4
+                self.analog.at[index_stimulus[0], 'stimulus_xls'] = next(ampl_recording_iter)
+
         self.analog.to_csv(self.input_path + 'analog_synchronized.csv', index=False)
 
 
 if __name__ == '__main__':
     # test_recording = RecordingStimulusOnly("Z:\\Current_members\\Ourania_Semelidou\\2p\\Ca_imaging_analysis_PreSynchro\\Fmko\\StimulusOnly\\4445\\20220728_4445_00_synchro\\")
-    test_detection_rec = RecordingAmplDet(input_path="Z:\\Current_members\\Ourania_Semelidou\\2p\\Ca_imaging_analysis_PreSynchro\\Fmko\\Amplitude_Detection\\4445\\20220710_4445_02_synchro\\",
-                                          starting_trial=124)
+    test_detection_rec = RecordingAmplDet(input_path="Z:\\Current_members\\Ourania_Semelidou\\2p\\Ca_imaging_analysis_PreSynchro\\Fmko\\Amplitude_Detection\\4445\\20220710_4445_00_synchro\\",
+                                          starting_trial=0)
+
+    analog_synced = pd.read_csv("Z:\\Current_members\\Ourania_Semelidou\\2p\\Ca_imaging_analysis_PreSynchro\\Fmko\\Amplitude_Detection\\4445\\20220710_4445_00_synchro\\analog_synchronized.csv", sep=',', header=0)
+    test_det_ampl = test_detection_rec.analog[test_detection_rec.analog['stimulus_xls']!=888 ]
+
+
