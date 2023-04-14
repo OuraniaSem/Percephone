@@ -13,15 +13,24 @@ import scipy.signal as ss
 
 
 class Recording:
-    def __init__(self, input_path):
-        self.df_f = None
+    def __init__(self, input_path, inhibitory_ids):
         self.input_path = input_path
         f = np.load(input_path + 'F.npy', allow_pickle=True)
         fneu = np.load(input_path + 'Fneu.npy', allow_pickle=True)
         iscell = np.load(input_path + 'iscell.npy', allow_pickle=True)
-        self.compute_df_f(f, fneu,iscell, input_path + 'df_f.npy')
 
-    def compute_df_f(self, f_, f_neu, is_cell, save_path):
+        # Create a dimension in iscell to define excitatory and inhibitory cells
+        exh_inh = np.ones((len(iscell), 1))  # array to define excitatory
+        exh_inh[inhibitory_ids] = 0  # correct the array to define inhibitory as 0
+        is_exh_inh = np.append(iscell, exh_inh, axis=1)  # add the array in the iscell to have a 3rd column with exh/inh
+
+        cells_list = np.concatenate(np.argwhere(is_exh_inh[:, 0]))
+        excitatory_ids = np.concatenate(np.argwhere(is_exh_inh[cells_list, 2]))  # list with excitatory cells
+
+        self.df_f_exc = self.compute_df_f(f, fneu, excitatory_ids, input_path + 'df_f_exc.npy')
+        self.df_f_inh = self.compute_df_f(f, fneu, inhibitory_ids, input_path + 'df_f_inh.npy')
+
+    def compute_df_f(self, f_, f_neu, cell_ids, save_path):
         """
         Compute DF/F and save it as npy matrix
 
@@ -43,12 +52,11 @@ class Recording:
 
         Output
         -------
-        npy matrix with DF/F of all excitatory/inhibitory cells
+        npy matrix with DF/F of all excitatory or inhibitory cells
         """
 
-        cells_list = np.concatenate(np.argwhere(is_cell[:, 0]))
-        f_ = f_[cells_list, :]
-        f_neu = f_neu[cells_list, :]
+        f_ = f_[cell_ids, :]
+        f_neu = f_neu[cell_ids, :]
         session_n_frames = f_.shape[1]
         all_rois = f_.shape[0]
 
@@ -81,12 +89,12 @@ class Recording:
         # save the df_f as a npy
         np.save(save_path, df_f_percen)
 
-        self.df_f = df_f_percen
+        return df_f_percen
 
 
 class RecordingStimulusOnly(Recording):
-    def __init__(self, input_path):
-        super().__init__(input_path)
+    def __init__(self, input_path, inhibitory_ids):
+        super().__init__(input_path, inhibitory_ids)
         self.analog = np.loadtxt(input_path + 'analog.txt')
         if os.path.exists(input_path + 'stim_ampl_time.csv'):
             print('Analog information already computed. Reading stimulus time and amplitude.')
@@ -151,8 +159,8 @@ class RecordingStimulusOnly(Recording):
 
 
 class RecordingAmplDet(Recording):
-    def __init__(self, input_path, starting_trial):
-        super().__init__(input_path)
+    def __init__(self, input_path, starting_trial, inhibitory_ids):
+        super().__init__(input_path, inhibitory_ids)
         self.analog = pd.read_csv(input_path + 'analog.txt', sep="\t", header=None)
         self.analog[0] = (self.analog[0] * 10).astype(int)
         self.xls = pd.read_excel(input_path + 'bpod.xls', header=None)
@@ -253,11 +261,11 @@ class RecordingAmplDet(Recording):
 
 
 if __name__ == '__main__':
-    # test_recording = RecordingStimulusOnly("Z:\\Current_members\\Ourania_Semelidou\\2p\\Ca_imaging_analysis_PreSynchro\\Fmko\\StimulusOnly\\4445\\20220728_4445_00_synchro\\")
+    #test_recording = RecordingStimulusOnly("Z:\\Current_members\\Ourania_Semelidou\\2p\\Ca_imaging_analysis_PreSynchro\\Fmko\\StimulusOnly\\4445\\20220728_4445_00_synchro\\")
     test_detection_rec = RecordingAmplDet(input_path="Z:\\Current_members\\Ourania_Semelidou\\2p\\Ca_imaging_analysis_PreSynchro\\Fmko\\Amplitude_Detection\\4445\\20220710_4445_00_synchro\\",
-                                          starting_trial=0)
+                                          starting_trial=0, inhibitory_ids=[7, 24, 34, 73, 89, 103, 683])
 
-    analog_synced = pd.read_csv("Z:\\Current_members\\Ourania_Semelidou\\2p\\Ca_imaging_analysis_PreSynchro\\Fmko\\Amplitude_Detection\\4445\\20220710_4445_00_synchro\\analog_synchronized.csv", sep=',', header=0)
-    test_det_ampl = test_detection_rec.analog[test_detection_rec.analog['stimulus_xls']!=888 ]
+    #analog_synced = pd.read_csv("Z:\\Current_members\\Ourania_Semelidou\\2p\\Ca_imaging_analysis_PreSynchro\\Fmko\\Amplitude_Detection\\4445\\20220710_4445_00_synchro\\analog_synchronized.csv", sep=',', header=0)
+    #test_det_ampl = test_detection_rec.analog[test_detection_rec.analog['stimulus_xls']!=888 ]
 
 
