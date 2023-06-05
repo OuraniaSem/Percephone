@@ -81,8 +81,8 @@ class Recordings:
 
 if __name__ == '__main__':
     start_time = time.time()
-    F = np.load('../data/F.npy', allow_pickle=True)
-    F_neu = np.load('../data/Fneu.npy', allow_pickle=True)
+    F = np.load('/datas/Théo/Projects/Percephone/data/20220728_4445_02_synchro/F.npy', allow_pickle=True)
+    F_neu = np.load('/datas/Théo/Projects/Percephone/data/20220728_4445_02_synchro/Fneu.npy', allow_pickle=True)
     recording = Recordings(F, F_neu, None, 30)
     recording.plot_heat_map()
     recording.plot_trials([0, 2, 21, 15, 12, 1, 5, 8, 9])

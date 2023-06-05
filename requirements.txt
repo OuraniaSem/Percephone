@@ -16,3 +16,4 @@ scipy
 six
 tqdm
 zipp
+pandas

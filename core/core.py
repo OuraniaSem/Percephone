@@ -1,15 +1,25 @@
 """Ourania Semelidou, 27/03/2023
 Core classes for recording, synchronization, synchronization w/o ITI2 analog, """
 
-import numpy as np
-import pandas as pd
 import json
 import os
+import time
+
 import matplotlib
+import numpy as np
+import pandas as pd
+import scipy.signal as ss
+
+from responsivity import responsivity
+
 matplotlib.use("Qt5Agg")
 import matplotlib.pyplot as plt
+
 plt.switch_backend("Qt5Agg")
-import scipy.signal as ss
+plt.rcParams['font.size'] = 40
+plt.rcParams['axes.linewidth'] = 3
+
+sf = 30.9609  # Hz
 
 
 class Recording:
@@ -48,13 +58,15 @@ class Recording:
             Fluorescence of all ROIs from suite2p
         f_neu : npy matrix (cells, frames)
             Fluorescence of all neuropils from suite2p
+        cell_ids: list
+            ids of cells for wich the df_f will be computed
         save_path : folder where the df_f matrix will be saved (same as the input path)
 
-        Output
+        Return
         -------
         npy matrix with DF/F of all excitatory or inhibitory cells
         """
-
+        start_time = time.time()
         f_ = f_[cell_ids, :]
         f_neu = f_neu[cell_ids, :]
         session_n_frames = f_.shape[1]
@@ -88,22 +100,25 @@ class Recording:
 
         # save the df_f as a npy
         np.save(save_path, df_f_percen)
-
+        print("--- %s seconds ---" % round(time.time() - start_time, 2))
         return df_f_percen
+
+    def compute_responsivity(self, row_metadata):
+        responsivity(self, row_metadata)
 
 
 class RecordingStimulusOnly(Recording):
-    def __init__(self, input_path, inhibitory_ids):
+    def __init__(self, input_path, inhibitory_ids, correction=True):
         super().__init__(input_path, inhibitory_ids)
-        self.analog = np.loadtxt(input_path + 'analog.txt')
+        self.analog = pd.read_csv(input_path + 'analog.txt', sep="\t")
         if os.path.exists(input_path + 'stim_ampl_time.csv'):
             print('Analog information already computed. Reading stimulus time and amplitude.')
-            self.stim_time = pd.read_csv('stim_ampl_time.csv', usecols=['stim_time'])
-            self.stim_ampl = pd.read_csv('stim_ampl_time.csv', usecols=['stim_ampl'])
+            self.stim_time = pd.read_csv(input_path + 'stim_ampl_time.csv', usecols=['stim_time']).values.flatten()
+            self.stim_ampl = pd.read_csv(input_path + 'stim_ampl_time.csv', usecols=['stim_ampl']).to_numpy().flatten()
         else:
-            self.synchronization_no_iti()
+            self.synchronization_no_iti(correction)
 
-    def synchronization_no_iti(self):
+    def synchronization_no_iti(self, correction_shift):
         """
         Get the stimulus time and amplitude from the analog file
 
@@ -122,21 +137,28 @@ class RecordingStimulusOnly(Recording):
         ------
         csv file with the stimulus amplitude and time (stimulus starting time) in ms
         """
-
+        start_time = time.time()
         print('Obtaining time and amplitude from analog.')
-        analog_trace = self.analog[:, 1]
+        analog_trace = self.analog.iloc[:, 1].to_numpy()
         stim_peak_indx, stim_properties = ss.find_peaks(analog_trace, prominence=0.15, distance=200)
         peaks_diff = np.diff(stim_peak_indx)
         indices = np.concatenate([[True], peaks_diff > 50000])
         stim_peak_indx = stim_peak_indx[indices]
         stim_ampl_analog = analog_trace[stim_peak_indx]
         stim_ampl = np.around(stim_ampl_analog, decimals=1)
-        stim_ampl[stim_ampl == 1.5] = 12
-        stim_ampl[stim_ampl == 1.3] = 10
-        stim_ampl[stim_ampl == 1.1] = 8
-        stim_ampl[stim_ampl == 0.8] = 6
-        stim_ampl[stim_ampl == 0.6] = 4
-        stim_ampl[stim_ampl == 0.4] = 2
+        stim_ampl_sort = np.sort(np.unique(stim_ampl))
+        if len(np.unique(stim_ampl_sort)) == 6:
+            stim_ampl[stim_ampl == stim_ampl_sort[5]] = 12
+            stim_ampl[stim_ampl == stim_ampl_sort[4]] = 10
+            stim_ampl[stim_ampl == stim_ampl_sort[3]] = 8
+            stim_ampl[stim_ampl == stim_ampl_sort[2]] = 6
+            stim_ampl[stim_ampl == stim_ampl_sort[1]] = 4
+            stim_ampl[stim_ampl == stim_ampl_sort[0]] = 2
+        if len(np.unique(stim_ampl_sort)) == 4:
+            stim_ampl[stim_ampl == stim_ampl_sort[3]] = 10
+            stim_ampl[stim_ampl == stim_ampl_sort[2]] = 8
+            stim_ampl[stim_ampl == stim_ampl_sort[1]] = 6
+            stim_ampl[stim_ampl == stim_ampl_sort[0]] = 4
 
         def stim_onset_calc(peak_index):
             time_window = 400  # 40 ms before peak
@@ -144,18 +166,30 @@ class RecordingStimulusOnly(Recording):
             return np.argwhere(signal_window > 0.184)[0][0] + peak_index - time_window
 
         stim_onset_idx = list(map(stim_onset_calc, stim_peak_indx))
-        stim_onset_time = self.analog[stim_onset_idx, 0]
+        stim_onset_time = self.analog.iloc[stim_onset_idx, 0]
 
         # plot the analog to test the index of stimulus onset
         fig, axs = plt.subplots(2, 1, figsize=(18, 10), sharex=True)
         axs[0].plot(analog_trace)
         axs[0].plot(stim_onset_idx, analog_trace[stim_onset_idx], 'x')
         plt.show()
+        stim_onsets = ((stim_onset_time.to_numpy() / 1000) * sf).astype('int')
 
-        self.stim_time = stim_onset_time
+        def correction(idx):
+            """ Perform a frames correction. 8 is the number of frames that the last stimulus will be shifted before"""
+            coeff = ((8 / len(self.df_f_exc[0])) / (stim_onsets[-1] - stim_onsets[0]))
+            b = coeff * stim_onsets[0]
+            return int(idx - (((coeff * idx) - b) * len(self.df_f_inh[0])))
+
         self.stim_ampl = stim_ampl
-        # save the stimulus time and amplitude as csv
-        pd.DataFrame({'stim_time': stim_onset_time,'stim_ampl': stim_ampl}).to_csv(self.input_path + 'stim_ampl_time.csv')
+        if correction_shift:
+            self.stim_time = np.array(list(map(correction, stim_onsets))).flatten()
+        else:
+            self.stim_time = np.array(stim_onsets).flatten()
+        print(self.stim_time.shape, self.stim_ampl.shape)
+        pd.DataFrame({'stim_time': self.stim_time,
+                      'stim_ampl': stim_ampl}).to_csv(self.input_path + 'stim_ampl_time.csv')
+        print("--- %s seconds ---" % round(time.time() - start_time, 2))
 
 
 class RecordingAmplDet(Recording):
@@ -164,6 +198,8 @@ class RecordingAmplDet(Recording):
         self.analog = pd.read_csv(input_path + 'analog.txt', sep="\t", header=None)
         self.analog[0] = (self.analog[0] * 10).astype(int)
         self.xls = pd.read_excel(input_path + 'bpod.xls', header=None)
+        self.stim_time = []
+        self.stim_ampl = []
         with open(input_path + 'params_trial.json', "r") as read_file:
             self.json = json.load(read_file)
         if os.path.exists(input_path + 'analog_synchronized.csv'):
@@ -234,14 +270,14 @@ class RecordingAmplDet(Recording):
         # Get lists for the reward, timeout and stimulus from the xls calculations for the trials that were recorded
         for icount in range(starting_trial, len(ITI_time_xls)):
             if icount < end_protocol:
-                reward_to_analog.append(reward_time_to_ITI[icount])  #index (ms*10)
+                reward_to_analog.append(reward_time_to_ITI[icount])
                 timeout_to_analog.append(timeout_time_to_ITI[icount])
                 stimulus_to_analog.append(stimulus_time_to_ITI[icount])
                 ampl_recording.append(self.json[icount]["amp"])
         ampl_recording_iter = iter(ampl_recording)
 
         for icount_time in range(len(index_iti_final)):
-            ITI_time_analog = self.analog.at[index_iti_final[icount_time], 't'] #round?
+            ITI_time_analog = self.analog.at[index_iti_final[icount_time], 't']
             reward_time_analog = ITI_time_analog + reward_to_analog[icount_time]
             timeout_time_analog = ITI_time_analog + timeout_to_analog[icount_time]
             stimulus_time_analog = ITI_time_analog + stimulus_to_analog[icount_time]
@@ -253,19 +289,15 @@ class RecordingAmplDet(Recording):
             if len(index_timeout) != 0:
                 self.analog.at[index_timeout[0], 'timeout'] = 3
                 if len(index_stimulus) == 0:
-                    timeout_trial =next(ampl_recording_iter)
+                    timeout_trial = next(ampl_recording_iter)
             if len(index_stimulus) != 0:
-                self.analog.at[index_stimulus[0], 'stimulus_xls'] = next(ampl_recording_iter)
-
+                amp = next(ampl_recording_iter)
+                self.analog.at[index_stimulus[0], 'stimulus_xls'] = amp
+                self.stim_time.append(index_stimulus[0] / 10000)
+                self.stim_ampl.append(amp)
         self.analog.to_csv(self.input_path + 'analog_synchronized.csv', index=False)
 
 
 if __name__ == '__main__':
-    #test_recording = RecordingStimulusOnly("Z:\\Current_members\\Ourania_Semelidou\\2p\\Ca_imaging_analysis_PreSynchro\\Fmko\\StimulusOnly\\4445\\20220728_4445_00_synchro\\")
-    test_detection_rec = RecordingAmplDet(input_path="Z:\\Current_members\\Ourania_Semelidou\\2p\\Ca_imaging_analysis_PreSynchro\\Fmko\\Amplitude_Detection\\4445\\20220710_4445_00_synchro\\",
-                                          starting_trial=0, inhibitory_ids=[7, 24, 34, 73, 89, 103, 683])
-
-    #analog_synced = pd.read_csv("Z:\\Current_members\\Ourania_Semelidou\\2p\\Ca_imaging_analysis_PreSynchro\\Fmko\\Amplitude_Detection\\4445\\20220710_4445_00_synchro\\analog_synchronized.csv", sep=',', header=0)
-    #test_det_ampl = test_detection_rec.analog[test_detection_rec.analog['stimulus_xls']!=888 ]
-
-
+    path = "/datas/Théo/Projects/Percephone/data/4456/20220728_4456_02_synchro/"
+    test_rec_stim_only = RecordingStimulusOnly(path, inhibitory_ids=[14])
