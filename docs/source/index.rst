@@ -21,9 +21,14 @@ Just clone the github repository:
    :caption: Contents:
 
 
-API
+Content
 -----------
 
-* :ref:`Recording`
-* :ref:`modindex`
-* :ref:`search`
+* :ref:`API`
+* :ref:`Contact Us`
+
+.. toctree::
+    :maxdepth: 1
+    :caption: Contents:
+
+    api

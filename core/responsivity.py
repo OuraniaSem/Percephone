@@ -48,7 +48,16 @@ def responsive_prsa_et_al_method(df, stim_times):
 
 
 def responsive_iq_method(df_data, stim_idx):
-    """ Method with interquartile measure of the baseline """
+    """ Method with interquartile measure of the baseline
+
+    Parameters
+    ----------
+    df_data :  numpy array
+        delta f over f (neurons,time)
+    stim_idx :  numpy array
+        stim indexes
+
+    """
     responsive = np.zeros((len(df_data), len(stim_idx)))
     exclude_windows = [list(range(t, t + post_boundary)) for t in stim_idx]
     exclude_windows.append(list(range(0, pre_boundary)))
@@ -79,13 +88,16 @@ def responsivity(record, row_metadata):
 
     Parameters
     -------
-    :param record: recording object
-    :param row_metadata: a pandas series containing metadatas
+    record: Recording object
+    row_metadata:   pandas.Series()
+                    Contains metadatas of the recording
 
-    Return
-    ------
-    summary_resp: pandas dataframe containing different responsivity parameters for each amplitude of stimulation(rows)
-    resp_neurons: pandas dataframes containning different responsivity parameters for each neurons
+    Returns
+    -------
+    summary_resp:   pandas.DataFrame()
+                    Contains different responsivity parameters for each amplitude of stimulation(rows)
+    resp_neurons:   pandas.DataFrame()
+                    Contains different responsivity parameters for each neurons
 
     """
     filename = row_metadata["Number"].values[0]
@@ -141,6 +153,9 @@ def responsivity(record, row_metadata):
         [np.mean(record.df_f_exc, axis=0), np.mean(record.df_f_inh, axis=0)])
     recording.sum_resp = summary_resp
     recording.resp_neurons = resp_neurons
+    recording.name = filename
+    recording.group = group
+    recording.date = date
     return summary_resp, resp_neurons
 
 

@@ -34,3 +34,4 @@ co = fig.colorbar(c, ax=ax)
 co.ax.tick_params(which='both', width=4)
 fig.tight_layout()
 plt.show()
+
