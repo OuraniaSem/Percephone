@@ -8,7 +8,7 @@ Overview
 Percephone is a python project to analyze calcium imaging recordings in combination with behavioral data obtained with a perceptual decision-making task
 
 Installation
------------
+---------------
 Just clone the github repository:
 
 
@@ -17,16 +17,9 @@ Just clone the github repository:
    $ git clone https://github.com/OuraniaSem/Percephone.git
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+    :maxdepth: 2
+    :caption: Contents
 
+    api
+    contact_us
 
-Content
------------
-
-* :ref:`API`
-* :ref:`Contact Us`
-
-.. toctree::
-    :maxdepth: 1
-    :caption: Contents:

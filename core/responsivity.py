@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import scipy.stats as ss
 
-import core as pc
+
 
 matplotlib.use("Qt5Agg")
 import matplotlib.pyplot as plt
@@ -151,31 +151,31 @@ def responsivity(record, row_metadata):
         [np.std(record.df_f_exc, axis=0), np.std(record.df_f_inh, axis=0)])
     resp_neurons["Mean baseline"] = np.concatenate(
         [np.mean(record.df_f_exc, axis=0), np.mean(record.df_f_inh, axis=0)])
-    recording.sum_resp = summary_resp
-    recording.resp_neurons = resp_neurons
-    recording.name = filename
-    recording.group = group
-    recording.date = date
+    record.sum_resp = summary_resp
+    record.resp_neurons = resp_neurons
+    record.name = filename
+    record.group = group
+    record.date = date
     return summary_resp, resp_neurons
 
 
 if __name__ == '__main__':
-    directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format/"
-    roi_info = pd.read_excel(
-        "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format/FmKO_ROIs&inhibitory.xlsx")
-    summary_resp_glob = pd.DataFrame()
-    output_neurons_resp = pd.DataFrame()
-    for folder in os.listdir(directory):
-        if os.path.isdir(directory + folder):
-            path = directory + folder + '/'
-            row = roi_info[roi_info["Number"] == int(folder[9:13])]
-            inhib_ids = np.array(list(list(row["Inhibitory neurons: ROIs"])[0].split(", ")))
-            recording = pc.RecordingStimulusOnly(path, inhibitory_ids=inhib_ids.astype(int))
-            sum_resp, neurons_resp = recording.responsivity(row)
-            summary_resp_glob = pd.concat([summary_resp_glob, sum_resp])
-            output_neurons_resp = pd.concat([output_neurons_resp, neurons_resp])
-    summary_resp_glob.to_csv("global_responsiveness.csv")
-    output_neurons_resp.to_csv("neurons_resp.csv")
+    # directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format/"
+    # roi_info = pd.read_excel(
+    #     "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format/FmKO_ROIs&inhibitory.xlsx")
+    # summary_resp_glob = pd.DataFrame()
+    # output_neurons_resp = pd.DataFrame()
+    # for folder in os.listdir(directory):
+    #     if os.path.isdir(directory + folder):
+    #         path = directory + folder + '/'
+    #         row = roi_info[roi_info["Number"] == int(folder[9:13])]
+    #         inhib_ids = np.array(list(list(row["Inhibitory neurons: ROIs"])[0].split(", ")))
+    #         recording = pc.RecordingStimulusOnly(path, inhibitory_ids=inhib_ids.astype(int))
+    #         sum_resp, neurons_resp = recording.responsivity(row)
+    #         summary_resp_glob = pd.concat([summary_resp_glob, sum_resp])
+    #         output_neurons_resp = pd.concat([output_neurons_resp, neurons_resp])
+    # summary_resp_glob.to_csv("global_responsiveness.csv")
+    # output_neurons_resp.to_csv("neurons_resp.csv")
 
     """Plot to verify manually the quality of responsivity detection"""
     # df, stim_timings, stim_ampl = recording.df_f_exc, recording.stim_time, recording.stim_ampl
@@ -201,3 +201,5 @@ if __name__ == '__main__':
     #     plt.ylim([0, 400])
     #     fig.tight_layout()
     #     plt.show()
+
+

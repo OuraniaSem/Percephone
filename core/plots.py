@@ -1,12 +1,14 @@
 """Théo Gauvrit 14/04/2023
-
+Functions for plottings. Most of them use the Recordings class.
 """
 
 import time
+
 import matplotlib
 import numpy as np
 import scipy.signal as ss
 from scipy.cluster.hierarchy import dendrogram, linkage
+
 import core as pc
 from scalebars import add_scalebar
 
@@ -21,6 +23,29 @@ plt.rcParams['svg.fonttype'] = 'none'
 sampling_rate = 30.9609  # Hz
 wt_color = "#326993"
 ko_color = "#CC0000"
+
+
+def peristimulus(record, stim, inh=False):
+    stim_times, stim_ampl = record.stim_time, record.stim_ampl
+    if inh:
+        df = record.df_f_inh
+    else:
+        df = record.df_f_exc
+    stim_timings = stim_times[stim_ampl == stim]
+    # print(stim_ampl)
+    # print(stim_times)
+    stim_timings = stim_timings[stim_timings < (len(df[0])-int(sampling_rate * 3.5))]
+    stim_ranges = [np.arange(stim_timing, stim_timing + int(sampling_rate * 3.5))
+                   for stim_timing in stim_timings]
+    output = np.zeros((len(df), int(sampling_rate * 3.5)))
+    print(stim)
+    for i, r in enumerate(df):
+        try:
+            output[i] = np.mean(r[np.array(stim_ranges)], axis=0)
+        except IndexError as e:
+            if stim in np.unique(record.stim_ampl):
+                print("IndexError for the neurone n°" + str(i))
+    return output
 
 
 def heat_map(df_f, stim_times, stim_ampl):
@@ -72,7 +97,29 @@ def heat_map_per_stim(df_f, stim_times, stim_ampl):
         plt.ylabel('Neurons')
         plt.title("Stimulus " + str(stim) + " amp")
         fig.tight_layout()
+        fig.savefig("heat_map_4939_04_" + str(stim) + "amp.png")
         plt.show()
+    print("--- %s seconds ---" % round(time.time() - start_time, 2))
+
+
+def group_heat_map_per_stim(df_f, stim_, filename):
+    print("Plotting heat map per stimulation.")
+    start_time = time.time()
+    print("Plotting heatmap.")
+    time_range = np.linspace(0, len(df_f[0]) / sampling_rate, len(df_f[0]))
+    Z = linkage(df_f, 'ward', optimal_ordering=True)
+    dn = dendrogram(Z, no_plot=True)
+    fig, ax = plt.subplots(1, 1, figsize=(18, 10))
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    df_f_clustered = df_f[dn['leaves']]
+    ax.pcolor(time_range, np.arange(len(df_f_clustered)), df_f_clustered, vmin=0, vmax=50, cmap="Reds")
+    plt.xlabel('Time (seconds)')
+    plt.ylabel('Neurons')
+    plt.title("Stimulus " + str(stim_) + " amp")
+    fig.tight_layout()
+    fig.savefig(filename)
+    plt.show()
     print("--- %s seconds ---" % round(time.time() - start_time, 2))
 
 
@@ -170,19 +217,20 @@ def df_f_graph_trials(recording, stim, neuron_id, ntrials=5, color=wt_color):
 
 if __name__ == '__main__':
     path = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/4754/20221004_4754_01_synchro/"
-    test_rec = pc.RecordingStimulusOnly(path, inhibitory_ids=[12, 19, 36], correction=True)
+    path = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format/20221205_4939_04_synchro/"
+    test_rec = pc.RecordingStimulusOnly(path,  inhibitory_ids=[2, 6, 7, 8, 10, 12, 14, 20, 25, 30, 31, 51, 52, 53, 61, 63, 89, 103, 186, 405], correction=True)
 
-    heat_map_per_stim(test_rec.df_f_exc, test_rec.stim_time, test_rec.stim_ampl)
+    heat_map_per_stim(test_rec.df_f_inh, test_rec.stim_time, test_rec.stim_ampl)
+
     # df_f_graph(test_rec, neuron_id=0)
     # for i in range(20):
     #     df_f_graph_trials(recording=test_rec, stim=12, ntrials=5, neuron_id=i, color=wt_color)
     # df_f_per_stim(recording=test_rec, stim=12, exc_ids=[23, 5, 9, 11, 32, 10], inh_ids=[1, 2], color=ko_color)
 
-    # analog_trace = test_rec.analog.iloc[:, 1]
+    analog_trace = test_rec.analog.iloc[:, 1]
     # # analog_trace = test_rec.analog["stimulus"].to_numpy()
 
-    # stim_onset_idx1 = np.array(test_rec.stim_time)
-    # trace = test_rec.df_f_exc[63]
+    trace = test_rec.df_f_exc[42]
     # print(len(analog_trace)/10000)
     # print(len(trace) / sampling_rate)
 
@@ -195,14 +243,14 @@ if __name__ == '__main__':
     # axs[1].plot((stim_onset_idx1/len(trace))*100, [200] * len(stim_onset_idx1), 'x')
     # plt.show()
 
-    # # SHARE X seconds
-    # fig, axs = plt.subplots(2, 1, figsize=(18, 10), sharex="all")
-    # time_range = np.linspace(0, len(analog_trace)/10000, len(analog_trace))
-    # axs[0].plot(time_range, analog_trace)
-    # time_range = np.linspace(0, len(trace) / sampling_rate, len(trace))
-    # axs[1].plot(time_range, trace)
-    # axs[1].plot((stim_onset_idx1 / sampling_rate), [200] * len(stim_onset_idx1), 'x')
-    # plt.show()
+    # SHARE X seconds
+    fig, axs = plt.subplots(2, 1, figsize=(18, 10), sharex="all")
+    time_range = np.linspace(0, len(analog_trace) / 10000, len(analog_trace))
+    axs[0].plot(time_range, analog_trace)
+    time_range = np.linspace(0, len(trace) / sampling_rate, len(trace))
+    axs[1].plot(time_range, trace)
+    axs[1].plot((test_rec.stim_time / sampling_rate), [200] * len(test_rec.stim_time), 'x')
+    plt.show()
 
     # # # NO share x
     # # fig, axs = plt.subplots(2, 1, figsize=(18, 10))

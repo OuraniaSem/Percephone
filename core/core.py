@@ -1,5 +1,5 @@
 """Ourania Semelidou, 27/03/2023
-Core classes for recording, synchronization, synchronization w/o ITI2 analog, """
+Core classes for recording, synchronization, synchronization w/o ITI2 analog"""
 
 import json
 import os
@@ -54,19 +54,20 @@ class Recording:
 
         Parameters
         ----------
-        f_ : npy matrix (cells, frames)
+        f_ : numpy.ndarray (cells, frames)
             Fluorescence of all ROIs from suite2p
-        f_neu : npy matrix (cells, frames)
+        f_neu : numpy.ndarray  (cells, frames)
             Fluorescence of all neuropils from suite2p
         cell_ids: list
             ids of cells for wich the df_f will be computed
-        save_path : folder where the df_f matrix will be saved (same as the input path)
+        save_path : str
+            folder where the df_f matrix will be saved (same as the input path)
 
-        Return
+        Returns
         -------
-        npy matrix with DF/F of all excitatory or inhibitory cells
+        df_f_percen : numpy.ndarray
+            DF/F of all the cells selected
         """
-        start_time = time.time()
         f_ = f_[cell_ids, :]
         f_neu = f_neu[cell_ids, :]
         session_n_frames = f_.shape[1]
@@ -100,7 +101,6 @@ class Recording:
 
         # save the df_f as a npy
         np.save(save_path, df_f_percen)
-        print("--- %s seconds ---" % round(time.time() - start_time, 2))
         return df_f_percen
 
     def compute_responsivity(self, row_metadata):
@@ -120,7 +120,8 @@ class RecordingStimulusOnly(Recording):
 
     def synchronization_no_iti(self, correction_shift):
         """
-        Get the stimulus time and amplitude from the analog file
+        Get the stimulus time and amplitude from the analog file and
+        save a csv file with the stimulus amplitude and time (stimulus starting time) in ms
 
         Note
         -------
@@ -131,13 +132,10 @@ class RecordingStimulusOnly(Recording):
 
         Parameters
         -------
-        input file
+        correction_shift : bool
+            indicate if the correction of the shift of frame should be executed
 
-        Output
-        ------
-        csv file with the stimulus amplitude and time (stimulus starting time) in ms
         """
-        start_time = time.time()
         print('Obtaining time and amplitude from analog.')
         analog_trace = self.analog.iloc[:, 1].to_numpy()
         stim_peak_indx, stim_properties = ss.find_peaks(analog_trace, prominence=0.15, distance=200)
@@ -147,18 +145,9 @@ class RecordingStimulusOnly(Recording):
         stim_ampl_analog = analog_trace[stim_peak_indx]
         stim_ampl = np.around(stim_ampl_analog, decimals=1)
         stim_ampl_sort = np.sort(np.unique(stim_ampl))
-        if len(np.unique(stim_ampl_sort)) == 6:
-            stim_ampl[stim_ampl == stim_ampl_sort[5]] = 12
-            stim_ampl[stim_ampl == stim_ampl_sort[4]] = 10
-            stim_ampl[stim_ampl == stim_ampl_sort[3]] = 8
-            stim_ampl[stim_ampl == stim_ampl_sort[2]] = 6
-            stim_ampl[stim_ampl == stim_ampl_sort[1]] = 4
-            stim_ampl[stim_ampl == stim_ampl_sort[0]] = 2
-        if len(np.unique(stim_ampl_sort)) == 4:
-            stim_ampl[stim_ampl == stim_ampl_sort[3]] = 10
-            stim_ampl[stim_ampl == stim_ampl_sort[2]] = 8
-            stim_ampl[stim_ampl == stim_ampl_sort[1]] = 6
-            stim_ampl[stim_ampl == stim_ampl_sort[0]] = 4
+        convert = {4: [4, 6, 8, 10], 5: [4, 6, 8, 10, 12], 6: [2, 4, 6, 8, 10, 12], 7: [0, 2, 4, 6, 8, 10, 12]}
+        for i in range(len(stim_ampl_sort)):
+            stim_ampl[stim_ampl == stim_ampl_sort[i]] = convert[len(stim_ampl_sort)][i]
 
         def stim_onset_calc(peak_index):
             time_window = 400  # 40 ms before peak
@@ -189,11 +178,10 @@ class RecordingStimulusOnly(Recording):
         print(self.stim_time.shape, self.stim_ampl.shape)
         pd.DataFrame({'stim_time': self.stim_time,
                       'stim_ampl': stim_ampl}).to_csv(self.input_path + 'stim_ampl_time.csv')
-        print("--- %s seconds ---" % round(time.time() - start_time, 2))
 
 
 class RecordingAmplDet(Recording):
-    def __init__(self, input_path, starting_trial, inhibitory_ids):
+    def __init__(self, input_path, starting_trial, inhibitory_ids, correction=True):
         super().__init__(input_path, inhibitory_ids)
         self.analog = pd.read_csv(input_path + 'analog.txt', sep="\t", header=None)
         self.analog[0] = (self.analog[0] * 10).astype(int)
@@ -221,6 +209,7 @@ class RecordingAmplDet(Recording):
         -------
         excel file, analog file, starting trial for the recording (relative to the behavioral trials)
 
+        starting_trial
         Output
         ------
         Updated analog file (csv) with the stimulus, timeout, reward time
@@ -293,11 +282,19 @@ class RecordingAmplDet(Recording):
             if len(index_stimulus) != 0:
                 amp = next(ampl_recording_iter)
                 self.analog.at[index_stimulus[0], 'stimulus_xls'] = amp
-                self.stim_time.append(index_stimulus[0] / 10000)
+                self.stim_time.append(int((index_stimulus[0] / 10000)*sf))
                 self.stim_ampl.append(amp)
+        stim_ampl = np.around(self.stim_ampl, decimals=1)
+        stim_ampl_sort = np.sort(np.unique(stim_ampl))
+        convert = {4: [4, 6, 8, 10], 6: [2, 4, 6, 8, 10, 12], 7: [0, 2, 4, 6, 8, 10, 12]}
+        for i in range(len(stim_ampl_sort)):
+            stim_ampl[stim_ampl == stim_ampl_sort[i]] = convert[len(stim_ampl_sort)][i]
+        self.stim_ampl = stim_ampl
+        self.stim_time = np.array(self.stim_time)
         self.analog.to_csv(self.input_path + 'analog_synchronized.csv', index=False)
 
 
 if __name__ == '__main__':
-    path = "/datas/Théo/Projects/Percephone/data/4456/20220728_4456_02_synchro/"
+    path = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/4456/20220715_4456_ampl_02synchro/"
     test_rec_stim_only = RecordingStimulusOnly(path, inhibitory_ids=[14])
+    path = "/run/user/1004/gvfs/smb-share:server=engram.local,share=data/Current_members/Ourania_Semelidou/2p/Ca_imaging_analysis_PreSynchro/Fmko/StimulusOnly/4456/20220813_4456_02_synchro/"

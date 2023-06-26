@@ -2,7 +2,12 @@ API
 ===
 
 percephone.core
+---------------
 
-.. automodule:: percephone.core
-    .. autoclass:: Recording
+
+.. autoclass:: core.Recording
+    :members: compute_df_f, compute_responsivity
+
+.. autoclass:: core.RecordingStimulusOnly
+    :members:
 
