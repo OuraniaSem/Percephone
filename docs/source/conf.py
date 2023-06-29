@@ -15,8 +15,8 @@
 import os
 import sys
 sys.path.insert(0, os.path.abspath('../../core'))
-autodoc_mock_imports = ['sip', 'PyQt5', 'PyQt5.QtGui', 'PyQt5.QtCore', 'PyQt5.QtWidgets']
-
+sys.path.insert(1, "/datas/Théo/Spikesorting/venv/Spikesorting2/bin/python")
+print(sys.executable)
 # -- Project information -----------------------------------------------------
 
 project = 'percephone'
