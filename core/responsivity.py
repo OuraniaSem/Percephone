@@ -3,17 +3,12 @@ Charecterization of the responsivity for all neurons.
 """
 import os
 import random as rnd
-
 import matplotlib
 import numpy as np
 import pandas as pd
 import scipy.stats as ss
-
-
-
 matplotlib.use("Qt5Agg")
 import matplotlib.pyplot as plt
-
 plt.switch_backend("Qt5Agg")
 
 sf = 30.9609  # Hz

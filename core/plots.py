@@ -32,8 +32,6 @@ def peristimulus(record, stim, inh=False):
     else:
         df = record.df_f_exc
     stim_timings = stim_times[stim_ampl == stim]
-    # print(stim_ampl)
-    # print(stim_times)
     stim_timings = stim_timings[stim_timings < (len(df[0])-int(sampling_rate * 3.5))]
     stim_ranges = [np.arange(stim_timing, stim_timing + int(sampling_rate * 3.5))
                    for stim_timing in stim_timings]
