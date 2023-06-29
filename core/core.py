@@ -16,8 +16,6 @@ matplotlib.use("Qt5Agg")
 import matplotlib.pyplot as plt
 
 plt.switch_backend("Qt5Agg")
-plt.rcParams['font.size'] = 40
-plt.rcParams['axes.linewidth'] = 3
 
 sf = 30.9609  # Hz
 
