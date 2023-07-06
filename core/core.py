@@ -9,9 +9,10 @@ import matplotlib
 import numpy as np
 import pandas as pd
 import scipy.signal as ss
+import h5py
 
 from responsivity import responsivity
-
+import scipy.interpolate as si
 matplotlib.use("Qt5Agg")
 import matplotlib.pyplot as plt
 
@@ -106,9 +107,24 @@ class Recording:
 
 
 class RecordingStimulusOnly(Recording):
-    def __init__(self, input_path, inhibitory_ids, correction=True):
+    def __init__(self, input_path, inhibitory_ids, correction=True, analog_mesc_path=None, msession=None):
         super().__init__(input_path, inhibitory_ids)
-        self.analog = pd.read_csv(input_path + 'analog.txt', sep="\t")
+        if analog_mesc_path is None:
+            self.analog = pd.read_csv(input_path + 'analog.txt', sep="\t")
+        else:
+            f = h5py.File(analog_mesc_path)
+            dset = f[msession]  # 'MSession_0'
+            list(dset.keys())
+            unit = dset['MUnit_0']
+            list(unit.keys())
+            c0 = unit['Curve_0']
+            list(c0.keys())
+            curve0 = np.array(c0['CurveDataYRawData'])
+            ref_values = c0.attrs.get("CurveDataYConversionReferenceValues")
+            f = si.interp1d(ref_values[::2], ref_values[1::2])
+            analog = f(curve0)
+            self.analog = pd.DataFrame({0: np.linspace(0, len(analog)/10, len(analog)), 1: analog})
+
         if os.path.exists(input_path + 'stim_ampl_time.csv'):
             print('Analog information already computed. Reading stimulus time and amplitude.')
             self.stim_time = pd.read_csv(input_path + 'stim_ampl_time.csv', usecols=['stim_time']).values.flatten()
@@ -293,6 +309,9 @@ class RecordingAmplDet(Recording):
 
 
 if __name__ == '__main__':
-    path = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/4456/20220715_4456_ampl_02synchro/"
-    test_rec_stim_only = RecordingStimulusOnly(path, inhibitory_ids=[14])
-    path = "/run/user/1004/gvfs/smb-share:server=engram.local,share=data/Current_members/Ourania_Semelidou/2p/Ca_imaging_analysis_PreSynchro/Fmko/StimulusOnly/4456/20220813_4456_02_synchro/"
+    # path = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/4456/20220715_4456_ampl_02synchro/"
+    # test_rec_stim_only = RecordingStimulusOnly(path, inhibitory_ids=[14])
+
+    path = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/4447/20220715_4447_ampl_00_synchro/"
+    path_mesc = '/datas/Théo/Projects/Percephone/data/mesc/20220715_4447_ampl.mesc'
+    test_no_analog = RecordingStimulusOnly(path, inhibitory_ids=[14], analog_mesc_path=path_mesc, msession='MSession_0')
