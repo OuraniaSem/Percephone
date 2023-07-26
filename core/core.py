@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import scipy.signal as ss
 import h5py
-from responsivity_multithread1 import responsivity
+from responsivity import responsivity
 import scipy.interpolate as si
 matplotlib.use("Qt5Agg")
 import matplotlib.pyplot as plt
@@ -183,8 +183,8 @@ class RecordingStimulusOnly(Recording):
 
 
 class RecordingAmplDet(Recording):
-    def __init__(self, input_path, starting_trial, inhibitory_ids, correction=True):
-        super().__init__(input_path, inhibitory_ids)
+    def __init__(self, input_path, starting_trial, inhibitory_ids, sf, correction=True):
+        super().__init__(input_path, inhibitory_ids, sf)
         self.analog = pd.read_csv(input_path + 'analog.txt', sep="\t", header=None)
         self.analog[0] = (self.analog[0] * 10).astype(int)
         self.xls = pd.read_excel(input_path + 'bpod.xls', header=None)
@@ -223,6 +223,9 @@ class RecordingAmplDet(Recording):
         data_timeout = self.xls[self.xls[0] == 'STATE'][self.xls[4] == 'Timeout']
         data_stimulus = self.xls[self.xls[0] == 'STATE'][self.xls[4] == 'Stimulus']
 
+        splitted = np.split(self.xls, self.xls[self.xls[4] == 'The trial ended'].index)
+        liks = [np.round(((split[2][(split[0] == 'EVENT') & (split[4] == 94)].values - 2) * 10000).astype(float)) for split in splitted]
+
         # get the time for ITI2, reward, timeout and stimulus
         ITI_time_xls = data_iti[2].values.astype(float)
         reward_time = data_reward[2].values.astype(float)
@@ -230,14 +233,15 @@ class RecordingAmplDet(Recording):
         stimulus_time = data_stimulus[2].values.astype(float)
 
         # calculate the time of reward and timeout relative to ITI2
-        reward_time_to_ITI = np.around((reward_time - ITI_time_xls) * 10000).tolist()  # in ms
-        timeout_time_to_ITI = np.around((timeout_time - ITI_time_xls) * 10000).tolist()  # in ms
-        stimulus_time_to_ITI = np.around((stimulus_time - ITI_time_xls) * 10000).tolist()  # in ms
+        reward_time_to_ITI = np.around((reward_time - 2) * 10000).tolist()  # in ms
+        timeout_time_to_ITI = np.around((timeout_time - 2) * 10000).tolist()  # in ms
+        stimulus_time_to_ITI = np.around((stimulus_time - 2) * 10000).tolist()  # in ms
 
         self.analog.columns = ['t', 'stimulus', 't_iti', 'iti']
         self.analog['reward'] = 0
         self.analog['timeout'] = 0
         self.analog['stimulus_xls'] = 888
+        self.analog['licks'] = 0
 
         # Get the ITI2 from the analog file, as the first "1" value in the digital input of the analog file
         index_iti_final = []
@@ -256,6 +260,7 @@ class RecordingAmplDet(Recording):
         timeout_to_analog = []
         stimulus_to_analog = []
         ampl_recording = []
+        licks_to_analog = []
         end_protocol = len(index_iti_final) + starting_trial
 
         # Get lists for the reward, timeout and stimulus from the xls calculations for the trials that were recorded
@@ -264,6 +269,7 @@ class RecordingAmplDet(Recording):
                 reward_to_analog.append(reward_time_to_ITI[icount])
                 timeout_to_analog.append(timeout_time_to_ITI[icount])
                 stimulus_to_analog.append(stimulus_time_to_ITI[icount])
+                licks_to_analog.append(liks[icount])
                 ampl_recording.append(self.json[icount]["amp"])
         ampl_recording_iter = iter(ampl_recording)
 
@@ -272,9 +278,14 @@ class RecordingAmplDet(Recording):
             reward_time_analog = ITI_time_analog + reward_to_analog[icount_time]
             timeout_time_analog = ITI_time_analog + timeout_to_analog[icount_time]
             stimulus_time_analog = ITI_time_analog + stimulus_to_analog[icount_time]
+            licks_time_analog = ITI_time_analog + licks_to_analog[icount_time]
             index_reward = self.analog.index[self.analog['t'] == reward_time_analog].to_list()
             index_timeout = self.analog.index[self.analog['t'] == timeout_time_analog].to_list()
             index_stimulus = self.analog.index[self.analog['t'] == stimulus_time_analog].to_list()
+            for lick in licks_time_analog:
+                index_licks = self.analog.index[self.analog['t'] == lick].to_list()
+                if len(index_licks) != 0:
+                    self.analog.at[index_licks[0], 'licks'] = 4
             if len(index_reward) != 0:
                 self.analog.at[index_reward[0], 'reward'] = 2
             if len(index_timeout) != 0:
@@ -288,7 +299,7 @@ class RecordingAmplDet(Recording):
                 self.stim_ampl.append(amp)
         stim_ampl = np.around(self.stim_ampl, decimals=1)
         stim_ampl_sort = np.sort(np.unique(stim_ampl))
-        convert = {4: [4, 6, 8, 10], 6: [2, 4, 6, 8, 10, 12], 7: [0, 2, 4, 6, 8, 10, 12]}
+        convert = {4: [4, 6, 8, 10], 5: [4, 6, 8, 10, 12], 6: [2, 4, 6, 8, 10, 12], 7: [0, 2, 4, 6, 8, 10, 12]}
         for i in range(len(stim_ampl_sort)):
             stim_ampl[stim_ampl == stim_ampl_sort[i]] = convert[len(stim_ampl_sort)][i]
         self.stim_ampl = stim_ampl
@@ -300,6 +311,10 @@ if __name__ == '__main__':
     # path = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/4456/20220715_4456_ampl_02synchro/"
     # test_rec_stim_only = RecordingStimulusOnly(path, inhibitory_ids=[14])
 
-    path = "/datas/Théo/Projects/Percephone/data/StimulusOnlyWT/20221128_4939_00_synchro/"
-    test_no_analog = RecordingStimulusOnly(path, inhibitory_ids=[4, 14, 33, 34, 36, 39, 46, 74], sf=30.9609)
-    print(test_no_analog.stim_ampl)
+    # path = "/datas/Théo/Projects/Percephone/data/StimulusOnlyWT/20221128_4939_00_synchro/"
+    # test_no_analog = RecordingStimulusOnly(path, inhibitory_ids=[4, 14, 33, 34, 36, 39, 46, 74], sf=30.9609)
+    # print(test_no_analog.stim_ampl)
+
+    path = "Z:\\Current_members\\Ourania_Semelidou\\2p\\Ca_imaging_analysis_PreSynchro\\Fmko\\Amplitude_Detection\\4445\\20220710_4445_00_synchro\\"
+    record_detection = RecordingAmplDet(path,starting_trial=0, inhibitory_ids=[7, 24, 34, 73, 89, 103, 683], sf=30.9609)
+    print(record_detection.stim_ampl)
