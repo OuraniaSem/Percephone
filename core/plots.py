@@ -14,6 +14,7 @@ from scalebars import add_scalebar
 
 matplotlib.use("Qt5Agg")
 import matplotlib.pyplot as plt
+import scipy.interpolate as si
 
 plt.switch_backend("Qt5Agg")
 plt.rcParams['font.size'] = 40
@@ -25,6 +26,17 @@ wt_color = "#326993"
 ko_color = "#CC0000"
 
 
+def interpolation_frames(df):
+    """ int(3.5*30.9609) = 108
+        int(3.5*21.2209) = 74
+        dif= 34"""
+    index_init = np.arange(0, 108)
+    index = np.delete(index_init, (index_init[::3])[1:-1])
+    f = si.interp1d(index, df)
+    df_extended = f(index_init)
+    return df_extended
+
+
 def peristimulus(record, stim, inh=False):
     stim_times, stim_ampl = record.stim_time, record.stim_ampl
     if inh:
@@ -32,10 +44,10 @@ def peristimulus(record, stim, inh=False):
     else:
         df = record.df_f_exc
     stim_timings = stim_times[stim_ampl == stim]
-    stim_timings = stim_timings[stim_timings < (len(df[0])-int(sampling_rate * 3.5))]
-    stim_ranges = [np.arange(stim_timing, stim_timing + int(sampling_rate * 3.5))
+    stim_timings = stim_timings[stim_timings < (len(df[0])-int(record.sf * 3.5))]
+    stim_ranges = [np.arange(stim_timing, stim_timing + int(record.sf * 3.5))
                    for stim_timing in stim_timings]
-    output = np.zeros((len(df), int(sampling_rate * 3.5)))
+    output = np.zeros((len(df), int(record.sf * 3.5)))
     print(stim)
     for i, r in enumerate(df):
         try:

@@ -1,14 +1,16 @@
 """Théo Gauvrit 18/04/2023
 Charecterization of the responsivity for all neurons.
 """
-import os
 import random as rnd
+
 import matplotlib
 import numpy as np
 import pandas as pd
 import scipy.stats as ss
+
 matplotlib.use("Qt5Agg")
 import matplotlib.pyplot as plt
+
 plt.switch_backend("Qt5Agg")
 
 sf = 30.9609  # Hz
@@ -42,6 +44,24 @@ def responsive_prsa_et_al_method(df, stim_times):
     return responsive
 
 
+def resp_single_neuron(neuron_df_data_, random_timing, stim_idx):
+    resp = []
+    bootstrap_responses = []
+    for rnd_idx in random_timing:
+        bootstrap_responses.append(ss.iqr(neuron_df_data_[rnd_idx - pre_boundary:rnd_idx], nan_policy='omit'))
+    threshold = 2 * np.nanpercentile(bootstrap_responses, 95)
+    for y, stim_i in enumerate(stim_idx):
+        # bsl_activity = np.subtract(*np.nanpercentile((neuron_df[(int(stim_timing * sf) - pre_boundary):int(stim_timing * sf)]), [75, 25]))
+        bsl_activity = np.mean(neuron_df_data_[(stim_i - pre_boundary):stim_i])
+        peak_high = np.max(neuron_df_data_[stim_i:(stim_i + post_boundary)])
+        true_response = peak_high - bsl_activity
+        if true_response > threshold:
+            resp.append(True)
+        else:
+            resp.append(False)
+    return resp
+
+
 def responsive_iq_method(df_data, stim_idx):
     """ Method with interquartile measure of the baseline
 
@@ -53,28 +73,18 @@ def responsive_iq_method(df_data, stim_idx):
         stim indexes
 
     """
-    responsive = np.zeros((len(df_data), len(stim_idx)))
     exclude_windows = [list(range(t, t + post_boundary)) for t in stim_idx]
     exclude_windows.append(list(range(0, pre_boundary)))
     exclude_windows.append(list(range(len(df_data[0]) - post_boundary, len(df_data[0]))))
     range_iti = set(range(len(df_data[0]))).difference(set(np.concatenate(np.array(exclude_windows))))
     random_timing = rnd.sample(range_iti, k=1999)
-    for i, neuron_df_data in enumerate(df_data):
-        print("Neuron " + str(i))
-        bootstrap_responses = []
-        for rnd_idx in random_timing:
-            bootstrap_responses.append(ss.iqr(neuron_df_data[rnd_idx - pre_boundary:rnd_idx], nan_policy='omit'))
-        threshold = 2 * np.nanpercentile(bootstrap_responses, 95)
-        for y, stim_i in enumerate(stim_idx):
-            # bsl_activity = np.subtract(*np.nanpercentile((neuron_df[(int(stim_timing * sf) - pre_boundary):int(stim_timing * sf)]), [75, 25]))
-            bsl_activity = np.mean(neuron_df_data[(stim_i - pre_boundary):stim_i])
-            peak_high = np.max(neuron_df_data[stim_i:(stim_i + post_boundary)])
-            true_response = peak_high - bsl_activity
-            if true_response > threshold:
-                responsive[i, y] = True
-            else:
-                responsive[i, y] = False
-    return responsive
+
+    from multiprocessing import Pool, cpu_count
+    workers = cpu_count()
+    pool = Pool(processes=workers)
+    async_results = [pool.apply_async(resp_single_neuron, args=(i, random_timing, stim_idx)) for i in df_data]
+    results = [ar.get() for ar in async_results]
+    return results
 
 
 def responsivity(record, row_metadata):
@@ -95,6 +105,7 @@ def responsivity(record, row_metadata):
                     Contains different responsivity parameters for each neurons
 
     """
+    print("Calculation responsivity")
     filename = row_metadata["Number"].values[0]
     group = row_metadata["Genotype"].values[0]
     date = str(row_metadata["Date"].values[0])
@@ -106,34 +117,33 @@ def responsivity(record, row_metadata):
     summary_resp = pd.DataFrame()
     resp_neurons = pd.DataFrame()
     for amp in stims:
+        print("Amplitude: " + str(amp))
         stim_times = stim_timings[stim_ampl == amp]
+
         responsiveness_exc = responsive_iq_method(record.df_f_exc, stim_times)
         responsiveness_inh = responsive_iq_method(record.df_f_inh, stim_times)
+        print("Generating dataframes")
         resp_overall_exc[str(amp)] = responsiveness_exc
         resp_overall_inh[str(amp)] = responsiveness_inh
         total_responsivity_exc = np.sum(responsiveness_exc, axis=1)
         total_responsivity_inh = np.sum(responsiveness_inh, axis=1)
         response_per_trials_exc = np.sum(responsiveness_exc, axis=0)
         response_per_trials_inh = np.sum(responsiveness_inh, axis=0)
-        resp = {"Filename": filename, "Genotype": group, "Date": date,
-                "Amplitude": amp,
-                "total exc": len(record.df_f_exc),
-                "total inh": len(record.df_f_inh),
-                "% responsive exc units": (total_responsivity_exc > len(responsiveness_exc[0]) / 2).sum(),
-                "% responsive inh units": (total_responsivity_inh > len(responsiveness_inh[0]) / 2).sum(),
-                "responsivity of neurons exc":
-                    np.mean(
-                        total_responsivity_exc[total_responsivity_exc > len(responsiveness_exc[0]) / 2]) / len(
-                        stim_times),
-                "responsivity of neurons inh":
-                    np.mean(
-                        total_responsivity_inh[total_responsivity_inh > len(responsiveness_inh[0]) / 2]) / len(
-                        stim_times),
+        resp = {"Filename": filename, "Genotype": group, "Date": date, "Amplitude": amp,
+                "total exc": len(record.df_f_exc), "total inh": len(record.df_f_inh),
                 "mean_nb_exc_per_trials": np.mean(response_per_trials_exc),
                 "mean_nbinh_per_trials": np.mean(response_per_trials_inh),
                 "tbt_var_exc": np.std(response_per_trials_exc),
-                "tbt_var_inh": np.std(response_per_trials_inh)
-                }
+                "tbt_var_inh": np.std(response_per_trials_inh),
+                "nb responsive exc units >2": (total_responsivity_exc > 1).sum(),
+                "nb responsive inh units >2": (total_responsivity_inh > 1).sum(),
+                "responsivity of neurons exc >2": np.mean(
+                    total_responsivity_exc[total_responsivity_exc > 1]) / len(
+                    stim_times),
+                "responsivity of neurons inh >2": np.mean(
+                    total_responsivity_inh[total_responsivity_inh > 1]) / len(
+                    stim_times)}
+        # for percent in [0.10, 0.30, 0.5, 0.60, 0.9]:
         summary_resp = summary_resp.append(resp, ignore_index=True)
         resp_neurons[str(amp)] = np.concatenate(
             [total_responsivity_exc / len(stim_times), total_responsivity_inh / len(stim_times)])
@@ -143,9 +153,9 @@ def responsivity(record, row_metadata):
     resp_neurons["Type"] = np.concatenate(
         [["exc"] * len(total_responsivity_exc), ["inh"] * len(total_responsivity_inh)])
     resp_neurons["STD baseline"] = np.concatenate(
-        [np.std(record.df_f_exc, axis=0), np.std(record.df_f_inh, axis=0)])
+        [np.std(record.df_f_exc, axis=1), np.std(record.df_f_inh, axis=1)])
     resp_neurons["Mean baseline"] = np.concatenate(
-        [np.mean(record.df_f_exc, axis=0), np.mean(record.df_f_inh, axis=0)])
+        [np.mean(record.df_f_exc, axis=1), np.mean(record.df_f_inh, axis=1)])
     record.sum_resp = summary_resp
     record.resp_neurons = resp_neurons
     record.name = filename
@@ -196,5 +206,3 @@ if __name__ == '__main__':
     #     plt.ylim([0, 400])
     #     fig.tight_layout()
     #     plt.show()
-
-

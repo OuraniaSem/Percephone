@@ -10,24 +10,20 @@ import numpy as np
 import pandas as pd
 import scipy.signal as ss
 import h5py
-
-from responsivity import responsivity
+from responsivity_multithread1 import responsivity
 import scipy.interpolate as si
 matplotlib.use("Qt5Agg")
 import matplotlib.pyplot as plt
-
 plt.switch_backend("Qt5Agg")
-
-sf = 30.9609  # Hz
 
 
 class Recording:
-    def __init__(self, input_path, inhibitory_ids):
+    def __init__(self, input_path, inhibitory_ids, sf):
         self.input_path = input_path
         f = np.load(input_path + 'F.npy', allow_pickle=True)
         fneu = np.load(input_path + 'Fneu.npy', allow_pickle=True)
         iscell = np.load(input_path + 'iscell.npy', allow_pickle=True)
-
+        self.sf = sf
         # Create a dimension in iscell to define excitatory and inhibitory cells
         exh_inh = np.ones((len(iscell), 1))  # array to define excitatory
         exh_inh[inhibitory_ids] = 0  # correct the array to define inhibitory as 0
@@ -103,28 +99,14 @@ class Recording:
         return df_f_percen
 
     def compute_responsivity(self, row_metadata):
-        responsivity(self, row_metadata)
+        resp, resp_neur = responsivity(self, row_metadata)
+        return resp, resp_neur
 
 
 class RecordingStimulusOnly(Recording):
-    def __init__(self, input_path, inhibitory_ids, correction=True, analog_mesc_path=None, msession=None):
-        super().__init__(input_path, inhibitory_ids)
-        if analog_mesc_path is None:
-            self.analog = pd.read_csv(input_path + 'analog.txt', sep="\t")
-        else:
-            f = h5py.File(analog_mesc_path)
-            dset = f[msession]  # 'MSession_0'
-            list(dset.keys())
-            unit = dset['MUnit_0']
-            list(unit.keys())
-            c0 = unit['Curve_0']
-            list(c0.keys())
-            curve0 = np.array(c0['CurveDataYRawData'])
-            ref_values = c0.attrs.get("CurveDataYConversionReferenceValues")
-            f = si.interp1d(ref_values[::2], ref_values[1::2])
-            analog = f(curve0)
-            self.analog = pd.DataFrame({0: np.linspace(0, len(analog)/10, len(analog)), 1: analog})
-
+    def __init__(self, input_path, inhibitory_ids, sf, correction=True):
+        super().__init__(input_path, inhibitory_ids, sf)
+        self.analog = pd.read_csv(input_path + 'analog.txt', sep="\t")
         if os.path.exists(input_path + 'stim_ampl_time.csv'):
             print('Analog information already computed. Reading stimulus time and amplitude.')
             self.stim_time = pd.read_csv(input_path + 'stim_ampl_time.csv', usecols=['stim_time']).values.flatten()
@@ -157,16 +139,17 @@ class RecordingStimulusOnly(Recording):
         indices = np.concatenate([[True], peaks_diff > 50000])
         stim_peak_indx = stim_peak_indx[indices]
         stim_ampl_analog = analog_trace[stim_peak_indx]
-        stim_ampl = np.around(stim_ampl_analog, decimals=1)
-        stim_ampl_sort = np.sort(np.unique(stim_ampl))
+        stim_ampl_pre = np.around(stim_ampl_analog, decimals=1)
+        stim_ampl_sort = np.sort(np.unique(stim_ampl_pre))
+        stim_ampl = np.zeros(len(stim_ampl_pre))
         convert = {4: [4, 6, 8, 10], 5: [4, 6, 8, 10, 12], 6: [2, 4, 6, 8, 10, 12], 7: [0, 2, 4, 6, 8, 10, 12]}
         for i in range(len(stim_ampl_sort)):
-            stim_ampl[stim_ampl == stim_ampl_sort[i]] = convert[len(stim_ampl_sort)][i]
+            stim_ampl[stim_ampl_pre == stim_ampl_sort[i]] = convert[len(stim_ampl_sort)][i]
 
         def stim_onset_calc(peak_index):
             time_window = 400  # 40 ms before peak
             signal_window = analog_trace[peak_index - time_window:peak_index]
-            return np.argwhere(signal_window > 0.184)[0][0] + peak_index - time_window
+            return np.argwhere(signal_window > (3*np.std(analog_trace[peak_index-1000:peak_index-400])+np.mean(analog_trace[peak_index-1000:peak_index-400])))[0][0] + peak_index - time_window  # 0.184
 
         stim_onset_idx = list(map(stim_onset_calc, stim_peak_indx))
         stim_onset_time = self.analog.iloc[stim_onset_idx, 0]
@@ -176,7 +159,7 @@ class RecordingStimulusOnly(Recording):
         axs[0].plot(analog_trace)
         axs[0].plot(stim_onset_idx, analog_trace[stim_onset_idx], 'x')
         plt.show()
-        stim_onsets = ((stim_onset_time.to_numpy() / 1000) * sf).astype('int')
+        stim_onsets = ((stim_onset_time.to_numpy() / 1000) * self.sf).astype('int')
 
         def correction(idx):
             """ Perform a frames correction. 8 is the number of frames that the last stimulus will be shifted before"""
@@ -192,6 +175,11 @@ class RecordingStimulusOnly(Recording):
         print(self.stim_time.shape, self.stim_ampl.shape)
         pd.DataFrame({'stim_time': self.stim_time,
                       'stim_ampl': stim_ampl}).to_csv(self.input_path + 'stim_ampl_time.csv')
+
+    def remove_bad_frames(self, bad_frames_index):
+        self.df_f_exc = np.delete(self.df_f_exc, bad_frames_index)
+        self.df_f_inh = np.delete(self.df_f_inh, bad_frames_index)
+        self.analog = self.analog.drop(bad_frames_index)
 
 
 class RecordingAmplDet(Recording):
@@ -296,7 +284,7 @@ class RecordingAmplDet(Recording):
             if len(index_stimulus) != 0:
                 amp = next(ampl_recording_iter)
                 self.analog.at[index_stimulus[0], 'stimulus_xls'] = amp
-                self.stim_time.append(int((index_stimulus[0] / 10000)*sf))
+                self.stim_time.append(int((index_stimulus[0] / 10000)*self.sf))
                 self.stim_ampl.append(amp)
         stim_ampl = np.around(self.stim_ampl, decimals=1)
         stim_ampl_sort = np.sort(np.unique(stim_ampl))
@@ -312,6 +300,6 @@ if __name__ == '__main__':
     # path = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/4456/20220715_4456_ampl_02synchro/"
     # test_rec_stim_only = RecordingStimulusOnly(path, inhibitory_ids=[14])
 
-    path = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/4447/20220715_4447_ampl_00_synchro/"
-    path_mesc = '/datas/Théo/Projects/Percephone/data/mesc/20220715_4447_ampl.mesc'
-    test_no_analog = RecordingStimulusOnly(path, inhibitory_ids=[14], analog_mesc_path=path_mesc, msession='MSession_0')
+    path = "/datas/Théo/Projects/Percephone/data/StimulusOnlyWT/20221128_4939_00_synchro/"
+    test_no_analog = RecordingStimulusOnly(path, inhibitory_ids=[4, 14, 33, 34, 36, 39, 46, 74], sf=30.9609)
+    print(test_no_analog.stim_ampl)
