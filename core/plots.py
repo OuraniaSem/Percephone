@@ -226,9 +226,9 @@ def df_f_graph_trials(recording, stim, neuron_id, ntrials=5, color=wt_color):
 
 
 if __name__ == '__main__':
-    path = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/4754/20221004_4754_01_synchro/"
-    path = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format/20221205_4939_04_synchro/"
-    test_rec = pc.RecordingStimulusOnly(path,  inhibitory_ids=[2, 6, 7, 8, 10, 12, 14, 20, 25, 30, 31, 51, 52, 53, 61, 63, 89, 103, 186, 405], correction=True)
+    path = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/4445/20220710_4445_00_synchro/"
+    test_rec = pc.RecordingAmplDet(path, starting_trial=0, inhibitory_ids=[7, 24, 34, 73, 89, 103, 683],
+                                        sf=30.9609)
 
     heat_map_per_stim(test_rec.df_f_inh, test_rec.stim_time, test_rec.stim_ampl)
 
@@ -240,7 +240,7 @@ if __name__ == '__main__':
     analog_trace = test_rec.analog.iloc[:, 1]
     # # analog_trace = test_rec.analog["stimulus"].to_numpy()
 
-    trace = test_rec.df_f_exc[42]
+    trace = test_rec.df_f_exc[1]
     # print(len(analog_trace)/10000)
     # print(len(trace) / sampling_rate)
 

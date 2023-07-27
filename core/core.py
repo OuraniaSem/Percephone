@@ -192,8 +192,11 @@ class RecordingAmplDet(Recording):
         self.stim_ampl = []
         with open(input_path + 'params_trial.json', "r") as read_file:
             self.json = json.load(read_file)
-        if os.path.exists(input_path + 'analog_synchronized.csv'):
+        if os.path.exists(input_path + 'analog_synchronized.csv') and os.path.exists(input_path + 'stim_ampl_time.csv'):
             print('Behavioural information already incorporated in the analog.')
+            self.stim_time = pd.read_csv(input_path + 'stim_ampl_time.csv', usecols=['stim_time']).values.flatten()
+            self.stim_ampl = pd.read_csv(input_path + 'stim_ampl_time.csv', usecols=['stim_ampl']).to_numpy().flatten()
+
         else:
             self.synchronization_with_iti(starting_trial)
 
@@ -305,6 +308,8 @@ class RecordingAmplDet(Recording):
         self.stim_ampl = stim_ampl
         self.stim_time = np.array(self.stim_time)
         self.analog.to_csv(self.input_path + 'analog_synchronized.csv', index=False)
+        pd.DataFrame({'stim_time': self.stim_time,
+                      'stim_ampl': stim_ampl}).to_csv(self.input_path + 'stim_ampl_time.csv')
 
 
 if __name__ == '__main__':
@@ -315,6 +320,6 @@ if __name__ == '__main__':
     # test_no_analog = RecordingStimulusOnly(path, inhibitory_ids=[4, 14, 33, 34, 36, 39, 46, 74], sf=30.9609)
     # print(test_no_analog.stim_ampl)
 
-    path = "Z:\\Current_members\\Ourania_Semelidou\\2p\\Ca_imaging_analysis_PreSynchro\\Fmko\\Amplitude_Detection\\4445\\20220710_4445_00_synchro\\"
-    record_detection = RecordingAmplDet(path,starting_trial=0, inhibitory_ids=[7, 24, 34, 73, 89, 103, 683], sf=30.9609)
+    path = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/4445/20220710_4445_00_synchro/"
+    record_detection = RecordingAmplDet(path, starting_trial=0, inhibitory_ids=[7, 24, 34, 73, 89, 103, 683], sf=30.9609)
     print(record_detection.stim_ampl)
