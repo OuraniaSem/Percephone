@@ -3,17 +3,16 @@ Core classes for recording, synchronization, synchronization w/o ITI2 analog"""
 
 import json
 import os
-import time
 
 import matplotlib
 import numpy as np
 import pandas as pd
 import scipy.signal as ss
-import h5py
 from responsivity import responsivity
-import scipy.interpolate as si
+
 matplotlib.use("Qt5Agg")
 import matplotlib.pyplot as plt
+
 plt.switch_backend("Qt5Agg")
 
 
@@ -149,7 +148,8 @@ class RecordingStimulusOnly(Recording):
         def stim_onset_calc(peak_index):
             time_window = 400  # 40 ms before peak
             signal_window = analog_trace[peak_index - time_window:peak_index]
-            return np.argwhere(signal_window > (3*np.std(analog_trace[peak_index-1000:peak_index-400])+np.mean(analog_trace[peak_index-1000:peak_index-400])))[0][0] + peak_index - time_window  # 0.184
+            return np.argwhere(signal_window > (3 * np.std(analog_trace[peak_index - 1000:peak_index - 400]) + np.mean(
+                analog_trace[peak_index - 1000:peak_index - 400])))[0][0] + peak_index - time_window  # 0.184
 
         stim_onset_idx = list(map(stim_onset_calc, stim_peak_indx))
         stim_onset_time = self.analog.iloc[stim_onset_idx, 0]
@@ -189,14 +189,19 @@ class RecordingAmplDet(Recording):
         self.analog[0] = (self.analog[0] * 10).astype(int)
         self.xls = pd.read_excel(input_path + 'bpod.xls', header=None)
         self.stim_time = []
+        self.reward_time = []
         self.stim_ampl = []
+        self.timeout_time = []
         with open(input_path + 'params_trial.json', "r") as read_file:
             self.json = json.load(read_file)
-        if os.path.exists(input_path + 'analog_synchronized.csv') and os.path.exists(input_path + 'stim_ampl_time.csv'):
+        if os.path.exists(input_path + 'behavior_events.json'):
             print('Behavioural information already incorporated in the analog.')
-            self.stim_time = pd.read_csv(input_path + 'stim_ampl_time.csv', usecols=['stim_time']).values.flatten()
-            self.stim_ampl = pd.read_csv(input_path + 'stim_ampl_time.csv', usecols=['stim_ampl']).to_numpy().flatten()
-
+            with open(input_path + 'behavior_events.json', "r") as events_file:
+                events = json.load(events_file)
+            self.stim_time = np.array(events["stim_time"])
+            self.stim_ampl = np.array(events["stim_ampl"])
+            self.reward_time = np.array(events["reward_time"])
+            self.timeout_time = np.array(events["timeout_time"])
         else:
             self.synchronization_with_iti(starting_trial)
 
@@ -219,6 +224,7 @@ class RecordingAmplDet(Recording):
         ------
         Updated analog file (csv) with the stimulus, timeout, reward time
         """
+        print('Synchronization method with ITI.')
 
         # get the ITI2, reward, timeout and stimulus from the xls
         data_iti = self.xls[self.xls[0] == 'STATE'][self.xls[4] == 'ITI2']
@@ -227,7 +233,8 @@ class RecordingAmplDet(Recording):
         data_stimulus = self.xls[self.xls[0] == 'STATE'][self.xls[4] == 'Stimulus']
 
         splitted = np.split(self.xls, self.xls[self.xls[4] == 'The trial ended'].index)
-        liks = [np.round(((split[2][(split[0] == 'EVENT') & (split[4] == 94)].values - 2) * 10000).astype(float)) for split in splitted]
+        licks = [np.round(((split[2][(split[0] == 'EVENT') & (split[4] == 94)].values - 2) * 10000).astype(float)) for
+                 split in splitted]
 
         # get the time for ITI2, reward, timeout and stimulus
         ITI_time_xls = data_iti[2].values.astype(float)
@@ -272,7 +279,7 @@ class RecordingAmplDet(Recording):
                 reward_to_analog.append(reward_time_to_ITI[icount])
                 timeout_to_analog.append(timeout_time_to_ITI[icount])
                 stimulus_to_analog.append(stimulus_time_to_ITI[icount])
-                licks_to_analog.append(liks[icount])
+                licks_to_analog.append(licks[icount])
                 ampl_recording.append(self.json[icount]["amp"])
         ampl_recording_iter = iter(ampl_recording)
 
@@ -291,14 +298,16 @@ class RecordingAmplDet(Recording):
                     self.analog.at[index_licks[0], 'licks'] = 4
             if len(index_reward) != 0:
                 self.analog.at[index_reward[0], 'reward'] = 2
+                self.reward_time.append(int((index_reward[0] / 10000) * self.sf))
             if len(index_timeout) != 0:
                 self.analog.at[index_timeout[0], 'timeout'] = 3
+                self.timeout_time.append(int((index_timeout[0] / 10000) * self.sf))
                 if len(index_stimulus) == 0:
                     timeout_trial = next(ampl_recording_iter)
             if len(index_stimulus) != 0:
                 amp = next(ampl_recording_iter)
                 self.analog.at[index_stimulus[0], 'stimulus_xls'] = amp
-                self.stim_time.append(int((index_stimulus[0] / 10000)*self.sf))
+                self.stim_time.append(int((index_stimulus[0] / 10000) * self.sf))
                 self.stim_ampl.append(amp)
         stim_ampl = np.around(self.stim_ampl, decimals=1)
         stim_ampl_sort = np.sort(np.unique(stim_ampl))
@@ -307,9 +316,15 @@ class RecordingAmplDet(Recording):
             stim_ampl[stim_ampl == stim_ampl_sort[i]] = convert[len(stim_ampl_sort)][i]
         self.stim_ampl = stim_ampl
         self.stim_time = np.array(self.stim_time)
+        self.reward_time = np.array(self.reward_time)
+        self.timeout_time = np.array(self.timeout_time)
         self.analog.to_csv(self.input_path + 'analog_synchronized.csv', index=False)
-        pd.DataFrame({'stim_time': self.stim_time,
-                      'stim_ampl': stim_ampl}).to_csv(self.input_path + 'stim_ampl_time.csv')
+        to_save = {"stim_time": self.stim_time.tolist(),
+                   "stim_ampl": stim_ampl.tolist(),
+                   "reward_time": self.reward_time.tolist(),
+                   "timeout_time": self.timeout_time.tolist()}
+        with open(self.input_path + "behavior_events.json", "w") as jsn:
+            json.dump(to_save, jsn)
 
 
 if __name__ == '__main__':
@@ -320,6 +335,7 @@ if __name__ == '__main__':
     # test_no_analog = RecordingStimulusOnly(path, inhibitory_ids=[4, 14, 33, 34, 36, 39, 46, 74], sf=30.9609)
     # print(test_no_analog.stim_ampl)
 
-    path = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/4445/20220710_4445_00_synchro/"
-    record_detection = RecordingAmplDet(path, starting_trial=0, inhibitory_ids=[7, 24, 34, 73, 89, 103, 683], sf=30.9609)
+    path = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format/20220930_4756_01_synchro/"
+    record_detection = RecordingAmplDet(path, starting_trial=0,
+                                        inhibitory_ids=[12, 26, 45, 54, 55, 72, 86, 140, 345, 373], sf=30.9609)
     print(record_detection.stim_ampl)

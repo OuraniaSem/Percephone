@@ -27,7 +27,10 @@ ko_color = "#CC0000"
 
 
 def interpolation_frames(df):
-    """ int(3.5*30.9609) = 108
+    """
+    Fill the missing frames with interpolation if the sampling rate
+    is 21.2209 Hz for some files for the 3.5s window range
+        int(3.5*30.9609) = 108
         int(3.5*21.2209) = 74
         dif= 34"""
     index_init = np.arange(0, 108)
@@ -55,6 +58,15 @@ def peristimulus(record, stim, inh=False):
         except IndexError as e:
             if stim in np.unique(record.stim_ampl):
                 print("IndexError for the neurone n°" + str(i))
+    return output
+
+
+def perireward(reward_times, df, sf):
+    reward_times = reward_times[reward_times < (len(df[0]) - int(sf * 3.5))]
+    stim_ranges = [np.arange(timing, timing + int(sf * 3.5))for timing in reward_times]
+    output = np.zeros((len(df), int(sf * 3.5)))
+    for i, r in enumerate(df):
+        output[i] = np.mean(r[np.array(stim_ranges)], axis=0)
     return output
 
 
@@ -112,7 +124,7 @@ def heat_map_per_stim(df_f, stim_times, stim_ampl):
     print("--- %s seconds ---" % round(time.time() - start_time, 2))
 
 
-def group_heat_map_per_stim(df_f, stim_, filename):
+def group_heat_map_per_stim(df_f, name, filename):
     print("Plotting heat map per stimulation.")
     start_time = time.time()
     print("Plotting heatmap.")
@@ -126,7 +138,7 @@ def group_heat_map_per_stim(df_f, stim_, filename):
     ax.pcolor(time_range, np.arange(len(df_f_clustered)), df_f_clustered, vmin=0, vmax=50, cmap="Reds")
     plt.xlabel('Time (seconds)')
     plt.ylabel('Neurons')
-    plt.title("Stimulus " + str(stim_) + " amp")
+    plt.title("Stimulus " + str(name) + " amp")
     fig.tight_layout()
     fig.savefig(filename)
     plt.show()
