@@ -61,12 +61,12 @@ def peristimulus(record, stim, inh=False):
     return output
 
 
-def perireward(reward_times, df, sf):
-    reward_times = reward_times[reward_times < (len(df[0]) - int(sf * 3.5))]
-    stim_ranges = [np.arange(timing, timing + int(sf * 3.5))for timing in reward_times]
-    output = np.zeros((len(df), int(sf * 3.5)))
+def perirevent(times, df, sf):
+    event_times = times[times < (len(df[0]) - int(sf * 3.5))]
+    ranges = [np.arange(timing - int(sf*1), timing + int(sf * 3.5))for timing in event_times]
+    output = np.zeros((len(df), int(sf * 4.48)))  # 4.48 and not 4.5 because int(sf*4.5)>int(sf)+int(sf*3.5)
     for i, r in enumerate(df):
-        output[i] = np.mean(r[np.array(stim_ranges)], axis=0)
+        output[i] = np.mean(r[np.array(ranges)], axis=0)
     return output
 
 
@@ -124,21 +124,25 @@ def heat_map_per_stim(df_f, stim_times, stim_ampl):
     print("--- %s seconds ---" % round(time.time() - start_time, 2))
 
 
-def group_heat_map_per_stim(df_f, name, filename):
-    print("Plotting heat map per stimulation.")
+def group_heat_map_per_stim(df_f_exc, df_f_inh, dn_exc, dn_inh, name, filename):
     start_time = time.time()
     print("Plotting heatmap.")
-    time_range = np.linspace(0, len(df_f[0]) / sampling_rate, len(df_f[0]))
-    Z = linkage(df_f, 'ward', optimal_ordering=True)
-    dn = dendrogram(Z, no_plot=True)
-    fig, ax = plt.subplots(1, 1, figsize=(18, 10))
-    ax.spines['right'].set_visible(False)
-    ax.spines['top'].set_visible(False)
-    df_f_clustered = df_f[dn['leaves']]
-    ax.pcolor(time_range, np.arange(len(df_f_clustered)), df_f_clustered, vmin=0, vmax=50, cmap="Reds")
-    plt.xlabel('Time (seconds)')
-    plt.ylabel('Neurons')
-    plt.title("Stimulus " + str(name) + " amp")
+    time_range = np.linspace(-1, (len(df_f_exc[0]) / sampling_rate)-1, len(df_f_exc[0]))
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(18, 10), sharex="all", gridspec_kw={'height_ratios': [3, 1]})
+    ax1.spines['right'].set_visible(False)
+    ax1.spines['top'].set_visible(False)
+    ax1.get_xaxis().set_visible(False)
+    df_f_clustered = df_f_exc[dn_exc['leaves']]
+    ax1.pcolor(time_range, np.arange(len(df_f_clustered)), df_f_clustered, vmin=0, vmax=50, cmap="Reds")
+    ax2.spines['right'].set_visible(False)
+    ax2.spines['top'].set_visible(False)
+    df_f_clustered = df_f_inh[dn_inh['leaves']]
+    ax2.pcolor(time_range, np.arange(len(df_f_clustered)), df_f_clustered, vmin=0, vmax=50, cmap="Reds")
+    ax2.set_xlabel('Time (seconds)')
+    ax1.set_ylabel('Exc neurons')
+    ax2.set_ylabel('Inh neurons')
+    ax1.set_title(str(name))
+    ax2.set_xticks([-1, -0.5, 0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5])
     fig.tight_layout()
     fig.savefig(filename)
     plt.show()

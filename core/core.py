@@ -185,8 +185,6 @@ class RecordingStimulusOnly(Recording):
 class RecordingAmplDet(Recording):
     def __init__(self, input_path, starting_trial, inhibitory_ids, sf, correction=True):
         super().__init__(input_path, inhibitory_ids, sf)
-        self.analog = pd.read_csv(input_path + 'analog.txt', sep="\t", header=None)
-        self.analog[0] = (self.analog[0] * 10).astype(int)
         self.xls = pd.read_excel(input_path + 'bpod.xls', header=None)
         self.stim_time = []
         self.reward_time = []
@@ -203,6 +201,8 @@ class RecordingAmplDet(Recording):
             self.reward_time = np.array(events["reward_time"])
             self.timeout_time = np.array(events["timeout_time"])
         else:
+            self.analog = pd.read_csv(input_path + 'analog.txt', sep="\t", header=None)
+            self.analog[0] = (self.analog[0] * 10).astype(int)
             self.synchronization_with_iti(starting_trial)
 
     def synchronization_with_iti(self, starting_trial):
