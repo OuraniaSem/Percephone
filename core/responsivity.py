@@ -2,7 +2,6 @@
 Charecterization of the responsivity for all neurons.
 """
 import random as rnd
-
 import matplotlib
 import numpy as np
 import pandas as pd
@@ -15,7 +14,7 @@ plt.switch_backend("Qt5Agg")
 
 sf = 30.9609  # Hz
 pre_boundary = int(0.25 * sf)  # index
-post_boundary = int(1 * sf)  # index
+post_boundary = int(0.5 * sf)  # index
 
 
 def responsive_prsa_et_al_method(df, stim_times):
@@ -49,7 +48,7 @@ def resp_single_neuron(neuron_df_data_, random_timing, stim_idx):
     bootstrap_responses = []
     for rnd_idx in random_timing:
         bootstrap_responses.append(ss.iqr(neuron_df_data_[rnd_idx - pre_boundary:rnd_idx], nan_policy='omit'))
-    threshold = 2 * np.nanpercentile(bootstrap_responses, 95)
+    threshold = np.nanpercentile(bootstrap_responses, 95)  # 2 * np.nanper... before 11-09-2023
     for y, stim_i in enumerate(stim_idx):
         # bsl_activity = np.subtract(*np.nanpercentile((neuron_df[(int(stim_timing * sf) - pre_boundary):int(stim_timing * sf)]), [75, 25]))
         bsl_activity = np.mean(neuron_df_data_[(stim_i - pre_boundary):stim_i])
@@ -152,10 +151,11 @@ def responsivity(record, row_metadata):
     resp_neurons["Genotype"] = [group] * (len(total_responsivity_exc) + len(total_responsivity_inh))
     resp_neurons["Type"] = np.concatenate(
         [["exc"] * len(total_responsivity_exc), ["inh"] * len(total_responsivity_inh)])
+    windows = np.concatenate([list(np.arange(stim_i - int(0.5*record.sf), stim_i)) for stim_i in record.stim_time])
     resp_neurons["STD baseline"] = np.concatenate(
-        [np.std(record.df_f_exc, axis=1), np.std(record.df_f_inh, axis=1)])
+        [np.std(record.df_f_exc[:, windows], axis=1), np.std(record.df_f_inh[:, windows], axis=1)])
     resp_neurons["Mean baseline"] = np.concatenate(
-        [np.mean(record.df_f_exc, axis=1), np.mean(record.df_f_inh, axis=1)])
+        [np.mean(record.df_f_exc[:, windows], axis=1), np.mean(record.df_f_inh[:, windows], axis=1)])
     record.sum_resp = summary_resp
     record.resp_neurons = resp_neurons
     record.name = filename

@@ -3,26 +3,26 @@ Core classes for recording, synchronization, synchronization w/o ITI2 analog"""
 
 import json
 import os
-
+import random as rnd
 import matplotlib
 import numpy as np
 import pandas as pd
 import scipy.signal as ss
-from responsivity import responsivity
-
+from responsivity import responsivity, resp_single_neuron
+from Helper_Functions.Utils_core import read_info
 matplotlib.use("Qt5Agg")
 import matplotlib.pyplot as plt
-
 plt.switch_backend("Qt5Agg")
 
 
 class Recording:
-    def __init__(self, input_path, inhibitory_ids, sf):
+    def __init__(self, input_path, foldername, rois):
+        inhibitory_ids, self.sf = read_info(foldername, rois)
         self.input_path = input_path
         f = np.load(input_path + 'F.npy', allow_pickle=True)
         fneu = np.load(input_path + 'Fneu.npy', allow_pickle=True)
         iscell = np.load(input_path + 'iscell.npy', allow_pickle=True)
-        self.sf = sf
+
         # Create a dimension in iscell to define excitatory and inhibitory cells
         exh_inh = np.ones((len(iscell), 1))  # array to define excitatory
         exh_inh[inhibitory_ids] = 0  # correct the array to define inhibitory as 0
@@ -33,6 +33,10 @@ class Recording:
 
         self.df_f_exc = self.compute_df_f(f, fneu, excitatory_ids, input_path + 'df_f_exc.npy')
         self.df_f_inh = self.compute_df_f(f, fneu, inhibitory_ids, input_path + 'df_f_inh.npy')
+        if os.path.exists(input_path + 'spks.npy'):
+            spks = np.load(self.input_path + "spks.npy")
+            self.spks_exc = spks[excitatory_ids]
+            self.spks_inh = spks[inhibitory_ids]
 
     def compute_df_f(self, f_, f_neu, cell_ids, save_path):
         """
@@ -101,9 +105,37 @@ class Recording:
         resp, resp_neur = responsivity(self, row_metadata)
         return resp, resp_neur
 
+    def resp_matrice(self, df_data):
+        """ Method with interquartile measure of the baseline
+
+        Parameters
+        ----------
+        df_data :  numpy array
+            delta f over f (neurons,time) can be exc or inh
+        """
+        pre_boundary = int(0.25 * self.sf)  # index
+        post_boundary = int(0.5 * self.sf)
+        exclude_windows = [list(range(t, t + post_boundary)) for t in self.stim_time]
+        exclude_windows.append(list(range(0, pre_boundary)))  # to not have edge problem
+        exclude_windows.append(
+            list(range(len(df_data[0]) - post_boundary, len(df_data[0]))))  # to not have edge problem
+        range_iti = set(range(len(df_data[0]))).difference(set(np.concatenate(np.array(exclude_windows))))
+        random_timing = rnd.sample(range_iti, k=1999)
+
+        from multiprocessing import Pool, cpu_count
+        workers = cpu_count()
+        pool = Pool(processes=workers)
+        async_results = [pool.apply_async(resp_single_neuron, args=(i, random_timing, self.stim_time)) for i in df_data]
+        resp_mat = [ar.get() for ar in async_results]
+        return resp_mat
+
+    def delay_matrice(self, df_data, resp_masks):
+        from delay_onset import delay_
+        return delay_(self, df_data, self.stim_time, resp_masks)
+
 
 class RecordingStimulusOnly(Recording):
-    def __init__(self, input_path, inhibitory_ids, sf, correction=True):
+    def __init__(self, input_path, starting_trial, inhibitory_ids, sf, correction=True):
         super().__init__(input_path, inhibitory_ids, sf)
         self.analog = pd.read_csv(input_path + 'analog.txt', sep="\t")
         if os.path.exists(input_path + 'stim_ampl_time.csv'):
@@ -153,13 +185,13 @@ class RecordingStimulusOnly(Recording):
 
         stim_onset_idx = list(map(stim_onset_calc, stim_peak_indx))
         stim_onset_time = self.analog.iloc[stim_onset_idx, 0]
-
+        self.stim_time = stim_onset_time  # TEMP 13-09-2023
         # plot the analog to test the index of stimulus onset
         fig, axs = plt.subplots(2, 1, figsize=(18, 10), sharex=True)
         axs[0].plot(analog_trace)
         axs[0].plot(stim_onset_idx, analog_trace[stim_onset_idx], 'x')
         plt.show()
-        stim_onsets = ((stim_onset_time.to_numpy() / 1000) * self.sf).astype('int')
+        stim_onsets = np.array([int((stim / 1000) * self.sf) for stim in stim_onset_time])
 
         def correction(idx):
             """ Perform a frames correction. 8 is the number of frames that the last stimulus will be shifted before"""
@@ -171,15 +203,10 @@ class RecordingStimulusOnly(Recording):
         if correction_shift:
             self.stim_time = np.array(list(map(correction, stim_onsets))).flatten()
         else:
-            self.stim_time = np.array(stim_onsets).flatten()
+            self.stim_time = stim_onsets
         print(self.stim_time.shape, self.stim_ampl.shape)
         pd.DataFrame({'stim_time': self.stim_time,
                       'stim_ampl': stim_ampl}).to_csv(self.input_path + 'stim_ampl_time.csv')
-
-    def remove_bad_frames(self, bad_frames_index):
-        self.df_f_exc = np.delete(self.df_f_exc, bad_frames_index)
-        self.df_f_inh = np.delete(self.df_f_inh, bad_frames_index)
-        self.analog = self.analog.drop(bad_frames_index)
 
 
 class RecordingAmplDet(Recording):
@@ -328,14 +355,8 @@ class RecordingAmplDet(Recording):
 
 
 if __name__ == '__main__':
-    # path = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/4456/20220715_4456_ampl_02synchro/"
-    # test_rec_stim_only = RecordingStimulusOnly(path, inhibitory_ids=[14])
-
-    # path = "/datas/Théo/Projects/Percephone/data/StimulusOnlyWT/20221128_4939_00_synchro/"
-    # test_no_analog = RecordingStimulusOnly(path, inhibitory_ids=[4, 14, 33, 34, 36, 39, 46, 74], sf=30.9609)
-    # print(test_no_analog.stim_ampl)
-
-    path = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format/20220930_4756_01_synchro/"
-    record_detection = RecordingAmplDet(path, starting_trial=0,
-                                        inhibitory_ids=[12, 26, 45, 54, 55, 72, 86, 140, 345, 373], sf=30.9609)
-    print(record_detection.stim_ampl)
+    directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format/"
+    roi_info = pd.read_excel(directory + "/FmKO_ROIs&inhibitory.xlsx")
+    folder = "20221004_4754_01_synchro"
+    path = directory + folder + '/'
+    rec = RecordingAmplDet(path, 0, folder, roi_info)
