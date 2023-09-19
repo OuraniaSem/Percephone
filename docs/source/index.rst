@@ -3,7 +3,7 @@
 Welcome to Percephone's documentation!
 ======================================
 .. image:: images/dff_trace_example.png
-  :scale: 100 %
+  :scale: 50 %
   :align: center
 
 Overview
