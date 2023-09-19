@@ -1,7 +1,7 @@
 # Percephone
 Percephone is a tool to analyze calcium imaging recordings in combination with behavioral data obtained with a perceptual decision-making task
 
-![image info](./docs/source/images/dff_trace_example.png)
+![image info](./docs/source/images/dff_trace_example2.png)
 
 # Requirements:
   - Python 3.6 or more
