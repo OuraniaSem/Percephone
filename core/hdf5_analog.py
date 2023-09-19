@@ -45,9 +45,9 @@ dset = file['MSession_0']
 unit = dset['MUnit_5']  # change according to number
 c0 = unit['Curve_2']
 curve0 = np.array(c0['CurveDataYRawData'])
-offset = c0.attrs.get("CurveDataYConversionConversionLinearOffset")
+offset = np.array(c0.attrs.get("CurveDataYConversionConversionLinearOffset"))
 scale = c0.attrs.get("CurveDataYConversionConversionLinearScale")
-analog_linear = curve0*scale
+analog_linear = curve0*scale + offset
 fig, axs = plt.subplots(2, 1, figsize=(18, 10))
 # axs[0].plot(analog.iloc[:, 1])
 axs[1].plot(curve0)

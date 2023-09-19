@@ -2,19 +2,23 @@
 Functions for plottings. Most of them use the Recordings class.
 """
 
+import os
 import time
+
 import matplotlib
 import numpy as np
+import pandas as pd
 import scipy.signal as ss
 from scipy.cluster.hierarchy import dendrogram, linkage
-import os
+
 import core as pc
 from scalebars import add_scalebar
-import pandas as pd
+
 matplotlib.use("Qt5Agg")
 import matplotlib.pyplot as plt
 import scipy.interpolate as si
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+
 plt.switch_backend("Qt5Agg")
 plt.rcParams['font.sans-serif'] = ['Helvetica Neue']
 plt.rcParams['font.size'] = 40
@@ -25,15 +29,16 @@ sampling_rate = 30.9609  # Hz
 wt_color = "#326993"
 ko_color = "#CC0000"
 
-#Kernel for convolution
+# Kernel for convolution
 tau_r = 0.07  # s0.014
 tau_d = 0.236  # s
 kernel_size = 10  # size of the kernel in units of tau
 a = 5  # scaling factor for biexpo kernel
-dt = 1/sampling_rate  # spacing between successive timepoints
+dt = 1 / sampling_rate  # spacing between successive timepoints
 n_points = int(kernel_size * tau_d / dt)
-kernel_times = np.linspace(-n_points * dt, n_points * dt, 2 * n_points + 1)  # linearly spaced array from -n_points*dt to n_points*dt with spacing dt
-kernel_bi = a * (1-np.exp(-kernel_times / tau_r))*np.exp(-kernel_times / tau_d)
+kernel_times = np.linspace(-n_points * dt, n_points * dt,
+                           2 * n_points + 1)  # linearly spaced array from -n_points*dt to n_points*dt with spacing dt
+kernel_bi = a * (1 - np.exp(-kernel_times / tau_r)) * np.exp(-kernel_times / tau_d)
 kernel_bi[kernel_times < 0] = 0
 
 
@@ -58,7 +63,7 @@ def peristimulus(record, stim, inh=False):
     else:
         df = record.df_f_exc
     stim_timings = stim_times[stim_ampl == stim]
-    stim_timings = stim_timings[stim_timings < (len(df[0])-int(record.sf * 3.5))]
+    stim_timings = stim_timings[stim_timings < (len(df[0]) - int(record.sf * 3.5))]
     stim_ranges = [np.arange(stim_timing, stim_timing + int(record.sf * 3.5))
                    for stim_timing in stim_timings]
     output = np.zeros((len(df), int(record.sf * 3.5)))
@@ -74,7 +79,7 @@ def peristimulus(record, stim, inh=False):
 
 def perirevent(times, df, sf):
     event_times = times[times < (len(df[0]) - int(sf * 3.5))]
-    ranges = [np.arange(timing - int(sf*1), timing + int(sf * 3.5))for timing in event_times]
+    ranges = [np.arange(timing - int(sf * 1), timing + int(sf * 3.5)) for timing in event_times]
     output = np.zeros((len(df), int(sf * 4.48)))  # 4.48 and not 4.5 because int(sf*4.5)>int(sf)+int(sf*3.5)
     for i, r in enumerate(df):
         output[i] = np.mean(r[np.array(ranges)], axis=0)
@@ -107,25 +112,29 @@ def heat_map(df_f, stim_times, stim_ampl):
 def plot_dff_stim(rec, filename):
     df_inh = rec.df_f_inh
     df_exc = rec.df_f_exc
-    cmap ='inferno'
+    cmap = 'inferno'
     time_range = np.linspace(0, (len(df_exc[0]) / sampling_rate) - 1, len(df_exc[0]))
     fig, ax = plt.subplots(1, 1, figsize=(18, 10))
     divider = make_axes_locatable(ax)
-    tax = divider.append_axes('top',size='10%',pad=0.1,sharex=ax)
-    cax = divider.append_axes('right',size='2%',pad=0.1)
+    tax = divider.append_axes('top', size='10%', pad=0.1, sharex=ax)
+    cax = divider.append_axes('right', size='2%', pad=0.1)
     ax.tick_params(which='both', width=4)
     # convolution of the stims
     stim_vector = np.zeros(len(df_exc[0]))
-    stim_index = [list(range(stim, stim + int(0.5*rec.sf))) for i, stim in enumerate(rec.stim_time[rec.stim_ampl != 0])]
+    stim_index = [list(range(stim, stim + int(0.5 * rec.sf))) for i, stim in
+                  enumerate(rec.stim_time[rec.stim_ampl != 0])]
     for stim_range, stim_amp in zip(stim_index, rec.stim_ampl[rec.stim_ampl != 0]):
         stim_vector[stim_range] = stim_amp * 100
     conv_stim_det = np.convolve(stim_vector, kernel_bi, mode='same') * dt
-    tax.imshow(conv_stim_det.reshape(1, -1), cmap=cmap, aspect='auto', interpolation='none')
+    extent = [time_range[0] - dt / 2, time_range[-1] + dt / 2, len(df_exc) - 0.5, -0.5]
+    tax.imshow(conv_stim_det.reshape(1, -1), cmap=cmap, aspect='auto', interpolation='none', extent=extent)
     tax.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
     Z = linkage(df_exc, 'ward', optimal_ordering=True)
     dn_exc = dendrogram(Z, no_plot=True, count_sort="ascending")
-    im = ax.imshow(df_exc[dn_exc['leaves']], cmap=cmap, interpolation='none', aspect='auto', vmin= np.nanpercentile(np.ravel(df_exc), 1), vmax=np.nanpercentile(np.ravel(df_exc), 99))
-    cbar = plt.colorbar(im, cax= cax)
+    im = ax.imshow(df_exc[dn_exc['leaves']], cmap=cmap, interpolation='none', aspect='auto',
+                   vmin=np.nanpercentile(np.ravel(df_exc), 1),
+                   vmax=np.nanpercentile(np.ravel(df_exc), 99), extent=extent)
+    cbar = plt.colorbar(im, cax=cax)
     cbar.ax.tick_params(which='both', width=4)
     cbar.set_label(r'$\Delta F/F$')
     ax.set_xlabel('time (s)')
@@ -137,7 +146,7 @@ def plot_dff_stim(rec, filename):
 def group_heat_map_per_stim(df_f_exc, df_f_inh, dn_exc, dn_inh, name, filename):
     start_time = time.time()
     print("Plotting heatmap.")
-    time_range = np.linspace(-1, (len(df_f_exc[0]) / sampling_rate)-1, len(df_f_exc[0]))
+    time_range = np.linspace(-1, (len(df_f_exc[0]) / sampling_rate) - 1, len(df_f_exc[0]))
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(18, 10), sharex="all", gridspec_kw={'height_ratios': [3, 1]})
     ax1.spines['right'].set_visible(False)
     ax1.spines['top'].set_visible(False)
@@ -165,7 +174,7 @@ def group_heat_map_per_stim(df_f_exc, df_f_inh, dn_exc, dn_inh, name, filename):
 def group_heat_map_per_stim_split(df_f, dn, name, filename):
     start_time = time.time()
     print("Plotting heatmap.")
-    time_range = np.linspace(-1, (len(df_f[0]) / sampling_rate)-1, len(df_f[0]))
+    time_range = np.linspace(-1, (len(df_f[0]) / sampling_rate) - 1, len(df_f[0]))
     fig, ax1 = plt.subplots(1, 1, figsize=(18, 10))
     ax1.spines['right'].set_visible(False)
     ax1.spines['top'].set_visible(False)
@@ -277,7 +286,7 @@ def df_f_graph_trials(recording, stim, neuron_id, ntrials=5, color=wt_color):
 
 if __name__ == '__main__':
     # directory = "/datas/Théo/Projects/Percephone/data/StimulusOnlyWT/"
-    directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format/"
+    directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
 
     roi_info = pd.read_excel(directory + "/FmKO_ROIs&inhibitory.xlsx")
     files = ["20220715_4456_00_synchro"]
@@ -286,4 +295,3 @@ if __name__ == '__main__':
             path = directory + folder + '/'
             recording = pc.RecordingStimulusOnly(path, 0, folder, roi_info, correction=False)
             plot_dff_stim(recording, folder)
-
