@@ -17,7 +17,6 @@ six
 tqdm
 zipp
 pandas
-sklearn
 scikit-learn
 h5py
 ipywidgets
