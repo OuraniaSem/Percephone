@@ -2,8 +2,9 @@
 ======================================
 Welcome to Percephone's documentation!
 ======================================
+
 .. image:: images/dff_trace_example.png
-  :scale: 50 %
+  :scale: 35%
   :align: center
 
 Overview
@@ -24,6 +25,6 @@ Just clone the github repository:
     :caption: Contents
 
     api
-    data input-output
+    data_input-output
     contact_us
 
