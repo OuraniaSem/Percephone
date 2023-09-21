@@ -210,16 +210,17 @@ class RecordingStimulusOnly(Recording):
 
 
 class RecordingAmplDet(Recording):
-    def __init__(self, input_path, starting_trial, inhibitory_ids, sf, correction=True):
+    def __init__(self, input_path, starting_trial, inhibitory_ids, sf, correction=True, no_cache = False):
         super().__init__(input_path, inhibitory_ids, sf)
         self.xls = pd.read_excel(input_path + 'bpod.xls', header=None)
         self.stim_time = []
         self.reward_time = []
         self.stim_ampl = []
         self.timeout_time = []
+        self.detected_stim = []
         with open(input_path + 'params_trial.json', "r") as read_file:
             self.json = json.load(read_file)
-        if os.path.exists(input_path + 'behavior_events.json'):
+        if os.path.exists(input_path + 'behavior_events.json') and not no_cache:
             print('Behavioural information already incorporated in the analog.')
             with open(input_path + 'behavior_events.json', "r") as events_file:
                 events = json.load(events_file)
@@ -227,6 +228,7 @@ class RecordingAmplDet(Recording):
             self.stim_ampl = np.array(events["stim_ampl"])
             self.reward_time = np.array(events["reward_time"])
             self.timeout_time = np.array(events["timeout_time"])
+            self.detected_stim = np.array(events["detected_stim"])
         else:
             self.analog = pd.read_csv(input_path + 'analog.txt', sep="\t", header=None)
             self.analog[0] = (self.analog[0] * 10).astype(int)
@@ -279,7 +281,7 @@ class RecordingAmplDet(Recording):
         self.analog['timeout'] = 0
         self.analog['stimulus_xls'] = 888
         self.analog['licks'] = 0
-
+        self.detected_stim =[]
         # Get the ITI2 from the analog file, as the first "1" value in the digital input of the analog file
         index_iti_final = []
         index_iti_analog = self.analog.index[self.analog['iti'] == 1].tolist()
@@ -336,6 +338,11 @@ class RecordingAmplDet(Recording):
                 self.analog.at[index_stimulus[0], 'stimulus_xls'] = amp
                 self.stim_time.append(int((index_stimulus[0] / 10000) * self.sf))
                 self.stim_ampl.append(amp)
+                if len(index_reward) != 0:
+                    self.detected_stim.append(True)
+                else:
+                    self.detected_stim.append(False)
+
         stim_ampl = np.around(self.stim_ampl, decimals=1)
         stim_ampl_sort = np.sort(np.unique(stim_ampl))
         convert = {4: [4, 6, 8, 10], 5: [4, 6, 8, 10, 12], 6: [2, 4, 6, 8, 10, 12], 7: [0, 2, 4, 6, 8, 10, 12]}
@@ -345,18 +352,20 @@ class RecordingAmplDet(Recording):
         self.stim_time = np.array(self.stim_time)
         self.reward_time = np.array(self.reward_time)
         self.timeout_time = np.array(self.timeout_time)
+        self.detected_stim = np.array(self.detected_stim)
         self.analog.to_csv(self.input_path + 'analog_synchronized.csv', index=False)
         to_save = {"stim_time": self.stim_time.tolist(),
                    "stim_ampl": stim_ampl.tolist(),
                    "reward_time": self.reward_time.tolist(),
-                   "timeout_time": self.timeout_time.tolist()}
+                   "timeout_time": self.timeout_time.tolist(),
+                   "detected_stim": self.detected_stim.tolist()}
         with open(self.input_path + "behavior_events.json", "w") as jsn:
             json.dump(to_save, jsn)
 
 
 if __name__ == '__main__':
-    directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format/"
+    directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
     roi_info = pd.read_excel(directory + "/FmKO_ROIs&inhibitory.xlsx")
-    folder = "20221004_4754_01_synchro"
+    folder = "20221008_4746_00_synchro_sigma2_acuFR_tau02"
     path = directory + folder + '/'
-    rec = RecordingAmplDet(path, 0, folder, roi_info)
+    rec = RecordingAmplDet(path, 0, folder, roi_info, no_cache=True)
