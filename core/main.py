@@ -35,7 +35,7 @@ for folder in os.listdir(directory):
         n_record = folder[14:16]
         print(name)
         row = roi_info[(roi_info["Number"] == name) & (roi_info["Recording number"] == int(n_record))]
-        recording = pc.RecordingAmplDet(path, 0, folder, roi_info, no_cache=True)
+        recording = pc.RecordingAmplDet(path, 0, folder, roi_info)
         #  responsivity
         # sum_resp, neur_resp = recording.compute_responsivity(row)
         # summary_resp = pd.concat([summary_resp, sum_resp])

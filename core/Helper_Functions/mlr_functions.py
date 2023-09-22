@@ -1,8 +1,17 @@
 """Théo Gauvrit, 15/09/2023
 Functions for multiple linear regression linear"""
 
-import numpy as np
 from scipy.interpolate import interp1d
+import itertools
+import matplotlib
+import numpy as np
+
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score
+from tqdm import tqdm
+matplotlib.use("Qt5Agg")
+import matplotlib.pyplot as plt
+plt.switch_backend("Qt5Agg")
 
 
 def bootstrap(signal):
@@ -196,3 +205,52 @@ def find_significant_neurons(statistic, statistic_bootstrap, max_neurons, alpha_
 
     return indices_thr, mask
 
+def mlr(dff, regressors, sf):
+    n_regressors = len(regressors)
+    df_times = np.linspace(0, len(dff[0]) / sf, len(dff[0]))
+    # Linear regression
+    reg = LinearRegression().fit(regressors.T, dff.T)
+    coef = reg.coef_
+    r2 = r2_score(dff.T, reg.predict(regressors.T), multioutput='raw_values')
+
+    n_neurons = len(dff)  # Not sure, problem in the notebooks, don't understand where it came from
+    n_resamples = 50
+    r2_sbs = np.zeros(n_resamples * n_neurons)
+
+    for i in tqdm(range(n_resamples)):
+        dff_resampled = stationary_bootstrap(dff.T).T
+        reg = LinearRegression().fit(regressors.T, dff_resampled.T)
+        r2_sbs[i * n_neurons:(i + 1) * n_neurons] = r2_score(dff_resampled.T, reg.predict(regressors.T),
+                                                             multioutput='raw_values')
+    indices_r2, mask_r2 = find_significant_neurons(r2, r2_sbs, max_neurons=len(dff))
+    len(indices_r2)
+    n_resamples = 100
+    coef_bs = np.zeros((n_resamples, n_neurons, n_regressors))
+    samples = np.concatenate([regressors, dff])
+
+    for n in tqdm(range(n_resamples)):
+        resampled = bootstrap(samples.T).T
+        reg = LinearRegression().fit(resampled[:n_regressors].T, resampled[n_regressors:].T)
+        coef_bs[n] = reg.coef_
+
+    coef_se = np.zeros_like(coef)
+    for i in range(n_neurons):
+        coef_se[i] = np.sqrt(n_resamples / (n_resamples - 1)) * np.std(coef_bs[:, i, :], axis=0, ddof=1)
+
+    neuron_labels = np.zeros_like(coef)
+    for i in range(n_regressors):
+        neuron_labels[
+            coef[:, i] > 2 * coef_se[:, i], i] = 1  # if the coefs are larger than 2*SE we set the sign to 1
+        neuron_labels[coef[:, i] < -2 * coef_se[:, i], i] = -1  # if they are smaller than -2*SE we set it to -1
+    neuron_labels = neuron_labels[indices_r2]  # we only consider the neurons for which the fit is good
+
+    all_possible_labels = list(
+        itertools.product([0, 1, -1], repeat=n_regressors))  # get all possible combinations of 0, 1 and -1
+    n_neurons_per_label = []
+    text_labels = []
+    for label in all_possible_labels:
+        n_neurons_per_label.append(np.sum(np.all(neuron_labels == label, axis=1)))  # nb of nrs with a certain label
+        text_labels.append(str(label))  # each label saved as a string
+    n_neurons_per_label = np.array(n_neurons_per_label)
+    text_labels = np.array(text_labels)
+    return text_labels, n_neurons_per_label

@@ -140,11 +140,9 @@ def plot_dff_stim(rec, filename):
     plt.show()
 
 
-def plot_dff_stim_detected(rec, filename):
-    df_inh = rec.df_f_inh
-    df_exc = rec.df_f_exc
+def plot_dff_stim_detected(rec, dff, filename):
     cmap = 'inferno'
-    time_range = np.linspace(0, (len(df_exc[0]) / sampling_rate) - 1, len(df_exc[0]))
+    time_range = np.linspace(0, (len(dff[0]) / sampling_rate) - 1, len(dff[0]))
     fig, ax = plt.subplots(1, 1, figsize=(18, 10))
     divider = make_axes_locatable(ax)
     tax2 = divider.append_axes('top', size='10%', pad=0.1, sharex=ax)
@@ -152,8 +150,8 @@ def plot_dff_stim_detected(rec, filename):
     cax = divider.append_axes('right', size='2%', pad=0.1)
     ax.tick_params(which='both', width=4)
     # convolution of the stims
-    stim_vector = np.zeros(len(df_exc[0]))
-    stim_vector_det =  np.zeros(len(df_exc[0]))
+    stim_vector = np.zeros(len(dff[0]))
+    stim_vector_det =  np.zeros(len(dff[0]))
     stim_index = [list(range(stim, stim + int(0.5 * rec.sf))) for i, stim in
                   enumerate(rec.stim_time[rec.stim_ampl != 0])]
     for stim_range, stim_amp in zip(stim_index, rec.stim_ampl[rec.stim_ampl != 0]):
@@ -162,21 +160,21 @@ def plot_dff_stim_detected(rec, filename):
     for stim_range, stim_amp in zip(np.array(stim_index)[rec.detected_stim[rec.stim_ampl != 0]], rec.stim_ampl[(rec.detected_stim) & (rec.stim_ampl != 0)]):
         stim_vector_det[stim_range] = stim_amp * 100
     conv_stim_det = np.convolve(stim_vector_det, kernel_bi, mode='same') * dt
-    extent = [time_range[0] - dt / 2, time_range[-1] + dt / 2, len(df_exc) - 0.5, -0.5]
+    extent = [time_range[0] - dt / 2, time_range[-1] + dt / 2, len(dff) - 0.5, -0.5]
     tax2.imshow(conv_stim_det.reshape(1, -1), cmap=cmap, aspect='auto', interpolation='none', extent=extent)
     tax2.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
 
     tax1.imshow(conv_stim.reshape(1, -1), cmap=cmap, aspect='auto', interpolation='none', extent=extent)
     tax1.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
-    Z = linkage(df_exc, 'ward', optimal_ordering=True)
+    Z = linkage(dff, 'ward', optimal_ordering=True)
     dn_exc = dendrogram(Z, no_plot=True, count_sort="ascending")
-    im = ax.imshow(df_exc[dn_exc['leaves']], cmap=cmap, interpolation='none', aspect='auto',
-                   vmin=np.nanpercentile(np.ravel(df_exc), 1),
-                   vmax=np.nanpercentile(np.ravel(df_exc), 99), extent=extent)
+    im = ax.imshow(dff[dn_exc['leaves']], cmap=cmap, interpolation='none', aspect='auto',
+                   vmin=np.nanpercentile(np.ravel(dff), 1),
+                   vmax=np.nanpercentile(np.ravel(dff), 99), extent=extent)
     cbar = plt.colorbar(im, cax=cax)
     cbar.ax.tick_params(which='both', width=4)
     cbar.set_label(r'$\Delta F/F$')
-    ax.set_xlabel('time (s)')
+    ax.set_xlabel('Time (s)')
     ax.set_ylabel('Neurons')
     tax1.set_title(filename)
     plt.show()
@@ -210,7 +208,7 @@ def group_heat_map_per_stim(df_f_exc, df_f_inh, dn_exc, dn_inh, name, filename):
     print("--- %s seconds ---" % round(time.time() - start_time, 2))
 
 
-def group_heat_map_per_stim_split(df_f, dn, name, filename,legend):
+def group_heat_map_per_stim_split(df_f, dn, name, filename, legend, no_save=False):
     start_time = time.time()
     print("Plotting heatmap.")
     time_range = np.linspace(-1, (len(df_f[0]) / sampling_rate) - 1, len(df_f[0]))
@@ -224,9 +222,11 @@ def group_heat_map_per_stim_split(df_f, dn, name, filename,legend):
     ax1.tick_params(which='both', width=4)
     ax1.set_title(str(name))
     ax1.set_xticks([-1, -0.5, 0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5])
+    ax1.vlines(0, 0, len(df_f_clustered)-0.5, colors="forestgreen", lw=4, linestyles="dashed")
     fig.align_ylabels()
     fig.tight_layout()
-    fig.savefig(filename)
+    if not no_save:
+        fig.savefig(filename)
     plt.show()
     print("--- %s seconds ---" % round(time.time() - start_time, 2))
 
@@ -331,5 +331,5 @@ if __name__ == '__main__':
     for folder in files:
         if os.path.isdir(directory + folder):
             path = directory + folder + '/'
-            recording = pc.RecordingAmplDet(path, 0, folder, roi_info, correction=False, no_cache=True)
-            plot_dff_stim_detected(recording, folder)
+            recording = pc.RecordingAmplDet(path, 0, folder, roi_info, correction=False)
+            plot_dff_stim_detected(recording, recording.df_f_inh, folder)
