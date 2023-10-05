@@ -14,6 +14,7 @@ plt.switch_backend("Qt5Agg")
 
 
 def delay_(rec, df, stim_times, resp_mask):
+
     neuro_resp_delay = np.full((len(df), len(stim_times)), np.nan)
     st_index = [list(range(i, i+int(0.5*rec.sf))) for i in stim_times]
     st_vector = np.zeros(len(df[0]))
@@ -29,7 +30,7 @@ def delay_(rec, df, stim_times, resp_mask):
             baseline = np.mean(smooth_sig[st_i - 10:st_i])
             st_vector[np.concatenate(st_index)] = np.max(sig) + 0.50 * np.max(sig)
             conv_st = np.convolve(st_vector, kernel_biexp(rec.sf), mode='same') * 1/rec.sf
-            conv_st = conv_st + baseline 
+            conv_st = conv_st + baseline
             for y in range(15):
                 conv_ = range(st_i - 5, st_i + int(0.5 * rec.sf))
                 portion_sig = sig[0 + y: 20 + y]
@@ -38,17 +39,20 @@ def delay_(rec, df, stim_times, resp_mask):
                 r_ = reg_fit.score(conv_st[conv_][:, np.newaxis], portion_sig[:, np.newaxis])
                 rs_.append(r_)
             r_i_ = np.argmax(rs_)
-            neuro_resp_delay[n_neuro, id] = r_i_
+            neuro_resp_delay[n_neuro, i] = r_i_
     return neuro_resp_delay
 
 
 if __name__ == '__main__':
     directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format/"
     roi_info = pd.read_excel(directory + "/FmKO_ROIs&inhibitory.xlsx")
-    folder = "20221004_4754_01_synchro"
+    folder = "20220715_4456_00_synchro"
     path = directory + folder + '/'
     recording = pc.RecordingAmplDet(path, 0, folder, roi_info)
-    original_signal = recording.df_f_exc[1, :]
+    from zscore import zscore
+    recording.zscore = zscore(recording)
+    df = recording.zscore[1, :]  # recording.df_f_exc[1, :]
+    original_signal = df
     stim_vector = np.zeros(len(original_signal))
     stim_index = [list(range(i, i+int(0.5*recording.sf))) for i in recording.stim_time[recording.stim_ampl == 12]]
     stim_vector[np.concatenate(stim_index)] = 100
@@ -62,13 +66,13 @@ if __name__ == '__main__':
     ax.legend()
     plt.show()
     stims = recording.stim_time[recording.stim_ampl == 12]
-    for stim_i in stims[10:30]:
+    for stim_i in stims[0:40]:
         rs = []
-        smooth_signal = ss.savgol_filter(recording.df_f_exc[1, :], 5, 1)
+        smooth_signal = ss.savgol_filter(df, 5, 1)
         signal = smooth_signal[stim_i-10:stim_i + int(0.5 * recording.sf)+10]
         bsl = np.mean(smooth_signal[stim_i-10:stim_i])
-        stim_vector[np.concatenate(stim_index)] = np.max(signal) + 0.50 * np.max(signal)
-        conv_stim = np.convolve(stim_vector,kernel_biexp(recording.sf), mode='same') * 1/recording.sf
+        stim_vector[np.concatenate(stim_index)] = np.abs(np.max(signal)) + 0.50 * np.abs(np.max(signal))
+        conv_stim = np.convolve(stim_vector, kernel_biexp(recording.sf), mode='same') * 1/recording.sf
         conv_stim = conv_stim + bsl
         for i in range(15):
             conv = range(stim_i-5, stim_i + int(0.5 * recording.sf))
@@ -93,4 +97,3 @@ if __name__ == '__main__':
         ax.legend()
         ax.set_title(str(rs[r_i]) + " delay:" + str(r_i))
         plt.show()
-

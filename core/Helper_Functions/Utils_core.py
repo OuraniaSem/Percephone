@@ -19,10 +19,23 @@ def read_info(foldername, rois):
     n_record = foldername[14:16]
     row = rois[(rois["Number"] == name) & (rois["Recording number"] == int(n_record))]
     inhib_ids = np.array(list(list(row["Inhibitory neurons: ROIs"])[0].split(", ")))
-    return inhib_ids.astype(int), row["Frame Rate (Hz)"].values[0]
+    return row["Number"].values[0], inhib_ids.astype(int), row["Frame Rate (Hz)"].values[0], row["Genotype"].values[0]
 
 
 def kernel_biexp(sf):
+    """
+    Generate kernel of a biexponential function for mlr analysis or onset delay analysis
+    Parameters
+    ----------
+    sf: float
+        sampling frequency of the recording
+
+    Returns
+    -------
+    kernel_bi: array
+        kernel of the biexponential function
+
+    """
     tau_r = 0.07  # s0.014
     tau_d = 0.236  # s
     kernel_size = 10  # size of the kernel in units of tau
@@ -33,8 +46,6 @@ def kernel_biexp(sf):
                                n_points * dt,
                                2 * n_points + 1)  # linearly spaced array from -n_pts*dt to n_pts*dt with spacing dt
     kernel_bi = a * (1 - np.exp(-kernel_times / tau_r)) * np.exp(-kernel_times / tau_d)
-    kernel_rise = (1 - np.exp(-kernel_times / tau_r))
-    kernel_rise[kernel_times < 0] = 0
     kernel_bi[kernel_times < 0] = 0  # set to zero for negative times
     # fig, ax = plt.subplots()
     # ax.plot(kernel_times, kernel_rise)

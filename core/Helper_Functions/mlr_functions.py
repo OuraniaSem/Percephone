@@ -5,13 +5,41 @@ from scipy.interpolate import interp1d
 import itertools
 import matplotlib
 import numpy as np
-
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score
+from Helper_Functions.Utils_core import kernel_biexp
 from tqdm import tqdm
 matplotlib.use("Qt5Agg")
 import matplotlib.pyplot as plt
 plt.switch_backend("Qt5Agg")
+
+
+def regressor_labels(timings, duration, sf, len_signal, amplitude=100):
+    """
+    Convolve label events to obtain regressor for Multiple Linear Regression
+    Parameters
+    ----------
+    timings: array
+        timings in index of the label events
+    duration: array
+        duration of the label events
+    amplitude: int
+        amplitude of the label events
+    sf: float
+        sampling frequency
+    len_signal: int
+        length of the df/f trace in index
+
+    Returns
+    -------
+    regressor: array
+        convolved behavior label events
+    """
+    vector = np.zeros(len_signal)
+    index = [list(range(stim, int(stim + duration[i]))) for i, stim in enumerate(timings)]
+    vector[np.concatenate(index)] = amplitude
+    regressor = np.convolve(vector, kernel_biexp(sf), mode='same') * (1/sf)
+    return regressor
 
 
 def bootstrap(signal):
@@ -205,7 +233,26 @@ def find_significant_neurons(statistic, statistic_bootstrap, max_neurons, alpha_
 
     return indices_thr, mask
 
+
 def mlr(dff, regressors, sf):
+    """
+    Compute Multiple Linear Regression (MLR) between behavior events and neurons activity
+    Parameters
+    ----------
+    dff: array
+        delta f/f array for each neurons
+    regressors: list
+        list of regressors array
+    sf: float
+        sampling frequency
+
+    Returns
+    -------
+        text_labels: array
+            differents possible between the regressors
+        n_neurons_per_label:array
+            number of neurons for each labels
+    """
     n_regressors = len(regressors)
     df_times = np.linspace(0, len(dff[0]) / sf, len(dff[0]))
     # Linear regression
