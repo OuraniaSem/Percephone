@@ -3,6 +3,8 @@ Regroup small utils functions used in the cores function of Percephone
 """
 import numpy as np
 import pandas as pd
+import h5py
+
 
 def read_info(foldername, rois):
     """ Extract inhbitory ids and frame rate from rois_info excel sheet
