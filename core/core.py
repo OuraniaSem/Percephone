@@ -3,7 +3,6 @@ Core classes for recording, synchronization, synchronization w/o ITI2 analog"""
 
 import json
 import os
-
 import matplotlib
 import numpy as np
 import pandas as pd
@@ -207,7 +206,7 @@ class RecordingStimulusOnly(Recording):
 
 
 class RecordingAmplDet(Recording):
-    def __init__(self, input_path, starting_trial, inhibitory_ids, sf, correction=True, no_cache = False):
+    def __init__(self, input_path, starting_trial, inhibitory_ids, sf, correction=True, no_cache=False):
         super().__init__(input_path, inhibitory_ids, sf)
         self.xls = pd.read_excel(input_path + 'bpod.xls', header=None)
         self.stim_time = []
@@ -288,7 +287,7 @@ class RecordingAmplDet(Recording):
             elif elem - index_iti_analog[index - 1] > 1:
                 index_iti_final.append(elem)
 
-        index_iti_final.append(index_iti_analog[-1])
+        # index_iti_final.append(index_iti_analog[-1])
 
         # get the info for the recorded trials and align it with the excel
         reward_to_analog = []
@@ -332,7 +331,8 @@ class RecordingAmplDet(Recording):
             if len(index_stimulus) != 0:
                 amp = next(ampl_recording_iter)
                 self.analog.at[index_stimulus[0], 'stimulus_xls'] = amp
-                self.stim_time.append(int((index_stimulus[0] / 10000) * self.sf))
+                index_stim = int((index_stimulus[0] / 10000) * self.sf)
+                self.stim_time.append(index_stim-int(((1/self.sf)*(index_stimulus[0] / 10000))*(1/3)))
                 self.stim_ampl.append(amp)
                 if len(index_reward) != 0:
                     self.detected_stim.append(True)
@@ -360,8 +360,16 @@ class RecordingAmplDet(Recording):
 
 
 if __name__ == '__main__':
+    # directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
+    # roi_info = pd.read_excel(directory + "/FmKO_ROIs&inhibitory.xlsx")
+    # folder = "20221008_4746_00_synchro_sigma2_acuFR_tau02"
+    # path = directory + folder + '/'
+    # rec = RecordingAmplDet(path, 0, folder, roi_info)
+
     directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
     roi_info = pd.read_excel(directory + "/FmKO_ROIs&inhibitory.xlsx")
-    folder = "20221008_4746_00_synchro_sigma2_acuFR_tau02"
+    folder = "20231007_5873_00_synchro"
     path = directory + folder + '/'
-    rec = RecordingAmplDet(path, 0, folder, roi_info)
+    rec = RecordingAmplDet(path, 0, folder, roi_info, correction=False)
+
+

@@ -2,7 +2,7 @@
 Regroup small utils functions used in the cores function of Percephone
 """
 import numpy as np
-
+import pandas as pd
 
 def read_info(foldername, rois):
     """ Extract inhbitory ids and frame rate from rois_info excel sheet
@@ -17,7 +17,8 @@ def read_info(foldername, rois):
     """
     name = int(foldername[9:13])
     n_record = foldername[14:16]
-    row = rois[(rois["Number"] == name) & (rois["Recording number"] == int(n_record))]
+    date = str(foldername[:4]) + "-" + str(foldername[4:6]) + "-" + str(foldername[6:8])
+    row = rois[(rois["Number"] == name) & (rois["Recording number"] == int(n_record)) & (rois["Date"] == pd.to_datetime(date))]
     inhib_ids = np.array(list(list(row["Inhibitory neurons: ROIs"])[0].split(", ")))
     return row["Number"].values[0], inhib_ids.astype(int), row["Frame Rate (Hz)"].values[0], row["Genotype"].values[0]
 

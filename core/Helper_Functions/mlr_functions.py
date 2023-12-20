@@ -103,7 +103,6 @@ def calculate_pvalue(statistic, statistic_bootstrap):
     pvalue : 1d array
         p-values
     """
-    # ⌨️⬇️
     statistic_bootstrap = statistic_bootstrap.ravel()  # flatten array in case it's not already one-dimensional
     statistic_bootstrap_sorted = np.sort(statistic_bootstrap)  # sort the values in increasing order
     statistic_bootstrap_sorted = np.append(statistic_bootstrap_sorted, statistic_bootstrap_sorted[-1])
@@ -174,7 +173,6 @@ def calculate_covariance_bootstrap(signal, dff, n_resamples=50, average_block_si
     covariance_bootstrap : 1d array
         bootstrapped covariance values, shape (n_resamples*n_neurons)
     """
-    # ⌨️⬇️
     n_neurons = len(dff)
     covariance_bootstrap = np.zeros(n_resamples * n_neurons)
     from tqdm import tqdm
@@ -209,7 +207,6 @@ def find_significant_neurons(statistic, statistic_bootstrap, max_neurons, alpha_
     mask : 1d array
         boolean array which gives True on the indices of neurons for which we reject the null hypothesis
     """
-    # ⌨️⬇️
     pvalue = calculate_pvalue(statistic, statistic_bootstrap)
 
     n_neurons = len(pvalue)
@@ -289,15 +286,15 @@ def mlr(dff, regressors, sf):
         neuron_labels[
             coef[:, i] > 2 * coef_se[:, i], i] = 1  # if the coefs are larger than 2*SE we set the sign to 1
         neuron_labels[coef[:, i] < -2 * coef_se[:, i], i] = -1  # if they are smaller than -2*SE we set it to -1
-    neuron_labels = neuron_labels[indices_r2]  # we only consider the neurons for which the fit is good
+    neur_labels = neuron_labels[indices_r2]  # we only consider the neurons for which the fit is good
 
     all_possible_labels = list(
         itertools.product([0, 1, -1], repeat=n_regressors))  # get all possible combinations of 0, 1 and -1
     n_neurons_per_label = []
     text_labels = []
     for label in all_possible_labels:
-        n_neurons_per_label.append(np.sum(np.all(neuron_labels == label, axis=1)))  # nb of nrs with a certain label
+        n_neurons_per_label.append(np.sum(np.all(neur_labels == label, axis=1)))  # nb of nrs with a certain label
         text_labels.append(str(label))  # each label saved as a string
     n_neurons_per_label = np.array(n_neurons_per_label)
     text_labels = np.array(text_labels)
-    return text_labels, n_neurons_per_label
+    return text_labels, n_neurons_per_label, neuron_labels, indices_r2
