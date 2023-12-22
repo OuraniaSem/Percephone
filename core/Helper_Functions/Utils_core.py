@@ -68,6 +68,16 @@ def extract_analog_from_mesc(path_mesc, tuple_mesc, frame_rate, savepath=""):
     print("Analog saved.")
 
 
+def zscore(rec, dff):
+    # mean_bsl = np.mean(np.concatenate(rec.df_f_exc[:, np.linspace(rec.stim_time - int(0.5 * rec.sf), rec.stim_time, num=int(0.5 * rec.sf)+1, dtype=int)],axis=2), axis=1)
+    data = np.concatenate(np.stack(dff[:, np.linspace(rec.stim_time - int(0.5 * rec.sf), rec.stim_time, num=int(0.5 * rec.sf)+1, dtype=int)],axis=2))
+    mean_bsl = np.mean(data, axis=0)
+    std = np.std(data, axis=0)
+
+    zsc = np.divide(np.subtract(dff, mean_bsl[:, np.newaxis]), std[:, np.newaxis])
+    return zsc
+
+
 def kernel_biexp(sf):
     """
     Generate kernel of a biexponential function for mlr analysis or onset delay analysis
