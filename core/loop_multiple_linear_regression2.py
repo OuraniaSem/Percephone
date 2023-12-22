@@ -24,7 +24,7 @@ def detected_amp(filename, infos):
     return amps
 
 
-directory = "D:\\Ca imaging\\KO\\"
+directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
 roi_info = pd.read_excel(directory + "/FmKO_ROIs&inhibitory.xlsx")
 
 output = pd.DataFrame()
@@ -44,7 +44,6 @@ files = os.listdir(directory)
 # files = ["2022tauN_4745_01_synchro"]
 for id, folder in enumerate(files):
     if os.path.isdir(directory + folder):
-        print(folder)
         path = directory + folder + '/'
         rec = pc.RecordingAmplDet(path, 0, folder, roi_info)
         dff = rec.df_f_exc
@@ -60,19 +59,19 @@ for id, folder in enumerate(files):
         s_durations = durations
 
         # detected
-        stim_det = rec.stim_time[(rec.detected_stim)&(rec.stim_ampl==4)]
-        det_duration = s_durations[(rec.detected_stim)&(rec.stim_ampl==4)]
+        stim_det = rec.stim_time[rec.detected_stim]
+        det_duration = s_durations[rec.detected_stim]
         stim_vector = np.zeros(len(dff[0]))
         stim_index = [list(range(stim, int(stim + det_duration[i]))) for i, stim in enumerate(stim_det)]
-        stim_vector[np.concatenate(stim_index)] = 200
+        stim_vector[np.concatenate(stim_index)] = 100
         conv_stim_det = np.convolve(stim_vector, kernel_bi, mode='same') * dt
 
         # undetected
-        stim_undet = rec.stim_time[~(rec.detected_stim)&(rec.stim_ampl==4)]
-        undet_duration = s_durations[~(rec.detected_stim)&(rec.stim_ampl==4)]
+        stim_undet = rec.stim_time[~rec.detected_stim]
+        undet_duration = s_durations[~rec.detected_stim]
         stim_vector_undet = np.zeros(len(dff[0]))
         stim_index = [list(range(stim, int(stim + undet_duration[i]))) for i, stim in enumerate(stim_undet)]
-        stim_vector_undet[np.concatenate(stim_index)] = 200
+        stim_vector_undet[np.concatenate(stim_index)] = 100
         conv_stim_undet = np.convolve(stim_vector_undet, kernel_bi, mode='same') * dt
 
         # reward
@@ -99,7 +98,7 @@ for id, folder in enumerate(files):
         # postreward_vector[postreward_index[postreward_index < len(postreward_vector)]] = 100
         # conv_postreward = np.convolve(postreward_vector, kernel_bi, mode='same') * dt
 
-        regressors = np.array([conv_stim_det, conv_stim_undet])
+        regressors = np.array([conv_stim_det, conv_stim_undet,  conv_reward, conv_timeout])
 
         text_labels, n_neurons_per_label = mlr(dff, regressors, rec.sf)
         output["labels"] = text_labels
@@ -108,4 +107,4 @@ for id, folder in enumerate(files):
 output = output.loc[(output.iloc[:, 1:] != 0).any(axis=1)]
 s = output.sum()
 output_s = output.sort_index(key=output.sum(1).get)
-output.to_csv(directory+"output_mlr_WT_ampl4_tau02.csv")
+output_s.to_csv("output_mlr_tau02.csv")
