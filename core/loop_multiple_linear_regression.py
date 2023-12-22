@@ -49,7 +49,7 @@ for id, folder in enumerate(files):
     if os.path.isdir(directory + folder):
         path = directory + folder + '/'
         rec = pc.RecordingAmplDet(path, 0, folder, roi_info)
-        dff = rec.df_f_exc
+        dff = rec.df_f_exc # change for excitatory/inhibitory
         smooth_signal = ss.savgol_filter(dff, 5, 1)
         # stims
         detetected_amps = detected_amp(folder, roi_info)
@@ -79,7 +79,7 @@ for id, folder in enumerate(files):
         reward_vector[np.concatenate(reward_index)] = 200
         conv_reward = np.convolve(reward_vector, kernel_bi, mode='same') * dt
 
-        # timeout
+        # timeout / duration to recheck
         timeout_duration = 2  # s
         timeout_vector = np.zeros(len(smooth_signal[0]))
         timeout_index = np.concatenate([list(range(i, i + int(timeout_duration * rec.sf))) for i in rec.timeout_time])
