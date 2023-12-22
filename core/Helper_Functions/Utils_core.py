@@ -4,7 +4,7 @@ Regroup small utils functions used in the cores function of Percephone
 import numpy as np
 import pandas as pd
 import h5py
-
+import matplotlib.pyplot as plt
 
 def read_info(foldername, rois):
     """ Extract inhbitory ids and frame rate from rois_info excel sheet
@@ -98,3 +98,9 @@ def kernel_biexp(sf):
     # ax.set_xlabel('time (s)')
     # plt.show()
     return kernel_bi
+
+
+if __name__ == '__main__':
+    path = 'D:\\Ca imaging\\Analysis_Dec2023\\'
+    mesc = '20231007_5879_det.mesc'
+    extract_analog_from_mesc(path + '\\'+mesc, (0 ,0), savepath=path +'20231007_5879_det_00_synchro\\' )
