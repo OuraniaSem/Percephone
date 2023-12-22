@@ -25,7 +25,7 @@ def read_info(foldername, rois):
     return row["Number"].values[0], inhib_ids.astype(int), row["Frame Rate (Hz)"].values[0], row["Genotype"].values[0]
 
 
-def extract_analog_from_mesc(path_mesc, tuple_mesc, savepath=""):
+def extract_analog_from_mesc(path_mesc, tuple_mesc, frame_rate, savepath=""):
     """
     Extract analog from mesc file for ITI curve. Save it as analog.txt in order to be use by percephone
     Parameters
@@ -51,7 +51,7 @@ def extract_analog_from_mesc(path_mesc, tuple_mesc, savepath=""):
     plt.show()
     end_timings = timing_curve[-1] * np.array(timings.attrs.get("CurveDataYConversionConversionLinearScale"))
     print(end_timings)
-    end_timings_frames = len(timing_curve)*30.9609
+    end_timings_frames = len(timing_curve)*frame_rate
     print(end_timings_frames)
     end_timings_iti = len(iti_curve[::2])/10
     print(end_timings_iti)
@@ -103,4 +103,4 @@ def kernel_biexp(sf):
 if __name__ == '__main__':
     path = 'D:\\Ca imaging\\Analysis_Dec2023\\'
     mesc = '20231007_5879_det.mesc'
-    extract_analog_from_mesc(path + '\\'+mesc, (0 ,0), savepath=path +'20231007_5879_det_00_synchro\\' )
+    extract_analog_from_mesc(path + '\\'+mesc, (0 ,0), 31.2663, savepath=path +'20231007_5879_det_00_synchro\\' )
