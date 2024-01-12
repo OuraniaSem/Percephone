@@ -20,3 +20,5 @@ pandas
 scikit-learn
 h5py
 ipywidgets
+openpyxl
+xlrd
