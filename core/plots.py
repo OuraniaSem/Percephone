@@ -15,6 +15,7 @@ matplotlib.use("Qt5Agg")
 import matplotlib.pyplot as plt
 import scipy.interpolate as si
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from Helper_Functions.Utils_core import zscore
 
 plt.switch_backend("Qt5Agg")
 plt.rcParams['font.sans-serif'] = ['Helvetica Neue']
@@ -185,6 +186,18 @@ def plot_dff_stim_detected(rec, dff, filename):
 
 
 def plot_dff_stim_detected_timeout(rec, dff, filename):
+    """
+
+    Parameters
+    ----------
+    rec
+    dff
+    filename
+
+    Returns
+    -------
+
+    """
     cmap = 'inferno'
     time_range = np.linspace(0, (len(dff[0]) / sampling_rate) - 1, len(dff[0]))
     fig, ax = plt.subplots(1, 1, figsize=(18, 10))
@@ -390,16 +403,10 @@ if __name__ == '__main__':
     roi_info = pd.read_excel(directory + "/FmKO_ROIs&inhibitory.xlsx")
     folder = "20220715_4456_00_synchro"
     path = directory + folder + '/'
-    from hdf5_analog import extract_analog
+    # from hdf5_analog import extract_analog
     path_mesc = directory + folder[:13] + "_det.mesc"
     # extract_analog(path_mesc, (0, int(folder[14:16])), savepath=path)
     rec = pc.RecordingAmplDet(path, 0, folder, roi_info, correction=False, no_cache=True)
-    from zscore import zscore
-    rec.zscore = zscore(rec, rec.df_f_exc)
     # plot_dff_stim_detected(rec, rec.zscore, folder)
-    fig = plot_dff_stim_detected_timeout(rec, rec.zscore, folder)
-    fig.savefig("/datas/Théo/Projects/Percephone/output/heatmaps_inferno_bad_sync/"+folder+".png")
-
-
-    rec.analog
-    resampled_analog = ss.resample(rec.analog['stimulus'], len(rec.df_f_exc[1]))
+    plot_dff_stim_detected_timeout(rec, zscore(rec,rec.df_f_inh), "")
+    # resampled_analog = ss.resample(rec.analog['stimulus'], len(rec.df_f_exc[1]))
