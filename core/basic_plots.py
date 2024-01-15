@@ -12,7 +12,7 @@ import matplotlib as mpl
 import scipy.stats as ss
 import os
 
-plt.rcParams['font.size'] = 20
+plt.rcParams['font.size'] = 40
 plt.rcParams['axes.linewidth'] = 3
 plt.rcParams['svg.fonttype'] = 'none'
 plt.rcParams['lines.linewidth'] = 3
@@ -40,26 +40,34 @@ def boxplot(wt, ko, ylabel):
 
     """
     print("Boxplot plotting.")
-    fig, ax = plt.subplots(1, 1, figsize=(4, 6), sharey=True)
+    lw = 5
+    fig, ax = plt.subplots(1, 1, figsize=(6, 8), sharey=True)
     ax.set_ylabel(ylabel)
-    ax.boxplot([wt], positions=[1], patch_artist=True, showfliers=False,
+    ax.boxplot([wt], positions=[0.15], patch_artist=True, showfliers=False,widths=0.2,
                meanprops=dict(marker='o', markerfacecolor=wt_color, markeredgecolor='black'),
-               boxprops=dict(linewidth=2.0, facecolor='white', color=wt_color),
-               capprops=dict(linewidth=2.0, color=wt_color),
-               whiskerprops=dict(linewidth=2.0, color=wt_color),
-               medianprops=dict(linewidth=2.0, color=wt_color), )
-    ax.boxplot([ko], positions=[2], patch_artist=True, showfliers=False,
+               boxprops=dict(linewidth=lw, facecolor='white', color=wt_color),
+               capprops=dict(linewidth=lw, color=wt_color),
+               whiskerprops=dict(linewidth=lw, color=wt_color),
+               medianprops=dict(linewidth=lw, color=wt_color), )
+    ax.boxplot([ko], positions=[0.40], patch_artist=True, showfliers=False,widths=0.2,
                meanprops=dict(marker='o', markerfacecolor=ko_color, markeredgecolor='black'),
-               boxprops=dict(linewidth=2.0, facecolor='white', color=ko_color),
-               capprops=dict(linewidth=2.0, color=ko_color),
-               whiskerprops=dict(linewidth=2.0, color=ko_color),
-               medianprops=dict(linewidth=2.0, color=ko_color), )
-
+               boxprops=dict(linewidth=lw, facecolor='white', color=ko_color),
+               capprops=dict(linewidth=lw, color=ko_color),
+               whiskerprops=dict(linewidth=lw, color=ko_color),
+               medianprops=dict(linewidth=lw, color=ko_color), )
+    y = wt
+    x = np.random.normal(0.15, 0.02, size=len(y))
+    y1 = ko
+    x1 = np.random.normal(0.40, 0.02, size=len(y1))
+    ax.plot(x, y, ".", alpha=0.5, ms=28, markerfacecolor='none', markeredgecolor=wt_color, markeredgewidth=4)
+    ax.plot(x1, y1, ".", alpha=0.5, ms=28, markerfacecolor='none', markeredgecolor=ko_color, markeredgewidth=4)
     ax.grid(False)
     ax.set_title(None)
     ax.set_xlabel(None)
     ax.spines[['right', 'top', 'bottom']].set_visible(False)
     ax.set_xticks([])
+    plt.tick_params(axis="x", which="both", bottom=False)
+    plt.xticks([0.15, 0.40], ['', ""])
     plt.tight_layout()
     plt.show()
 
@@ -144,7 +152,7 @@ def barplot(wt,ko, ylabel):
 
 
 if __name__ == '__main__':
-    directory = ""
+    directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
     roi_info = pd.read_excel(directory + "/FmKO_ROIs&inhibitory.xlsx")
     folders = os.listdir(directory)
     folder = folders[4]
