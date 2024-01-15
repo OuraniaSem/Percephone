@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 import scipy.stats as ss
 import os
+import math
 
 plt.rcParams['font.size'] = 40
 plt.rcParams['axes.linewidth'] = 3
@@ -64,8 +65,46 @@ def boxplot(wt, ko, ylabel):
     ax.grid(False)
     ax.set_title(None)
     ax.set_xlabel(None)
+    max_y = max(max(wt), max(ko))
+    lim_max = max(int(max_y)*0.15, int(math.ceil(max_y / 2 + 0.5)) * 2)
+    min_y = min(min(wt), min(ko))
+    lim_inf = min(0, min_y + 0.15*min_y)
+    ax.set_ylim(ymin=lim_inf, ymax=lim_max)
+    yticks = list(ax.get_yticks())
+    ax.set_yticks(sorted(yticks))
     ax.spines[['right', 'top', 'bottom']].set_visible(False)
     ax.set_xticks([])
+    x_1, x_2 = [0.15, 0.40]
+    max_data = max([max(wt), max(ko)])
+    y, col = max_data + 0.05 * abs(max_data), 'k'
+    ax.plot([x_1, x_2], [y, y], lw=1.5, c=col)
+
+
+    def stat_boxplot(sb_wt, sb_ko, ylabel):
+        print(ylabel)
+        data_wt = sb_wt
+        data_ko = sb_ko
+        print(ss.shapiro(data_wt))
+        print(ss.shapiro(data_ko))
+        stat, pvalue_WT = ss.shapiro(data_wt)
+        stat, pvalue_KO = ss.shapiro(data_ko)
+        if pvalue_WT > 0.05 and pvalue_KO > 0.05:
+            stat, pvalue = ss.ttest_ind(data_wt, data_ko)
+            print(ss.ttest_ind(data_wt, data_ko))
+        else:
+            stat, pvalue = ss.mannwhitneyu(data_wt, data_ko)
+            print(ss.mannwhitneyu(data_wt, data_ko))
+        return pvalue
+    pval = stat_boxplot(wt, ko, ylabel)
+    if pval < 0.001:
+        sig_symbol = '***'
+    elif pval < 0.01:
+        sig_symbol = '**'
+    elif pval < 0.05:
+        sig_symbol = '*'
+    elif pval > 0.05:
+        sig_symbol = 'ns'
+    ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col)
     plt.tick_params(axis="x", which="both", bottom=False)
     plt.xticks([0.15, 0.40], ['', ""])
     plt.tight_layout()
@@ -111,6 +150,7 @@ def barplot(wt,ko, ylabel):
     y, col = max_data + 0.15 * abs(max_data), 'k'
     ax.plot([x1, x2], [y, y], lw=1.5, c=col)
 
+
     def stat_varplot(s_wt, s_ko, s_y_label):
         """
         add stat on the barplot
@@ -152,7 +192,7 @@ def barplot(wt,ko, ylabel):
 
 
 if __name__ == '__main__':
-    directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
+    directory = "/Users/adriencorniere/Desktop/Data_Percephone/"
     roi_info = pd.read_excel(directory + "/FmKO_ROIs&inhibitory.xlsx")
     folders = os.listdir(directory)
     folder = folders[4]
@@ -163,5 +203,5 @@ if __name__ == '__main__':
         y_wt = roi_info[col_name][roi_info['Genotype'] == 'WT'].dropna()
         y_ko = roi_info[col_name][roi_info['Genotype'] == 'KO'].dropna()
         boxplot(wt=y_wt, ko=y_ko, ylabel=col_name)
-        barplot(wt=y_wt, ko=y_ko, ylabel=col_name)
+        # barplot(wt=y_wt, ko=y_ko, ylabel=col_name)
 
