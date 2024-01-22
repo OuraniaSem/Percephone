@@ -1,17 +1,23 @@
-"""Ourania Semelidou, 27/03/2023
-Core classes for recording, synchronization, synchronization w/o ITI2 analog"""
+"""
+01/11/2024
+Ourania Semelidou
+Théo Gauvrit
 
+Recording object classes
+"""
 import json
 import os
 import matplotlib
 import numpy as np
 import pandas as pd
 import scipy.signal as ss
-from responsivity import responsivity, resp_single_neuron
-from response import resp_matrice, auc_matrice, delay_matrice
-from Helper_Functions.Utils_core import read_info
-matplotlib.use("Qt5Agg")
 import matplotlib.pyplot as plt
+
+from percephone.utils.io import read_info
+from percephone.analysis.response import resp_matrice, auc_matrice, delay_matrice
+
+
+matplotlib.use("Qt5Agg")
 plt.switch_backend("Qt5Agg")
 
 
@@ -100,20 +106,12 @@ class Recording:
         np.save(save_path, df_f_percen)
         return df_f_percen
 
-    def compute_responsivity(self, row_metadata):
-        resp, resp_neur = responsivity(self, row_metadata)
-        return resp, resp_neur
-
-    def delay_matrice(self, df_data, resp_masks):
-        from delay_onset import delay_
-        return delay_(self, df_data, self.stim_time, resp_masks)
 
     def responsivity(self):
         self.matrices["EXC"]["Responsivity"] = resp_matrice(self, self.df_f_exc)
         self.matrices["INH"]["Responsivity"] = resp_matrice(self, self.df_f_inh)
 
     def delay_onset(self):
-        from delay_onset import delay_
         self.matrices["EXC"]["Delay_onset"] = delay_(self, self.df_f_exc, self.stim_time,
                                                      self.matrices["EXC"]["Responsivity"])
         self.matrices["INH"]["Delay_onset"] = delay_(self, self.df_f_inh, self.stim_time,
@@ -357,19 +355,5 @@ class RecordingAmplDet(Recording):
                    "detected_stim": self.detected_stim.tolist()}
         with open(self.input_path + "behavior_events.json", "w") as jsn:
             json.dump(to_save, jsn)
-
-
-if __name__ == '__main__':
-    # directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
-    # roi_info = pd.read_excel(directory + "/FmKO_ROIs&inhibitory.xlsx")
-    # folder = "20221008_4746_00_synchro_sigma2_acuFR_tau02"
-    # path = directory + folder + '/'
-    # rec = RecordingAmplDet(path, 0, folder, roi_info)
-
-    directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
-    roi_info = pd.read_excel(directory + "/FmKO_ROIs&inhibitory.xlsx")
-    folder = "20231007_5873_00_synchro"
-    path = directory + folder + '/'
-    rec = RecordingAmplDet(path, 0, folder, roi_info, correction=False)
 
 

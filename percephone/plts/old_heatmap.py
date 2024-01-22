@@ -1,8 +1,7 @@
-"""Théo Gauvrit 14/04/2023
-Functions for plottings. Most of them use the Recordings class.
 """
-
-import os
+Théo Gauvrit 18/01/2024
+Old read colored heatmaps
+"""
 import time
 import matplotlib
 import numpy as np
@@ -10,7 +9,7 @@ import pandas as pd
 import scipy.signal as ss
 from scipy.cluster.hierarchy import dendrogram, linkage
 import core as pc
-from scalebars import add_scalebar
+from percephone.plts.scalebars import add_scalebar
 matplotlib.use("Qt5Agg")
 import matplotlib.pyplot as plt
 import scipy.interpolate as si
@@ -108,137 +107,6 @@ def heat_map(df_f, stim_times, stim_ampl):
     axs[0].vlines(stim_times[stim_times < session_duration], ymin=0.5, ymax=stim_ampl, color='black', lw=2)
     fig.tight_layout()
     plt.show()
-
-
-def plot_dff_stim(rec, filename):
-    df_inh = rec.df_f_inh
-    df_exc = rec.df_f_exc
-    cmap = 'inferno'
-    time_range = np.linspace(0, (len(df_exc[0]) / sampling_rate) - 1, len(df_exc[0]))
-    fig, ax = plt.subplots(1, 1, figsize=(18, 10))
-    divider = make_axes_locatable(ax)
-    tax = divider.append_axes('top', size='10%', pad=0.1, sharex=ax)
-    cax = divider.append_axes('right', size='2%', pad=0.1)
-    ax.tick_params(which='both', width=4)
-    # convolution of the stims
-    stim_vector = np.zeros(len(df_exc[0]))
-    stim_index = [list(range(stim, stim + int(0.5 * rec.sf))) for i, stim in
-                  enumerate(rec.stim_time[rec.stim_ampl != 0])]
-    for stim_range, stim_amp in zip(stim_index, rec.stim_ampl[rec.stim_ampl != 0]):
-        stim_vector[stim_range] = stim_amp * 100
-    conv_stim_det = np.convolve(stim_vector, kernel_bi, mode='same') * dt
-    extent = [time_range[0] - dt / 2, time_range[-1] + dt / 2, len(df_exc) - 0.5, -0.5]
-    tax.imshow(conv_stim_det.reshape(1, -1), cmap=cmap, aspect='auto', interpolation='none', extent=extent)
-    tax.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
-    Z = linkage(df_exc, 'ward', optimal_ordering=True)
-    dn_exc = dendrogram(Z, no_plot=True, count_sort="ascending")
-    im = ax.imshow(df_exc[dn_exc['leaves']], cmap=cmap, interpolation='none', aspect='auto',
-                   vmin=np.nanpercentile(np.ravel(df_exc), 1),
-                   vmax=np.nanpercentile(np.ravel(df_exc), 99), extent=extent)
-    cbar = plt.colorbar(im, cax=cax)
-    cbar.ax.tick_params(which='both', width=4)
-    cbar.set_label(r'$\Delta F/F$')
-    ax.set_xlabel('time (s)')
-    ax.set_ylabel('Neurons')
-    tax.set_title(filename)
-    plt.show()
-
-
-def plot_dff_stim_detected(rec, dff, filename):
-    cmap = 'inferno'
-    time_range = np.linspace(0, (len(dff[0]) / sampling_rate) - 1, len(dff[0]))
-    fig, ax = plt.subplots(1, 1, figsize=(18, 10))
-    divider = make_axes_locatable(ax)
-    tax2 = divider.append_axes('top', size='10%', pad=0.1, sharex=ax)
-    tax1 = divider.append_axes('top', size='10%', pad=0.1, sharex=ax)
-    cax = divider.append_axes('right', size='2%', pad=0.1)
-    ax.tick_params(which='both', width=4)
-    # convolution of the stims
-    stim_vector = np.zeros(len(dff[0]))
-    stim_vector_det =  np.zeros(len(dff[0]))
-    stim_index = [list(range(stim, stim + int(0.5 * rec.sf))) for i, stim in
-                  enumerate(rec.stim_time[rec.stim_ampl != 0])]
-    for stim_range, stim_amp in zip(stim_index, rec.stim_ampl[rec.stim_ampl != 0]):
-        stim_vector[stim_range] = stim_amp * 100
-    conv_stim = np.convolve(stim_vector, kernel_bi, mode='same') * dt
-    for stim_range, stim_amp in zip(np.array(stim_index)[rec.detected_stim[rec.stim_ampl != 0]], rec.stim_ampl[(rec.detected_stim) & (rec.stim_ampl != 0)]):
-        stim_vector_det[stim_range] = stim_amp * 100
-    conv_stim_det = np.convolve(stim_vector_det, kernel_bi, mode='same') * dt
-    extent = [time_range[0] - dt / 2, time_range[-1] + dt / 2, len(dff) - 0.5, -0.5]
-    tax2.imshow(conv_stim_det.reshape(1, -1), cmap=cmap, aspect='auto', interpolation='none', extent=extent)
-    tax2.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
-
-    tax1.imshow(conv_stim.reshape(1, -1), cmap=cmap, aspect='auto', interpolation='none', extent=extent)
-    tax1.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
-    Z = linkage(dff, 'ward', optimal_ordering=True)
-    dn_exc = dendrogram(Z, no_plot=True, count_sort="ascending")
-    im = ax.imshow(dff[dn_exc['leaves']], cmap=cmap, interpolation='none', aspect='auto',
-                   vmin=np.nanpercentile(np.ravel(dff), 1),
-                   vmax=np.nanpercentile(np.ravel(dff), 99), extent=extent)
-    cbar = plt.colorbar(im, cax=cax)
-    cbar.ax.tick_params(which='both', width=4)
-    # cbar.set_label(r'$\Delta F/F$')
-    cbar.set_label(r'Z-score')
-    ax.set_xlabel('Time (s)')
-    ax.set_ylabel('Neurons')
-    tax1.set_title(filename)
-    plt.show()
-
-
-def plot_dff_stim_detected_timeout(rec, dff, filename):
-    """
-
-    Parameters
-    ----------
-    rec
-    dff
-    filename
-
-    Returns
-    -------
-
-    """
-    cmap = 'inferno'
-    time_range = np.linspace(0, (len(dff[0]) / sampling_rate) - 1, len(dff[0]))
-    fig, ax = plt.subplots(1, 1, figsize=(18, 10))
-    divider = make_axes_locatable(ax)
-    tax2 = divider.append_axes('top', size='10%', pad=0.1, sharex=ax)
-    tax1 = divider.append_axes('top', size='10%', pad=0.1, sharex=ax)
-    cax = divider.append_axes('right', size='2%', pad=0.1)
-    ax.tick_params(which='both', width=4)
-    # convolution of the stims
-    stim_vector = np.zeros(len(dff[0]))
-    stim_vector_det = np.zeros(len(dff[0]))
-    stim_index = [list(range(stim, stim + int(0.5 * rec.sf))) for i, stim in
-                  enumerate(rec.stim_time[rec.stim_ampl != 0])]
-    for stim_range, stim_amp in zip(stim_index, rec.stim_ampl[rec.stim_ampl != 0]):
-        stim_vector[stim_range] = stim_amp * 100
-    conv_stim = np.convolve(stim_vector, kernel_bi, mode='same') * dt
-    timeout_index = [list(range(to, to + int(0.5 * rec.sf))) for i, to in
-                  enumerate(rec.timeout_time)]
-    for to_range in timeout_index:
-        stim_vector_det[to_range] = 1000
-    conv_stim_det = np.convolve(stim_vector_det, kernel_bi, mode='same') * dt
-    extent = [time_range[0] - dt / 2, time_range[-1] + dt / 2, len(dff) - 0.5, -0.5]
-    tax2.imshow(conv_stim_det.reshape(1, -1), cmap=cmap, aspect='auto', interpolation='none', extent=extent)
-    tax2.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
-
-    tax1.imshow(conv_stim.reshape(1, -1), cmap=cmap, aspect='auto', interpolation='none', extent=extent)
-    tax1.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
-    Z = linkage(dff, 'ward', optimal_ordering=True)
-    dn_exc = dendrogram(Z, no_plot=True, count_sort="ascending")
-    im = ax.imshow(dff[dn_exc['leaves']], cmap=cmap, interpolation='none', aspect='auto',
-                   vmin=np.nanpercentile(np.ravel(dff), 1),
-                   vmax=np.nanpercentile(np.ravel(dff), 99), extent=extent)
-    cbar = plt.colorbar(im, cax=cax)
-    cbar.ax.tick_params(which='both', width=4)
-    # cbar.set_label(r'$\Delta F/F$')
-    cbar.set_label(r'Z-score')
-    ax.set_xlabel('Time (s)')
-    ax.set_ylabel('Neurons')
-    tax1.set_title(filename)
-    plt.show()
-    return fig
 
 
 def group_heat_map_per_stim(df_f_exc, df_f_inh, dn_exc, dn_inh, name, filename):
@@ -382,31 +250,3 @@ def df_f_graph_trials(rec, stim, neuron_id, ntrials=5, color=wt_color):
     plt.show()
     print("--- %s seconds ---" % round(time.time() - start_time, 2))
     fig.savefig(rec.input_path + "example_trials_df_resp_" + str(stim) + ".pdf")
-
-
-if __name__ == '__main__':
-    # directory = "/datas/Théo/Projects/Percephone/data/StimulusOnlyWT/"
-    # directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
-    # roi_info = pd.read_excel(directory + "/FmKO_ROIs&inhibitory.xlsx")
-    # files = ["20220715_4456_00_synchro"]
-    # files = os.listdir(directory)
-    # for folder in files:
-    #     if os.path.isdir(directory + folder):
-    #         path = directory + folder + '/'
-    #         recording = pc.RecordingAmplDet(path, 0, folder, roi_info, correction=False)
-    #         from zscore import zscore
-    #         recording.zscore = zscore(recording,rec.df_f_exc)
-    #         plot_dff_stim_detected(recording, recording.zscore, folder)
-    #
-    #
-    directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
-    roi_info = pd.read_excel(directory + "/FmKO_ROIs&inhibitory.xlsx")
-    folder = "20220715_4456_00_synchro"
-    path = directory + folder + '/'
-    # from hdf5_analog import extract_analog
-    path_mesc = directory + folder[:13] + "_det.mesc"
-    # extract_analog(path_mesc, (0, int(folder[14:16])), savepath=path)
-    rec = pc.RecordingAmplDet(path, 0, folder, roi_info, correction=False, no_cache=True)
-    # plot_dff_stim_detected(rec, rec.zscore, folder)
-    plot_dff_stim_detected_timeout(rec, zscore(rec,rec.df_f_inh), "")
-    # resampled_analog = ss.resample(rec.analog['stimulus'], len(rec.df_f_exc[1]))

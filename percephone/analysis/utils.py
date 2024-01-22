@@ -1,5 +1,7 @@
-"""Théo Gauvrit, 15/09/2023
-Functions for multiple linear regression linear"""
+"""
+Théo Gauvrit 22/01/2024
+Utility functions for analysis
+"""
 
 from scipy.interpolate import interp1d
 import itertools
@@ -7,11 +9,44 @@ import matplotlib
 import numpy as np
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score
-from Helper_Functions.Utils_core import kernel_biexp
 from tqdm import tqdm
+
 matplotlib.use("Qt5Agg")
 import matplotlib.pyplot as plt
+
 plt.switch_backend("Qt5Agg")
+
+
+def kernel_biexp(sf):
+    """
+    Generate kernel of a biexponential function for mlr analysis or onset delay analysis
+    Parameters
+    ----------
+    sf: float
+        sampling frequency of the recording
+
+    Returns
+    -------
+    kernel_bi: array
+        kernel of the biexponential function
+
+    """
+    tau_r = 0.07  # s0.014
+    tau_d = 0.236  # s
+    kernel_size = 10  # size of the kernel in units of tau
+    a = 5  # scaling factor for biexpo kernel
+    dt = 1 / sf  # spacing between successive timepoints
+    n_points = int(kernel_size * tau_d / dt)
+    kernel_times = np.linspace(-n_points * dt,
+                               n_points * dt,
+                               2 * n_points + 1)  # linearly spaced array from -n_pts*dt to n_pts*dt with spacing dt
+    kernel_bi = a * (1 - np.exp(-kernel_times / tau_r)) * np.exp(-kernel_times / tau_d)
+    kernel_bi[kernel_times < 0] = 0  # set to zero for negative times
+    # fig, ax = plt.subplots()
+    # ax.plot(kernel_times, kernel_rise)
+    # ax.set_xlabel('time (s)')
+    # plt.show()
+    return kernel_bi
 
 
 def regressor_labels(timings, duration, sf, len_signal, amplitude=100):
@@ -38,7 +73,7 @@ def regressor_labels(timings, duration, sf, len_signal, amplitude=100):
     vector = np.zeros(len_signal)
     index = [list(range(stim, int(stim + duration[i]))) for i, stim in enumerate(timings)]
     vector[np.concatenate(index)] = amplitude
-    regressor = np.convolve(vector, kernel_biexp(sf), mode='same') * (1/sf)
+    regressor = np.convolve(vector, kernel_biexp(sf), mode='same') * (1 / sf)
     return regressor
 
 
@@ -107,7 +142,7 @@ def calculate_pvalue(statistic, statistic_bootstrap):
     statistic_bootstrap_sorted = np.sort(statistic_bootstrap)  # sort the values in increasing order
     statistic_bootstrap_sorted = np.append(statistic_bootstrap_sorted, statistic_bootstrap_sorted[-1])
     probability_of_smaller_values = np.arange(len(statistic_bootstrap_sorted)) / (
-                len(statistic_bootstrap_sorted) - 1)  # express the probability of finding a smaller value of the statistic
+            len(statistic_bootstrap_sorted) - 1)  # express the probability of finding a smaller value of the statistic
     empirical_distribution_function = interp1d(statistic_bootstrap_sorted, probability_of_smaller_values, kind='next',
                                                fill_value='extrapolate')  # interpolate to get the eCDF
     pvalue = np.zeros(len(statistic))
