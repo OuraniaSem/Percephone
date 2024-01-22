@@ -111,12 +111,6 @@ class Recording:
         self.matrices["EXC"]["Responsivity"] = resp_matrice(self, self.df_f_exc)
         self.matrices["INH"]["Responsivity"] = resp_matrice(self, self.df_f_inh)
 
-    def delay_onset(self):
-        self.matrices["EXC"]["Delay_onset"] = delay_(self, self.df_f_exc, self.stim_time,
-                                                     self.matrices["EXC"]["Responsivity"])
-        self.matrices["INH"]["Delay_onset"] = delay_(self, self.df_f_inh, self.stim_time,
-                                                     self.matrices["INH"]["Responsivity"])
-
     def delay_onset_map(self):
         self.matrices["EXC"]["Delay_onset"] = delay_matrice(self, self.df_f_exc, self.stim_time,
                                                      self.matrices["EXC"]["Responsivity"])
@@ -204,8 +198,8 @@ class RecordingStimulusOnly(Recording):
 
 
 class RecordingAmplDet(Recording):
-    def __init__(self, input_path, starting_trial, inhibitory_ids, sf, correction=True, no_cache=False):
-        super().__init__(input_path, inhibitory_ids, sf)
+    def __init__(self, input_path, starting_trial, foldername,rois, correction=True, no_cache=False):
+        super().__init__(input_path, foldername, rois)
         self.xls = pd.read_excel(input_path + 'bpod.xls', header=None)
         self.stim_time = []
         self.reward_time = []
@@ -227,6 +221,31 @@ class RecordingAmplDet(Recording):
             self.analog = pd.read_csv(input_path + 'analog.txt', sep="\t", header=None)
             self.analog[0] = (self.analog[0] * 10).astype(int)
             self.synchronization_with_iti(starting_trial)
+        self.zscore_exc = self.zscore(self.df_f_exc)
+        self.zscore_inh = self.zscore(self.df_f_inh)
+
+    def zscore(self, dff):
+        """
+
+        Parameters
+        ----------
+        dff: np.ndarray
+            delta f over f array from inh or exc
+
+        Returns
+            zscore: np.ndarray
+                zscore for one set of neurons (inh or exc)
+        -------
+
+        """
+        data = np.concatenate(np.stack(
+            dff[:, np.linspace(self.stim_time - int(0.5 * self.sf), self.stim_time, num=int(0.5 * self.sf) + 1, dtype=int)],
+            axis=2))
+        mean_bsl = np.mean(data, axis=0)
+        std = np.std(data, axis=0)
+
+        zsc = np.divide(np.subtract(dff, mean_bsl[:, np.newaxis]), std[:, np.newaxis])
+        return zsc
 
     def synchronization_with_iti(self, starting_trial):
         """
