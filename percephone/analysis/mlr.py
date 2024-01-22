@@ -1,16 +1,13 @@
-"""Théo Gauvrit, 05/09/2023
-Perform multiple linear regression between neuronal signals and external signals(stim, reward, licj, etc )
-Adapted from Banyuls summer school 2023"""
+"""
+Théo Gauvrit 18/01/2024
+Multiple Linear regression analysis
+"""
 
-import itertools
 import os
 import matplotlib
 import numpy as np
 import pandas as pd
 import scipy.signal as ss
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import r2_score
-from tqdm import tqdm
 import core as pc
 from Helper_Functions.mlr_functions import mlr
 matplotlib.use("Qt5Agg")
@@ -50,14 +47,8 @@ for id, folder in enumerate(files):
         path = directory + folder + '/'
         rec = pc.RecordingAmplDet(path, 0, folder, roi_info)
         dff = rec.df_f_exc
-        smooth_signal = ss.savgol_filter(dff, 5, 1)
         # stims
-        detetected_amps = detected_amp(folder, roi_info)
-        if len(detetected_amps) == 0:
-            continue
-        stims = np.concatenate([rec.stim_time[rec.stim_ampl == stim] for stim in detetected_amps])
-        len(rec.stim_time)
-        len(rec.reward_time)
+
         durations = np.zeros(len(rec.stim_time))
         for i, stim_t in enumerate(rec.stim_time):
             diff_ar = np.absolute(rec.reward_time - stim_t)
@@ -65,38 +56,49 @@ for id, folder in enumerate(files):
                 durations[i] = 15
             else:
                 durations[i] = diff_ar[diff_ar.argmin()]
-        s_durations = np.concatenate([durations[rec.stim_ampl == stim] for stim in detetected_amps])
-        stim_vector = np.zeros(len(smooth_signal[0]))
+        s_durations = durations
 
-        stim_index = [list(range(stim, int(stim + s_durations[i]))) for i, stim in enumerate(stims)]
+        # detected
+        stim_det = rec.stim_time[rec.detected_stim]
+        det_duration = s_durations[rec.detected_stim]
+        stim_vector = np.zeros(len(dff[0]))
+        stim_index = [list(range(stim, int(stim + det_duration[i]))) for i, stim in enumerate(stim_det)]
         stim_vector[np.concatenate(stim_index)] = 100
         conv_stim_det = np.convolve(stim_vector, kernel_bi, mode='same') * dt
 
+        # undetected
+        stim_undet = rec.stim_time[~rec.detected_stim]
+        undet_duration = s_durations[~rec.detected_stim]
+        stim_vector_undet = np.zeros(len(dff[0]))
+        stim_index = [list(range(stim, int(stim + undet_duration[i]))) for i, stim in enumerate(stim_undet)]
+        stim_vector_undet[np.concatenate(stim_index)] = 100
+        conv_stim_undet = np.convolve(stim_vector_undet, kernel_bi, mode='same') * dt
+
         # reward
         reward_duration = 0.1  # s
-        reward_vector = np.zeros(len(smooth_signal[0]))
+        reward_vector = np.zeros(len(dff[0]))
         reward_index = [list(range(i, i + int(reward_duration * rec.sf))) for i in rec.reward_time]
         reward_vector[np.concatenate(reward_index)] = 200
         conv_reward = np.convolve(reward_vector, kernel_bi, mode='same') * dt
 
         # timeout
         timeout_duration = 2  # s
-        timeout_vector = np.zeros(len(smooth_signal[0]))
+        timeout_vector = np.zeros(len(dff[0]))
         timeout_index = np.concatenate([list(range(i, i + int(timeout_duration * rec.sf))) for i in rec.timeout_time])
 
         timeout_vector[timeout_index[timeout_index < len(timeout_vector)]] = 100
         conv_timeout = np.convolve(timeout_vector, kernel_bi, mode='same') * dt
 
         # postreward
-        postreward_duration = 2  # s
-        postreward_vector = np.zeros(len(smooth_signal[0]))
-        postreward_index = np.concatenate(
-            [list(range(i + int(reward_duration * rec.sf), i + int(postreward_duration * rec.sf))) for i in
-             rec.reward_time])
-        postreward_vector[postreward_index[postreward_index < len(postreward_vector)]] = 100
-        conv_postreward = np.convolve(postreward_vector, kernel_bi, mode='same') * dt
+        # postreward_duration = 2  # s
+        # postreward_vector = np.zeros(len(smooth_signal[0]))
+        # postreward_index = np.concatenate(
+        #     [list(range(i + int(reward_duration * rec.sf), i + int(postreward_duration * rec.sf))) for i in
+        #      rec.reward_time])
+        # postreward_vector[postreward_index[postreward_index < len(postreward_vector)]] = 100
+        # conv_postreward = np.convolve(postreward_vector, kernel_bi, mode='same') * dt
 
-        regressors = np.array([conv_stim_det, conv_reward, conv_timeout])
+        regressors = np.array([conv_stim_det, conv_stim_undet,  conv_reward, conv_timeout])
 
         text_labels, n_neurons_per_label = mlr(dff, regressors, rec.sf)
         output["labels"] = text_labels
@@ -105,4 +107,4 @@ for id, folder in enumerate(files):
 output = output.loc[(output.iloc[:, 1:] != 0).any(axis=1)]
 s = output.sum()
 output_s = output.sort_index(key=output.sum(1).get)
-output_s.to_csv("output_mlr.csv")
+output_s.to_csv("output_mlr_tau02.csv")

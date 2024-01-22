@@ -2,15 +2,12 @@
 01/11/2024
 Adrien Corniere
 
-Basic plot functions like boxplot, barplot...
+Stats related plot functions like boxplot, barplot...
 """
-import core as pc
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import scipy.stats as ss
-import os
 import math
 
 plt.rcParams['font.size'] = 40
@@ -44,13 +41,13 @@ def boxplot(wt, ko, ylabel):
     lw = 5
     fig, ax = plt.subplots(1, 1, figsize=(6, 8), sharey=True)
     ax.set_ylabel(ylabel)
-    ax.boxplot([wt], positions=[0.15], patch_artist=True, showfliers=False,widths=0.2,
+    ax.boxplot([wt], positions=[0.15], patch_artist=True, showfliers=False, widths=0.2,
                meanprops=dict(marker='o', markerfacecolor=wt_color, markeredgecolor='black'),
                boxprops=dict(linewidth=lw, facecolor='white', color=wt_color),
                capprops=dict(linewidth=lw, color=wt_color),
                whiskerprops=dict(linewidth=lw, color=wt_color),
                medianprops=dict(linewidth=lw, color=wt_color), )
-    ax.boxplot([ko], positions=[0.40], patch_artist=True, showfliers=False,widths=0.2,
+    ax.boxplot([ko], positions=[0.40], patch_artist=True, showfliers=False, widths=0.2,
                meanprops=dict(marker='o', markerfacecolor=ko_color, markeredgecolor='black'),
                boxprops=dict(linewidth=lw, facecolor='white', color=ko_color),
                capprops=dict(linewidth=lw, color=ko_color),
@@ -78,7 +75,6 @@ def boxplot(wt, ko, ylabel):
     max_data = max([max(wt), max(ko)])
     y, col = max_data + 0.05 * abs(max_data), 'k'
     ax.plot([x_1, x_2], [y, y], lw=1.5, c=col)
-
 
     def stat_boxplot(sb_wt, sb_ko, ylabel):
         print(ylabel)
@@ -111,7 +107,7 @@ def boxplot(wt, ko, ylabel):
     plt.show()
 
 
-def barplot(wt,ko, ylabel):
+def barplot(wt, ko, ylabel):
     """
     create barplot for two data groups.
 
@@ -121,7 +117,7 @@ def barplot(wt,ko, ylabel):
         data of the wt group,
     ko : numpy.ndarray, series, list
         data of the ko group,
-    y_label : string
+    ylabel : string
         columns names,
 
     -------
@@ -139,7 +135,7 @@ def barplot(wt,ko, ylabel):
     ax.set_xlim([1.65, 1.9])
     plt.show()
     ax.grid(False)
-    ax.set_ylabel(col_name + " Var ")
+    ax.set_ylabel(ylabel + " Var ")
     ax.set_title(None)
     ax.set_xlabel(None)
     ax.spines[['right', 'top']].set_visible(False)
@@ -149,7 +145,6 @@ def barplot(wt,ko, ylabel):
     max_data = max([var_wt, var_ko])
     y, col = max_data + 0.15 * abs(max_data), 'k'
     ax.plot([x1, x2], [y, y], lw=1.5, c=col)
-
 
     def stat_varplot(s_wt, s_ko, s_y_label):
         """
@@ -189,19 +184,3 @@ def barplot(wt,ko, ylabel):
     elif pval > 0.05:
         sig_symbol = 'ns'
     ax.text((x1 + x2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col)
-
-
-if __name__ == '__main__':
-    directory = "/Users/adriencorniere/Desktop/Data_Percephone/"
-    roi_info = pd.read_excel(directory + "/FmKO_ROIs&inhibitory.xlsx")
-    folders = os.listdir(directory)
-    folder = folders[4]
-    path = directory + folder + '/'
-    rec = pc.RecordingAmplDet(path, 0, folder, roi_info, correction=False)
-    roi_info.replace("NA", np.nan, inplace=True)
-    for col_name in roi_info.columns[12:16]:
-        y_wt = roi_info[col_name][roi_info['Genotype'] == 'WT'].dropna()
-        y_ko = roi_info[col_name][roi_info['Genotype'] == 'KO'].dropna()
-        boxplot(wt=y_wt, ko=y_ko, ylabel=col_name)
-        # barplot(wt=y_wt, ko=y_ko, ylabel=col_name)
-

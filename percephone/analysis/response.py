@@ -1,5 +1,10 @@
-"""Théo Gauvrit, 26/09/2023
-Produces matrices neurones x events(stim, reward, timeout) for AUC, responsivity, delay onset, etc"""
+"""
+Théo Gauvrit 18/01/2024
+analysis of neuronal response to stimulus
+-response
+-onset
+-AUC
+"""
 
 import matplotlib
 import numpy as np
@@ -164,5 +169,3 @@ def group_matrices(recs, savename, no_cache=False):
                                 "AUC INH": auc_inh
                                 }, ignore_index=True)
     output.to_csv(savename)
-
-
