@@ -12,10 +12,11 @@ import numpy as np
 import pandas as pd
 import scipy.signal as ss
 import matplotlib.pyplot as plt
-
 from percephone.utils.io import read_info
 from percephone.analysis.response import resp_matrice, auc_matrice, delay_matrice
-
+from percephone.analysis.mlr import mlr
+from percephone.analysis.mlr_models import classic_model
+from percephone.utils.io import extract_analog_from_mesc
 
 matplotlib.use("Qt5Agg")
 plt.switch_backend("Qt5Agg")
@@ -25,27 +26,25 @@ class Recording:
     def __init__(self, input_path, foldername, rois):
         self.filename, inhibitory_ids, self.sf, self.genotype = read_info(foldername, rois)
         self.input_path = input_path
-        f = np.load(input_path + 'F.npy', allow_pickle=True)
-        fneu = np.load(input_path + 'Fneu.npy', allow_pickle=True)
-        iscell = np.load(input_path + 'iscell.npy', allow_pickle=True)
         self.matrices = {"EXC": {"Responsivity": [], "AUC": [], "Delay_onset": []},
-                        "INH": {"Responsivity": [], "AUC": [], "Delay_onset": []}}
+                         "INH": {"Responsivity": [], "AUC": [], "Delay_onset": []}}
+
+        iscell = np.load(input_path + 'iscell.npy', allow_pickle=True)
         # Create a dimension in iscell to define excitatory and inhibitory cells
         exh_inh = np.ones((len(iscell), 1))  # array to define excitatory
         exh_inh[inhibitory_ids] = 0  # correct the array to define inhibitory as 0
         is_exh_inh = np.append(iscell, exh_inh, axis=1)  # add the array in the iscell to have a 3rd column with exh/inh
-
         cells_list = np.concatenate(np.argwhere(is_exh_inh[:, 0]))
         excitatory_ids = np.concatenate(np.argwhere(is_exh_inh[cells_list, 2]))  # list with excitatory cells
 
-        self.df_f_exc = self.compute_df_f(f, fneu, excitatory_ids, input_path + 'df_f_exc.npy')
-        self.df_f_inh = self.compute_df_f(f, fneu, inhibitory_ids, input_path + 'df_f_inh.npy')
+        self.df_f_exc = self.compute_df_f(excitatory_ids, input_path + 'df_f_exc.npy')
+        self.df_f_inh = self.compute_df_f(inhibitory_ids, input_path + 'df_f_inh.npy')
         if os.path.exists(input_path + 'spks.npy'):
             spks = np.load(self.input_path + "spks.npy")
             self.spks_exc = spks[excitatory_ids]
             self.spks_inh = spks[inhibitory_ids]
 
-    def compute_df_f(self, f_, f_neu, cell_ids, save_path):
+    def compute_df_f(self, cell_ids, save_path):
         """
         Compute DF/F and save it as npy matrix
 
@@ -59,10 +58,6 @@ class Recording:
 
         Parameters
         ----------
-        f_ : numpy.ndarray (cells, frames)
-            Fluorescence of all ROIs from suite2p
-        f_neu : numpy.ndarray  (cells, frames)
-            Fluorescence of all neuropils from suite2p
         cell_ids: list
             ids of cells for wich the df_f will be computed
         save_path : str
@@ -73,6 +68,8 @@ class Recording:
         df_f_percen : numpy.ndarray
             DF/F of all the cells selected
         """
+        f_ = np.load(self.input_path + 'F.npy', allow_pickle=True)
+        f_neu = np.load(self.input_path + 'Fneu.npy', allow_pickle=True)
         f_ = f_[cell_ids, :]
         f_neu = f_neu[cell_ids, :]
         session_n_frames = f_.shape[1]
@@ -106,16 +103,15 @@ class Recording:
         np.save(save_path, df_f_percen)
         return df_f_percen
 
-
     def responsivity(self):
         self.matrices["EXC"]["Responsivity"] = resp_matrice(self, self.df_f_exc)
         self.matrices["INH"]["Responsivity"] = resp_matrice(self, self.df_f_inh)
 
     def delay_onset_map(self):
         self.matrices["EXC"]["Delay_onset"] = delay_matrice(self, self.df_f_exc, self.stim_time,
-                                                     self.matrices["EXC"]["Responsivity"])
+                                                            self.matrices["EXC"]["Responsivity"])
         self.matrices["INH"]["Delay_onset"] = delay_matrice(self, self.df_f_inh, self.stim_time,
-                                                     self.matrices["INH"]["Responsivity"])
+                                                            self.matrices["INH"]["Responsivity"])
 
     def auc(self):
         self.matrices["EXC"]["AUC"] = auc_matrice(self, self.df_f_exc, self.matrices["EXC"]["Responsivity"])
@@ -198,14 +194,19 @@ class RecordingStimulusOnly(Recording):
 
 
 class RecordingAmplDet(Recording):
-    def __init__(self, input_path, starting_trial, foldername,rois, correction=True, no_cache=False):
+    def __init__(self, input_path, starting_trial, foldername, rois, tuple_mesc=(0, 0), correction=True,
+                 no_cache=False):
         super().__init__(input_path, foldername, rois)
         self.xls = pd.read_excel(input_path + 'bpod.xls', header=None)
         self.stim_time = []
-        self.reward_time = []
         self.stim_ampl = []
+        self.stim_durations = []
+        self.reward_time = []
         self.timeout_time = []
         self.detected_stim = []
+        self.mlr_labels_exc = []
+        self.mlr_labels_inh = []
+
         with open(input_path + 'params_trial.json', "r") as read_file:
             self.json = json.load(read_file)
         if os.path.exists(input_path + 'behavior_events.json') and not no_cache:
@@ -217,10 +218,20 @@ class RecordingAmplDet(Recording):
             self.reward_time = np.array(events["reward_time"])
             self.timeout_time = np.array(events["timeout_time"])
             self.detected_stim = np.array(events["detected_stim"])
+            self.stim_durations = np.array(events["stim_durations"])
         else:
+            if not os.path.exists(input_path + 'analog.txt'):
+                mesc_file = [file for file in os.listdir(input_path) if file.endswith(".mesc")]
+                if mesc_file:
+                    extract_analog_from_mesc(input_path + mesc_file,tuple_mesc, self.sf, savepath=input_path)
+
+                else:
+                    print("No analog.txt either mesc file in the folder!")
+                    return
             self.analog = pd.read_csv(input_path + 'analog.txt', sep="\t", header=None)
             self.analog[0] = (self.analog[0] * 10).astype(int)
             self.synchronization_with_iti(starting_trial)
+
         self.zscore_exc = self.zscore(self.df_f_exc)
         self.zscore_inh = self.zscore(self.df_f_inh)
 
@@ -239,7 +250,8 @@ class RecordingAmplDet(Recording):
 
         """
         data = np.concatenate(np.stack(
-            dff[:, np.linspace(self.stim_time - int(0.5 * self.sf), self.stim_time, num=int(0.5 * self.sf) + 1, dtype=int)],
+            dff[:,
+            np.linspace(self.stim_time - int(0.5 * self.sf), self.stim_time, num=int(0.5 * self.sf) + 1, dtype=int)],
             axis=2))
         mean_bsl = np.mean(data, axis=0)
         std = np.std(data, axis=0)
@@ -349,7 +361,7 @@ class RecordingAmplDet(Recording):
                 amp = next(ampl_recording_iter)
                 self.analog.at[index_stimulus[0], 'stimulus_xls'] = amp
                 index_stim = int((index_stimulus[0] / 10000) * self.sf)
-                self.stim_time.append(index_stim-int(((1/self.sf)*(index_stimulus[0] / 10000))*(1/3)))
+                self.stim_time.append(index_stim - int(((1 / self.sf) * (index_stimulus[0] / 10000)) * (1 / 3)))
                 self.stim_ampl.append(amp)
                 if len(index_reward) != 0:
                     self.detected_stim.append(True)
@@ -366,13 +378,28 @@ class RecordingAmplDet(Recording):
         self.reward_time = np.array(self.reward_time)
         self.timeout_time = np.array(self.timeout_time)
         self.detected_stim = np.array(self.detected_stim)
-        self.analog.to_csv(self.input_path + 'analog_synchronized.csv', index=False)
+
+        # stim duration extraction
+        durations = np.zeros(len(self.stim_time))
+        for i, stim_t in enumerate(self.stim_time):
+            diff_ar = np.absolute(self.reward_time - stim_t)
+            if diff_ar[diff_ar.argmin()] >= int(0.5 * self.sf) - 1:
+                durations[i] = 15
+            else:
+                durations[i] = diff_ar[diff_ar.argmin()]
+        self.stim_durations = durations
+
         to_save = {"stim_time": self.stim_time.tolist(),
                    "stim_ampl": stim_ampl.tolist(),
+                   "stim_durations": self.stim_durations.tolist(),
                    "reward_time": self.reward_time.tolist(),
                    "timeout_time": self.timeout_time.tolist(),
                    "detected_stim": self.detected_stim.tolist()}
         with open(self.input_path + "behavior_events.json", "w") as jsn:
             json.dump(to_save, jsn)
 
+    def mlr(self):
+        mlr_model = classic_model(self)
+        self.mlr_labels_exc = mlr(self.zscore_exc, mlr_model, self.sf)
+        self.mlr_labels_inh = mlr(self.zscore_inh, mlr_model, self.sf)
 

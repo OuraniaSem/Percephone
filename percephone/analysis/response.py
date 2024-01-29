@@ -16,6 +16,7 @@ import random as rnd
 from scipy.integrate import simps
 from sklearn.linear_model import LinearRegression
 from tqdm import tqdm
+from percephone.analysis.utils import kernel_biexp
 matplotlib.use("Qt5Agg")
 plt.switch_backend("Qt5Agg")
 
@@ -26,7 +27,7 @@ post_boundary = int(0.5 * sf)  # index
 
 def resp_single_neuron(neuron_df_data_, random_timing, stim_idx):
     """
-    Compute if the neuons are
+    Compute if the neurons are
     Parameters
     ----------
     neuron_df_data_: array
@@ -117,6 +118,12 @@ def auc_matrice(rec, df_data, resp_mask):
     auc_mat = [list(map(auc, x, responsive)) for x, responsive in zip(data1, resp_mask)]
     return auc_mat
 
+# d = [x+6 for x in c]
+
+c = [1,2,3,6]
+d = []
+for x in c:
+    d.append(x+6)
 
 def delay_response(signal, responsive):
     # 0-10(stim)-45
