@@ -4,6 +4,8 @@
 # LICENSE: Python Software Foundation (http://docs.python.org/license.html)
 
 from matplotlib.offsetbox import AnchoredOffsetbox
+
+
 class AnchoredScaleBar(AnchoredOffsetbox):
     def __init__(self, transform, sizex=0, sizey=0, labelx=None, labely=None, loc=4,
                  pad=0.1, borderpad=0.1, sep=2, prop=None, barcolor="black", barwidth=None, 

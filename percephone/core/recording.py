@@ -195,7 +195,7 @@ class RecordingStimulusOnly(Recording):
 
 class RecordingAmplDet(Recording):
     def __init__(self, input_path, starting_trial, foldername, rois, tuple_mesc=(0, 0), correction=True,
-                 no_cache=False):
+                 cache=True):
         super().__init__(input_path, foldername, rois)
         self.xls = pd.read_excel(input_path + 'bpod.xls', header=None)
         self.stim_time = []
@@ -204,12 +204,12 @@ class RecordingAmplDet(Recording):
         self.reward_time = []
         self.timeout_time = []
         self.detected_stim = []
-        self.mlr_labels_exc = []
-        self.mlr_labels_inh = []
+        self.mlr_labels_exc = {}
+        self.mlr_labels_inh = {}
 
         with open(input_path + 'params_trial.json', "r") as read_file:
             self.json = json.load(read_file)
-        if os.path.exists(input_path + 'behavior_events.json') and not no_cache:
+        if os.path.exists(input_path + 'behavior_events.json') and cache:
             print('Behavioural information already incorporated in the analog.')
             with open(input_path + 'behavior_events.json', "r") as events_file:
                 events = json.load(events_file)
@@ -223,7 +223,7 @@ class RecordingAmplDet(Recording):
             if not os.path.exists(input_path + 'analog.txt'):
                 mesc_file = [file for file in os.listdir(input_path) if file.endswith(".mesc")]
                 if mesc_file:
-                    extract_analog_from_mesc(input_path + mesc_file,tuple_mesc, self.sf, savepath=input_path)
+                    extract_analog_from_mesc(input_path + mesc_file, tuple_mesc, self.sf, savepath=input_path)
 
                 else:
                     print("No analog.txt either mesc file in the folder!")
@@ -398,8 +398,9 @@ class RecordingAmplDet(Recording):
         with open(self.input_path + "behavior_events.json", "w") as jsn:
             json.dump(to_save, jsn)
 
-    def mlr(self):
-        mlr_model = classic_model(self)
-        self.mlr_labels_exc = mlr(self.zscore_exc, mlr_model, self.sf)
-        self.mlr_labels_inh = mlr(self.zscore_inh, mlr_model, self.sf)
+    def mlr(self, mlr_model):
 
+        self.mlr_labels_exc["text_labels"], self.mlr_labels_exc["n_neurons_per_label"], self.mlr_labels_exc[
+            "neuron_labels"], self.mlr_labels_exc["indices_r2"] = mlr(self.zscore_exc, mlr_model, self.sf)
+        self.mlr_labels_inh["text_labels"], self.mlr_labels_inh["n_neurons_per_label"], self.mlr_labels_inh[
+            "neuron_labels"], self.mlr_labels_inh["indices_r2"] = mlr(self.zscore_inh, mlr_model, self.sf)
