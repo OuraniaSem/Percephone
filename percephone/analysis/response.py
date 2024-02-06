@@ -71,8 +71,8 @@ def resp_matrice(rec, df_data):
     exclude_windows.append(list(range(0, pre_boundary)))  # to not have edge problem
     exclude_windows.append(
         list(range(len(df_data[0]) - post_boundary, len(df_data[0]))))  # to not have edge problem
-    range_iti = set(range(len(df_data[0]))).difference(set(np.concatenate(np.array(exclude_windows))))
-    random_timing = rnd.sample(range_iti, k=1999)
+    range_iti = set(range(len(df_data[0]))).difference(set(np.concatenate(exclude_windows)))
+    random_timing = rnd.sample(list(range_iti), k=1999)
 
     from multiprocessing import Pool, cpu_count
     workers = cpu_count()
@@ -118,12 +118,6 @@ def auc_matrice(rec, df_data, resp_mask):
     auc_mat = [list(map(auc, x, responsive)) for x, responsive in zip(data1, resp_mask)]
     return auc_mat
 
-# d = [x+6 for x in c]
-
-c = [1,2,3,6]
-d = []
-for x in c:
-    d.append(x+6)
 
 def delay_response(signal, responsive):
     # 0-10(stim)-45
