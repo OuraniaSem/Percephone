@@ -398,9 +398,28 @@ class RecordingAmplDet(Recording):
         with open(self.input_path + "behavior_events.json", "w") as jsn:
             json.dump(to_save, jsn)
 
-    def mlr(self, mlr_model):
+    def mlr(self, mlr_model, name_model):
 
-        self.mlr_labels_exc["text_labels"], self.mlr_labels_exc["n_neurons_per_label"], self.mlr_labels_exc[
-            "neuron_labels"], self.mlr_labels_exc["indices_r2"] = mlr(self.zscore_exc, mlr_model, self.sf)
-        self.mlr_labels_inh["text_labels"], self.mlr_labels_inh["n_neurons_per_label"], self.mlr_labels_inh[
-            "neuron_labels"], self.mlr_labels_inh["indices_r2"] = mlr(self.zscore_inh, mlr_model, self.sf)
+            if os.path.exists(self.input_path + name_model + '.json'):
+                print('MLR model already computed')
+                with open(self.input_path + name_model + '.json', "r") as events_file:
+                    events = json.load(events_file)
+                    self.mlr_labels_exc= events["exc"]
+                    self.mlr_labels_inh = events["inh"]
+
+            else:
+
+                self.mlr_labels_exc["text_labels"], self.mlr_labels_exc["n_neurons_per_label"], self.mlr_labels_exc[
+                    "neuron_labels"], self.mlr_labels_exc["indices_r2"] = mlr(self.zscore_exc, mlr_model, self.sf)
+                self.mlr_labels_inh["text_labels"], self.mlr_labels_inh["n_neurons_per_label"], self.mlr_labels_inh[
+                    "neuron_labels"], self.mlr_labels_inh["indices_r2"] = mlr(self.zscore_inh, mlr_model, self.sf)
+
+                def convert_to_list(obj):
+                    return {key: value.tolist() for key, value in obj.items()}
+
+                exc_list = convert_to_list(self.mlr_labels_exc)
+                inh_list = convert_to_list(self.mlr_labels_inh)
+                to_save_list = {"exc": exc_list, "inh": inh_list}
+
+                with open(self.input_path + name_model + ".json", "w") as jsn:
+                    json.dump(to_save_list, jsn)
