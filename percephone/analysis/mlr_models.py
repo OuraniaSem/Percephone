@@ -51,7 +51,7 @@ def classic_model(rec):
     conv_reward = regressor_labels(rec, rec.reward_time, reward_duration, len(rec.zscore_exc[0]), 200)
     timeout_duration = np.array([int(2 * rec.sf)]*len(rec.timeout_time))  # 2 s
     conv_timeout = regressor_labels(rec, rec.timeout_time, timeout_duration, len(rec.zscore_exc[0]), 100)
-    return np.array([conv_stim_det, conv_stim_undet, conv_reward, conv_timeout])
+    return np.array([conv_stim_det, conv_stim_undet, conv_reward, conv_timeout]), "classic_model"
 
 
 def r2_model(rec):
@@ -61,7 +61,7 @@ def r2_model(rec):
     conv_stim_det = regressor_labels(rec, timings, duration, len(rec.zscore_exc[0]), 100)
     reward_duration = np.array([int(0.1 * rec.sf)] * len(rec.reward_time))  # 0.1 s
     conv_reward = regressor_labels(rec, rec.reward_time, reward_duration, len(rec.zscore_exc[0]), 200)
-    return np.array([conv_stim_det,  conv_reward])
+    return np.array([conv_stim_det,  conv_reward]), "r2_model"
 
 
 def stim_ud_model(rec):
@@ -75,11 +75,11 @@ def stim_ud_model(rec):
     return np.array([conv_stim_det,  conv_stim_undet])
 
 
-def bi_stim_model(rec):
-    """Two regressors: one for the begining of the stim and the second for the end of the stim"""
-    timings = rec.stim_time[rec.detected_stim]
-    start_duration = rec.stim_durations[rec.detected_stim]/2
-    start_stim = regressor_labels(rec, timings, duration, len(rec.zscore_exc[0]), 100)
-    end_duration = rec.stim_durations[rec.detected_stim]/2  # 0.1 s
-    end_stim = regressor_labels(rec, rec.reward_time, reward_duration, len(rec.zscore_exc[0]), 200)
-    return np.array([start_stim,  end_stim])
+# def bi_stim_model(rec):
+#     """Two regressors: one for the begining of the stim and the second for the end of the stim"""
+#     timings = rec.stim_time[rec.detected_stim]
+#     start_duration = rec.stim_durations[rec.detected_stim]/2
+#     start_stim = regressor_labels(rec, timings, duration, len(rec.zscore_exc[0]), 100)
+#     end_duration = rec.stim_durations[rec.detected_stim]/2  # 0.1 s
+#     end_stim = regressor_labels(rec, rec.reward_time, reward_duration, len(rec.zscore_exc[0]), 200)
+#     return np.array([start_stim,  end_stim])

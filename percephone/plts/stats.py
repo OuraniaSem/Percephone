@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 import scipy.stats as ss
 import math
+from matplotlib.ticker import AutoMinorLocator
 
 plt.rcParams['font.size'] = 40
 plt.rcParams['axes.linewidth'] = 3
@@ -62,6 +63,9 @@ def boxplot(wt, ko, ylabel):
     ax.grid(False)
     ax.set_title(None)
     ax.set_xlabel(None)
+    ax.yaxis.set_minor_locator(AutoMinorLocator(2))
+    ax.tick_params(axis='both', which='major', length=6, width=3)
+    ax.tick_params(axis='both', which='minor', length=4, width=3)
     max_y = max(max(wt), max(ko))
     lim_max = max(int(max_y)*0.15, int(math.ceil(max_y / 2 + 0.5)) * 2)
     min_y = min(min(wt), min(ko))
@@ -71,10 +75,11 @@ def boxplot(wt, ko, ylabel):
     ax.set_yticks(sorted(yticks))
     ax.spines[['right', 'top', 'bottom']].set_visible(False)
     ax.set_xticks([])
+
     x_1, x_2 = [0.15, 0.40]
     max_data = max([max(wt), max(ko)])
     y, col = max_data + 0.05 * abs(max_data), 'k'
-    ax.plot([x_1, x_2], [y, y], lw=1.5, c=col)
+    ax.plot([x_1, x_2], [y, y], lw=3, c=col)
 
     def stat_boxplot(sb_wt, sb_ko, ylabel):
         print(ylabel)
@@ -98,7 +103,7 @@ def boxplot(wt, ko, ylabel):
         sig_symbol = '**'
     elif pval < 0.05:
         sig_symbol = '*'
-    elif pval > 0.05:
+    else:
         sig_symbol = 'ns'
     ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col)
     plt.tick_params(axis="x", which="both", bottom=False)
@@ -138,13 +143,16 @@ def barplot(wt, ko, ylabel):
     ax.set_ylabel(ylabel + " Var ")
     ax.set_title(None)
     ax.set_xlabel(None)
+    ax.yaxis.set_minor_locator(AutoMinorLocator(2))
+    ax.tick_params(axis='both', which='major', length=6, width=3)
+    ax.tick_params(axis='both', which='minor', length=4, width=3)
     ax.spines[['right', 'top']].set_visible(False)
     ax.set_xticks([])
     fig.tight_layout()
     x1, x2 = 1.7, 1.8
     max_data = max([var_wt, var_ko])
     y, col = max_data + 0.15 * abs(max_data), 'k'
-    ax.plot([x1, x2], [y, y], lw=1.5, c=col)
+    ax.plot([x1, x2], [y, y], lw=3, c=col)
 
     def stat_varplot(s_wt, s_ko, s_y_label):
         """
@@ -181,6 +189,6 @@ def barplot(wt, ko, ylabel):
         sig_symbol = '**'
     elif pval < 0.05:
         sig_symbol = '*'
-    elif pval > 0.05:
+    else:
         sig_symbol = 'ns'
     ax.text((x1 + x2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col)
