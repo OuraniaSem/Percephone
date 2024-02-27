@@ -162,3 +162,59 @@ def plot_dff_stim_detected_timeout(rec, dff, filename):
     tax1.set_title(filename)
     plt.show()
     return fig
+
+
+
+def plot_dff_stim_detected_lick(rec, dff, filename):
+    """
+
+    Parameters
+    ----------
+    rec
+    dff
+    filename
+
+    Returns
+    -------
+
+    """
+    cmap = 'inferno'
+    time_range = np.linspace(0, (len(dff[0]) / sampling_rate) - 1, len(dff[0]))
+    fig, ax = plt.subplots(1, 1, figsize=(18, 10))
+    divider = make_axes_locatable(ax)
+    tax2 = divider.append_axes('top', size='10%', pad=0.1, sharex=ax)
+    tax1 = divider.append_axes('top', size='10%', pad=0.1, sharex=ax)
+    cax = divider.append_axes('right', size='2%', pad=0.1)
+    ax.tick_params(which='both', width=4)
+    # convolution of the stims
+    stim_vector = np.zeros(len(dff[0]))
+    stim_vector_lick = np.zeros(len(dff[0]))
+    stim_index = [list(range(stim, stim + int(0.5 * rec.sf))) for i, stim in
+                  enumerate(rec.stim_time[rec.stim_ampl != 0])]
+    for stim_range, stim_amp in zip(stim_index, rec.stim_ampl[rec.stim_ampl != 0]):
+        stim_vector[stim_range] = stim_amp * 100
+    conv_stim = np.convolve(stim_vector, kernel_bi, mode='same') * dt
+    lick_index = [list(range(to, to + int(0.5 * rec.sf))) for i, to in
+                  enumerate(rec.lick_time[rec.lick_time<len(stim_vector_lick)])]
+    for to_range in lick_index:
+        stim_vector_lick[to_range] = 1000
+    conv_licks = np.convolve(stim_vector_lick, kernel_bi, mode='same') * dt
+    extent = [time_range[0] - dt / 2, time_range[-1] + dt / 2, len(dff) - 0.5, -0.5]
+    tax2.imshow(conv_licks.reshape(1, -1), cmap=cmap, aspect='auto', interpolation='none', extent=extent)
+    tax2.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
+
+    tax1.imshow(conv_stim.reshape(1, -1), cmap=cmap, aspect='auto', interpolation='none', extent=extent)
+    tax1.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
+    Z = linkage(dff, 'ward', optimal_ordering=True)
+    dn_exc = dendrogram(Z, no_plot=True, count_sort="ascending")
+    im = ax.imshow(dff[dn_exc['leaves']], cmap=cmap, interpolation='none', aspect='auto',
+                   vmin=np.nanpercentile(np.ravel(dff), 1),
+                   vmax=np.nanpercentile(np.ravel(dff), 99), extent=extent)
+    cbar = plt.colorbar(im, cax=cax)
+    cbar.ax.tick_params(which='both', width=4)
+    cbar.set_label(r'Z-score')
+    ax.set_xlabel('Time (s)')
+    ax.set_ylabel('Neurons')
+    tax1.set_title(filename)
+    plt.show()
+    return fig

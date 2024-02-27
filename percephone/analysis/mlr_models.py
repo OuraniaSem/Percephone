@@ -75,6 +75,20 @@ def stim_ud_model(rec):
     return np.array([conv_stim_det,  conv_stim_undet])
 
 
+def precise_stim_model(rec):
+    """Variation of the classic model where all the stims are stopped with the first lick. So
+    the stim regressors is shorter"""
+    timings = rec.stim_time[rec.detected_stim]
+    duration = [np.min(np.array(rec.lick_time-timing)[(rec.lick_time- timing)>0]) for timing in timings]
+    conv_stim_det = regressor_labels(rec, timings, duration, len(rec.zscore_exc[0]), 100)
+    undet_timings = rec.stim_time[~rec.detected_stim]
+    undet_duration = rec.stim_durations[~rec.detected_stim]
+    conv_stim_undet = regressor_labels(rec,  undet_timings, undet_duration, len(rec.zscore_exc[0]), 100)
+    lick_duration = np.array([int(0.1 * rec.sf)]*len(rec.lick_time))  # 0.1 s
+    conv_lick = regressor_labels(rec, rec.reward_time, lick_duration, len(rec.zscore_exc[0]), 200)
+    return np.array([conv_stim_det, conv_stim_undet, conv_lick]), "precise_stim_model"
+
+
 # def bi_stim_model(rec):
 #     """Two regressors: one for the begining of the stim and the second for the end of the stim"""
 #     timings = rec.stim_time[rec.detected_stim]

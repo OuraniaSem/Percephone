@@ -203,6 +203,7 @@ class RecordingAmplDet(Recording):
         self.stim_durations = []
         self.reward_time = []
         self.timeout_time = []
+        self.lick_time = []
         self.detected_stim = []
         self.mlr_labels_exc = {}
         self.mlr_labels_inh = {}
@@ -219,6 +220,7 @@ class RecordingAmplDet(Recording):
             self.timeout_time = np.array(events["timeout_time"])
             self.detected_stim = np.array(events["detected_stim"])
             self.stim_durations = np.array(events["stim_durations"])
+            self.lick_time = np.array(events["lick_time"])
         else:
             if not os.path.exists(input_path + 'analog.txt'):
                 mesc_file = [file for file in os.listdir(input_path) if file.endswith(".mesc")]
@@ -349,6 +351,7 @@ class RecordingAmplDet(Recording):
                 index_licks = self.analog.index[self.analog['t'] == lick].to_list()
                 if len(index_licks) != 0:
                     self.analog.at[index_licks[0], 'licks'] = 4
+                    self.lick_time.append(int((index_licks[0] / 10000) * self.sf))
             if len(index_reward) != 0:
                 self.analog.at[index_reward[0], 'reward'] = 2
                 self.reward_time.append(int((index_reward[0] / 10000) * self.sf))
@@ -378,7 +381,7 @@ class RecordingAmplDet(Recording):
         self.reward_time = np.array(self.reward_time)
         self.timeout_time = np.array(self.timeout_time)
         self.detected_stim = np.array(self.detected_stim)
-
+        self.lick_time = np.array(self.lick_time)
         # stim duration extraction
         durations = np.zeros(len(self.stim_time))
         for i, stim_t in enumerate(self.stim_time):
@@ -394,7 +397,9 @@ class RecordingAmplDet(Recording):
                    "stim_durations": self.stim_durations.tolist(),
                    "reward_time": self.reward_time.tolist(),
                    "timeout_time": self.timeout_time.tolist(),
-                   "detected_stim": self.detected_stim.tolist()}
+                   "detected_stim": self.detected_stim.tolist(),
+                   "lick_time": self.lick_time.tolist()
+                   }
         with open(self.input_path + "behavior_events.json", "w") as jsn:
             json.dump(to_save, jsn)
 
