@@ -192,3 +192,87 @@ def barplot(wt, ko, ylabel):
     else:
         sig_symbol = 'ns'
     ax.text((x1 + x2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col)
+
+
+def paired_boxplot(ax, det, undet, ylabel, title):
+    """
+    create boxplot for two data groups.
+
+    Parameters
+    ----------
+    det : numpy.ndarray, series, list
+        data of the detected group
+    undet : numpy.ndarray, series, list
+        data of the undetected group
+    ylabel : string
+        columns names
+
+    """
+    print("Boxplot plotting.")
+    lw = 5
+    ax.set_ylabel(ylabel)
+    ax.boxplot([det], positions=[0.15], patch_artist=True, showfliers=False, widths=0.2,
+               meanprops=dict(marker='o', markerfacecolor=light_ko_color, markeredgecolor='black'),
+               boxprops=dict(linewidth=lw, facecolor='white', color=light_ko_color),
+               capprops=dict(linewidth=lw, color=light_ko_color),
+               whiskerprops=dict(linewidth=lw, color=light_ko_color),
+               medianprops=dict(linewidth=lw, color=light_ko_color), )
+    ax.boxplot([undet], positions=[0.40], patch_artist=True, showfliers=False, widths=0.2,
+               meanprops=dict(marker='o', markerfacecolor=ko_color, markeredgecolor='black'),
+               boxprops=dict(linewidth=lw, facecolor='white', color=ko_color),
+               capprops=dict(linewidth=lw, color=ko_color),
+               whiskerprops=dict(linewidth=lw, color=ko_color),
+               medianprops=dict(linewidth=lw, color=ko_color), )
+    for i in range(len(det)):
+        ax.plot([0.15, 0.40], [det[i], undet[i]], marker="o", color=light_ko_color, alpha=0.9, linewidth=1.5,
+        markersize=10, markeredgewidth=2, markeredgecolor=ko_color, markerfacecolor=light_ko_color)
+
+    ax.grid(False)
+    ax.set_title(None)
+    ax.set_xlabel(None)
+    ax.yaxis.set_minor_locator(AutoMinorLocator(2))
+    ax.tick_params(axis='both', which='major', length=6, width=3)
+    ax.tick_params(axis='both', which='minor', length=4, width=3)
+    max_y = max(max(det), max(undet))
+    lim_max = max(int(max_y)*0.15, int(math.ceil(max_y / 2 + 0.5)) * 2)
+    min_y = min(min(det), min(undet))
+    lim_inf = min(0, min_y + 0.15*min_y)
+    ax.set_ylim(ymin=lim_inf, ymax=lim_max)
+    yticks = list(ax.get_yticks())
+    ax.set_yticks(sorted(yticks))
+    ax.spines[['right', 'top', 'bottom']].set_visible(False)
+    ax.set_xticks([])
+
+    x_1, x_2 = [0.15, 0.40]
+    max_data = max([max(det), max(undet)])
+    y, col = max_data + 0.05 * abs(max_data), 'k'
+    ax.plot([x_1, x_2], [y, y], lw=3, c=col)
+
+    def stat_paired_boxplot(sb_det, sb_undet, ylabel):
+        print(ylabel)
+        data_det = sb_det
+        data_undet = sb_undet
+        print(ss.shapiro(data_det))
+        print(ss.shapiro(data_undet))
+        stat, pvalue_det = ss.shapiro(data_det)
+        stat, pvalue_undet = ss.shapiro(data_undet)
+        if pvalue_det > 0.05 and pvalue_undet > 0.05:
+            stat, pvalue = ss.ttest_rel(data_det, data_undet)
+            print(ss.ttest_rel(data_det, data_undet))
+        else:
+            stat, pvalue = ss.wilcoxon(data_det, data_undet)
+            print(ss.wilcoxon(data_det, data_undet))
+        return pvalue
+    pval = stat_paired_boxplot(det, undet, ylabel)
+    if pval < 0.001:
+        sig_symbol = '***'
+    elif pval < 0.01:
+        sig_symbol = '**'
+    elif pval < 0.05:
+        sig_symbol = '*'
+    else:
+        sig_symbol = 'ns'
+    ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col)
+    ax.set_xticks([0.15, 0.40], ['', ""])
+    ax.tick_params(axis="x", which="both", bottom=False)
+    ax.set_title(title)

@@ -15,7 +15,7 @@ plt.switch_backend("Qt5Agg")
 # compute the correlation matrix for every neuron against every neuron
 
 
-def cross_cor(rec):
+def cross_cor(rec,fig, ax):
     order = []
     for label in np.unique(rec.mlr_labels_exc['neuron_labels'], axis=0):
         indexes = np.all(rec.mlr_labels_exc['neuron_labels'] == label, axis=1)
@@ -28,9 +28,128 @@ def cross_cor(rec):
     order_s = np.concatenate(np.array(sorted(order, key=len)))
     order_s = [x for x in order_s if x in rec.mlr_labels_exc["indices_r2"]]
     corr = np.corrcoef(rec.zscore_exc)
-    fig, ax = plt.subplots()
+
     h = ax.imshow(corr[order_s][:, order_s], cmap="seismic", vmin=-1, vmax=+1, interpolation="none")
-    fig.colorbar(h, ax=ax, label="Correlation Coefficient $C_{ij}$")
     ax.set_xlabel("Neuron i")
     ax.set_ylabel("Neuron j")
     ax.set_title(str(rec.filename) + " " + rec.genotype)
+    fig.suptitle('Cross cor for whole recording', fontsize=16)
+
+
+def cross_cor_prestim(rec, fig, ax):
+    order = []
+    for label in np.unique(rec.mlr_labels_exc['neuron_labels'], axis=0):
+        indexes = np.all(rec.mlr_labels_exc['neuron_labels'] == label, axis=1)
+        if len(indexes) == 0:
+            continue
+        else:
+            # avg_signal = np.average(rec.zscore_exc[indexes], axis=0)
+            order.append(np.where(indexes)[0])
+
+    order_s = np.concatenate(np.array(sorted(order, key=len)))
+    order_s = [x for x in order_s if x in rec.mlr_labels_exc["indices_r2"]]
+    exc = rec.df_f_exc[:, np.linspace(rec.stim_time - int(1 * rec.sf), rec.stim_time, int(1 * rec.sf), dtype=int)]
+    exc_ = exc.reshape(len(rec.df_f_exc), len(rec.stim_time) * int(1 * rec.sf))
+    corr = np.corrcoef(exc_)
+    h = ax.imshow(corr[order_s][:, order_s], cmap="seismic", vmin=-1, vmax=+1, interpolation="none")
+    ax.set_xlabel("Neuron i")
+    ax.set_ylabel("Neuron j")
+    ax.set_title(str(rec.filename) + " " + rec.genotype)
+    fig.suptitle('Cross cor during pre stim (baseline)', fontsize=16)
+
+
+def cross_cor_stim(rec, fig, ax):
+    order = []
+    for label in np.unique(rec.mlr_labels_exc['neuron_labels'], axis=0):
+        indexes = np.all(rec.mlr_labels_exc['neuron_labels'] == label, axis=1)
+        if len(indexes) == 0:
+            continue
+        else:
+            # avg_signal = np.average(rec.zscore_exc[indexes], axis=0)
+            order.append(np.where(indexes)[0])
+
+    order_s = np.concatenate(np.array(sorted(order, key=len)))
+    order_s = [x for x in order_s if x in rec.mlr_labels_exc["indices_r2"]]
+    exc = rec.df_f_exc[:, np.linspace(rec.stim_time, rec.stim_time + int(0.5 * rec.sf), int(0.5 * rec.sf),dtype=int)]
+    exc_ = exc.reshape(len(rec.df_f_exc), len(rec.stim_time) * int(0.5 * rec.sf))
+    corr = np.corrcoef(exc_)
+    h = ax.imshow(corr[order_s][:, order_s], cmap="seismic", vmin=-1, vmax=+1, interpolation="none")
+    ax.set_xlabel("Neuron i")
+    ax.set_ylabel("Neuron j")
+    ax.set_title(str(rec.filename) + " " + rec.genotype)
+    fig.suptitle('Cross cor during stim', fontsize=16)
+
+
+def cross_cor_stim_sub(rec,fig,ax):
+    order = []
+    for label in np.unique(rec.mlr_labels_exc['neuron_labels'], axis=0):
+        indexes = np.all(rec.mlr_labels_exc['neuron_labels'] == label, axis=1)
+        if len(indexes) == 0:
+            continue
+        else:
+            # avg_signal = np.average(rec.zscore_exc[indexes], axis=0)
+            order.append(np.where(indexes)[0])
+
+    order_s = np.concatenate(np.array(sorted(order, key=len)))
+    order_s = [x for x in order_s if x in rec.mlr_labels_exc["indices_r2"]]
+    bsl = rec.df_f_exc[:, np.linspace(rec.stim_time - int(3 * rec.sf), rec.stim_time,int(3 * rec.sf), dtype=int)]
+    bsl_ = bsl.reshape(len(rec.df_f_exc), len(rec.stim_time) * int(3 * rec.sf))
+    exc = rec.df_f_exc[:, np.linspace(rec.stim_time, rec.stim_time + int(0.5 * rec.sf), int(0.5 * rec.sf),dtype=int)]
+    exc_ = exc.reshape(len(rec.df_f_exc), len(rec.stim_time) * int(0.5 * rec.sf))
+    corr = np.corrcoef(exc_) - np.corrcoef(bsl_)
+
+    h = ax.imshow(corr[order_s][:, order_s], cmap="seismic", vmin=-1, vmax=+1, interpolation="none")
+    ax.set_xlabel("Neuron i")
+    ax.set_ylabel("Neuron j")
+    ax.set_title(str(rec.filename) + " " + rec.genotype)
+    fig.suptitle('Cross cor during stim with subtracted baseline', fontsize=16)
+
+
+def cross_cor_stim_det(rec, fig, ax):
+    order = []
+    for label in np.unique(rec.mlr_labels_exc['neuron_labels'], axis=0):
+        indexes = np.all(rec.mlr_labels_exc['neuron_labels'] == label, axis=1)
+        if len(indexes) == 0:
+            continue
+        else:
+            # avg_signal = np.average(rec.zscore_exc[indexes], axis=0)
+            order.append(np.where(indexes)[0])
+
+    order_s = np.concatenate(np.array(sorted(order, key=len)))
+    order_s = [x for x in order_s if x in rec.mlr_labels_exc["indices_r2"]]
+    bsl = rec.df_f_exc[:, np.linspace(rec.stim_time - int(3 * rec.sf), rec.stim_time,int(3 * rec.sf), dtype=int)]
+    bsl_ = bsl.reshape(len(rec.df_f_exc), len(rec.stim_time) * int(3 * rec.sf))
+    exc = rec.df_f_exc[:, np.linspace(rec.stim_time[rec.detected_stim], rec.stim_time[rec.detected_stim] + int(0.5 * rec.sf), int(0.5 * rec.sf),dtype=int)]
+    exc_ = exc.reshape(len(rec.df_f_exc), len(rec.stim_time[rec.detected_stim]) * int(0.5 * rec.sf))
+    corr = np.corrcoef(exc_) - np.corrcoef(bsl_)
+
+    h = ax.imshow(corr[order_s][:, order_s], cmap="seismic", vmin=-1, vmax=+1, interpolation="none")
+    ax.set_xlabel("Neuron i")
+    ax.set_ylabel("Neuron j")
+    ax.set_title(str(rec.filename) + " " + rec.genotype)
+    fig.suptitle('Cross cor during  DET stim with subtracted baseline', fontsize=16)
+
+
+def cross_cor_stim_undet(rec, fig, ax):
+    order = []
+    for label in np.unique(rec.mlr_labels_exc['neuron_labels'], axis=0):
+        indexes = np.all(rec.mlr_labels_exc['neuron_labels'] == label, axis=1)
+        if len(indexes) == 0:
+            continue
+        else:
+            # avg_signal = np.average(rec.zscore_exc[indexes], axis=0)
+            order.append(np.where(indexes)[0])
+
+    order_s = np.concatenate(np.array(sorted(order, key=len)))
+    order_s = [x for x in order_s if x in rec.mlr_labels_exc["indices_r2"]]
+    bsl = rec.df_f_exc[:, np.linspace(rec.stim_time - int(3 * rec.sf), rec.stim_time,int(3 * rec.sf), dtype=int)]
+    bsl_ = bsl.reshape(len(rec.df_f_exc), len(rec.stim_time) * int(3 * rec.sf))
+    exc = rec.df_f_exc[:, np.linspace(rec.stim_time[~rec.detected_stim], rec.stim_time[~rec.detected_stim] + int(0.5 * rec.sf), int(0.5 * rec.sf),dtype=int)]
+    exc_ = exc.reshape(len(rec.df_f_exc), len(rec.stim_time[~rec.detected_stim]) * int(0.5 * rec.sf))
+    corr = np.corrcoef(exc_) - np.corrcoef(bsl_)
+
+    h = ax.imshow(corr[order_s][:, order_s], cmap="seismic", vmin=-1, vmax=+1, interpolation="none")
+    ax.set_xlabel("Neuron i")
+    ax.set_ylabel("Neuron j")
+    ax.set_title(str(rec.filename) + " " + rec.genotype)
+    fig.suptitle('Cross cor during UNDET stim with subtracted baseline', fontsize=16)

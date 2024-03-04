@@ -195,7 +195,7 @@ def plot_dff_stim_detected_lick(rec, dff, filename):
         stim_vector[stim_range] = stim_amp * 100
     conv_stim = np.convolve(stim_vector, kernel_bi, mode='same') * dt
     lick_index = [list(range(to, to + int(0.5 * rec.sf))) for i, to in
-                  enumerate(rec.lick_time[rec.lick_time<len(stim_vector_lick)])]
+                  enumerate(rec.lick_time[rec.lick_time<len(stim_vector_lick)-16])]
     for to_range in lick_index:
         stim_vector_lick[to_range] = 1000
     conv_licks = np.convolve(stim_vector_lick, kernel_bi, mode='same') * dt
