@@ -25,11 +25,12 @@ pre_boundary = int(0.25 * sf)  # index
 post_boundary = int(0.5 * sf)  # index
 
 
-def resp_single_neuron(neuron_df_data_, random_timing, stim_idx):
+def resp_single_neuron(neuron_df_data_, random_timing, rec):
     """
     Compute if the neurons are
     Parameters
     ----------
+    lick_idx
     neuron_df_data_: array
         df over f data inh or exc
     random_timing: array
@@ -41,18 +42,39 @@ def resp_single_neuron(neuron_df_data_, random_timing, stim_idx):
     """
     resp = []
     bootstrap_responses = []
+    bootstrap_neg = []
     for rnd_idx in random_timing:
-        bootstrap_responses.append(ss.iqr(neuron_df_data_[rnd_idx - pre_boundary:rnd_idx], nan_policy='omit'))
-    threshold = np.nanpercentile(bootstrap_responses, 95)  # 2 * np.nanper... before 11-09-2023
-    for y, stim_i in enumerate(stim_idx):
+        signal = neuron_df_data_[rnd_idx - pre_boundary:rnd_idx]
+        signal_pos = signal  # + abs(min(signal))
+        signal_inverted = signal * -1
+        signal_neg = signal_inverted  # + abs(min(signal_inverted ))
+        bootstrap_responses.append(ss.iqr(signal_pos, nan_policy='omit'))
+        bootstrap_neg.append(ss.iqr(signal_neg, nan_policy='omit'))
+    threshold_high = np.nanpercentile(bootstrap_responses, 99)  # 2 * np.nanper... before 11-09-2023
+    threshold_low = -(np.nanpercentile(bootstrap_neg, 99)) #- abs(min(signal_inverted)))
+    # calculation of the durations
+
+    durations = np.zeros(len(rec.stim_time), dtype=int)
+    for i, timing in enumerate(rec.stim_time):
+        if rec.detected_stim[i]:
+            durations[i] = np.min(np.array(rec.lick_time - timing)[(rec.lick_time - timing) > 0])
+        else:
+            durations[i] = (int(0.5 * rec.sf))
+    durations[durations > int(0.5 * rec.sf)] = int(0.5 * rec.sf)
+
+    for y, stim_i in enumerate(rec.stim_time):
         # bsl_activity = np.subtract(*np.nanpercentile((neuron_df[(int(stim_timing * sf) - pre_boundary):int(stim_timing * sf)]), [75, 25]))
         bsl_activity = np.mean(neuron_df_data_[(stim_i - pre_boundary):stim_i])
-        peak_high = np.max(neuron_df_data_[stim_i:(stim_i + post_boundary)])
-        true_response = peak_high - bsl_activity
-        if true_response > threshold:
-            resp.append(True)
+        peak_high = np.max(neuron_df_data_[stim_i:(stim_i + durations[y])])
+        peak_low = np.min(neuron_df_data_[stim_i:(stim_i + durations[y])])
+        true_response_high = peak_high
+        true_response_low = peak_low
+        if true_response_high > threshold_high:
+            resp.append(1)
+        elif true_response_low < threshold_low:
+            resp.append(-1)
         else:
-            resp.append(False)
+            resp.append(0)
     return resp
 
 
@@ -77,7 +99,8 @@ def resp_matrice(rec, df_data):
     from multiprocessing import Pool, cpu_count
     workers = cpu_count()
     pool = Pool(processes=workers)
-    async_results = [pool.apply_async(resp_single_neuron, args=(i, random_timing, rec.stim_time)) for i in df_data]
+    # async_results = [resp_single_neuron(i, random_timing, rec) for i in df_data]
+    async_results = [pool.apply_async(resp_single_neuron, args=(i, random_timing,rec)) for i in df_data]
     resp_mat = [ar.get() for ar in async_results]
     return resp_mat
 
@@ -103,7 +126,7 @@ def auc_matrice(rec, df_data, resp_mask):
     """
 
     def auc(signal, responsive):
-        if not responsive:
+        if responsive==0:
             return False
         signal[signal < 0] = 0
         return simps(signal, dx=1 / rec.sf)

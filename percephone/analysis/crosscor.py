@@ -80,7 +80,7 @@ def cross_cor_stim(rec, fig, ax):
     fig.suptitle('Cross cor during stim', fontsize=16)
 
 
-def cross_cor_stim_sub(rec,fig,ax):
+def cross_cor_stim_sub(rec, fig, ax):
     order = []
     for label in np.unique(rec.mlr_labels_exc['neuron_labels'], axis=0):
         indexes = np.all(rec.mlr_labels_exc['neuron_labels'] == label, axis=1)

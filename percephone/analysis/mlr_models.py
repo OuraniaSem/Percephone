@@ -79,7 +79,7 @@ def precise_stim_model(rec):
     """Variation of the classic model where all the stims are stopped with the first lick. So
     the stim regressors is shorter"""
     timings = rec.stim_time[rec.detected_stim]
-    duration = [np.min(np.array(rec.lick_time-timing)[(rec.lick_time- timing)>0]) for timing in timings]
+    duration = [np.min(np.array(rec.lick_time-timing)[(rec.lick_time - timing)>0]) for timing in timings]
     conv_stim_det = regressor_labels(rec, timings, duration, len(rec.zscore_exc[0]), 100)
     undet_timings = rec.stim_time[~rec.detected_stim]
     undet_duration = rec.stim_durations[~rec.detected_stim]
@@ -124,3 +124,5 @@ def biphase_stim_model(rec):
 #     end_duration = rec.stim_durations[rec.detected_stim]/2  # 0.1 s
 #     end_stim = regressor_labels(rec, rec.reward_time, reward_duration, len(rec.zscore_exc[0]), 200)
 #     return np.array([start_stim,  end_stim])
+
+#temp

@@ -104,8 +104,8 @@ class Recording:
         return df_f_percen
 
     def responsivity(self):
-        self.matrices["EXC"]["Responsivity"] = resp_matrice(self, self.df_f_exc)
-        self.matrices["INH"]["Responsivity"] = resp_matrice(self, self.df_f_inh)
+        self.matrices["EXC"]["Responsivity"] = resp_matrice(self, self.zscore_exc)
+        self.matrices["INH"]["Responsivity"] = resp_matrice(self, self.zscore_inh)
 
     def delay_onset_map(self):
         self.matrices["EXC"]["Delay_onset"] = delay_matrice(self, self.df_f_exc, self.stim_time,

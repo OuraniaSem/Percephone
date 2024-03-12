@@ -276,3 +276,4 @@ def paired_boxplot(ax, det, undet, ylabel, title):
     ax.set_xticks([0.15, 0.40], ['', ""])
     ax.tick_params(axis="x", which="both", bottom=False)
     ax.set_title(title)
+
