@@ -296,3 +296,26 @@ def intereactive_heatmap(rec, activity):
 
     plt.connect('button_press_event', on_click)
     plt.show()
+
+
+def amp_tuning_heatmap(ax, rec, activity):
+    cmap = 'inferno'
+    amps_reponses = []
+    for amp in [2, 4, 6, 8, 10, 12]:
+        stims = rec.stim_time[rec.stim_ampl == amp]
+        response = activity[:, np.linspace(stims, stims + int(1 * rec.sf), int(1 * rec.sf), dtype=int)]
+        responses = response.reshape(len(activity), len(stims) * int(1 * rec.sf))
+        response_ = np.mean(responses, axis=1)
+        amps_reponses.append(response_)
+
+    tune_act = np.transpose(amps_reponses)
+    inter_response = np.array([np.interp(np.linspace(2, 12, 100), [2, 4, 6, 8, 10, 12], resp) for resp in tune_act])
+    Z = linkage(inter_response, 'ward', optimal_ordering=True)
+    dn_exc = dendrogram(Z, no_plot=True, count_sort="ascending")
+    im = ax.imshow(inter_response[dn_exc["leaves"]], cmap=cmap, interpolation='none', aspect='auto',
+                   vmin=np.nanpercentile(np.ravel(activity), 1),
+                   vmax=np.nanpercentile(np.ravel(activity), 99))
+    ax.set_xticks([0, 20, 40, 60, 80, 99])
+    ax.set_xticklabels(["2", "4", "6", "8", "10", "12"])
+    ax.set_xlabel("Amplitude Stim")
+    ax.set_ylabel("Neurons")
