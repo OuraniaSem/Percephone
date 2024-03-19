@@ -26,7 +26,7 @@ def read_info(folder_name, rois):
     inhibitory_ids = np.array(list(list(row["Inhibitory neurons: ROIs"])[0].split(", ")))
     return (row["Number"].values[0],
             inhibitory_ids.astype(int),
-            row["Frame Rate (Hz)"].values[0], row["Genotype"].values[0])
+            row["Frame Rate (Hz)"].values[0], row["Genotype"].values[0], row["Threshold"].values[0])
 
 
 def extract_analog_from_mesc(path_mesc, tuple_mesc, frame_rate, savepath=""):
@@ -72,3 +72,30 @@ def extract_analog_from_mesc(path_mesc, tuple_mesc, frame_rate, savepath=""):
     np.savetxt(savepath + 'analog.txt', analog_t, fmt='%.8g', delimiter="\t")
     print("Analog saved.")
 
+
+if __name__ == '__main__':
+    folder = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
+    roi_info = pd.read_excel(folder + "/FmKO_ROIs&inhibitory.xlsx")
+    # filename = "20231009_5896_04_synchro/"
+    # path_mesc = folder + "20231009_5896_det.mesc"
+    # tuple_mesc = (0, 4, 0)
+    # frame_rate = 30.9609
+    # extract_analog_from_mesc(path_mesc, tuple_mesc, frame_rate, savepath=folder + filename)
+    #
+    import percephone.core.recording as pc
+    # import percephone.plts.heatmap as hm
+    # rec = pc.RecordingAmplDet(folder+filename, 0, filename, roi_info, cache=False)
+    # hm.plot_dff_stim_detected_lick(rec, rec.zscore_exc, str(rec.filename))
+
+
+
+    filename= "20220715_4456_00_synchro/"
+    rec = pc.RecordingAmplDet(folder + filename, 0, filename, roi_info, cache=False)
+    F = np.load(folder + filename + "df_f_exc.npy")
+    print(np.argmax(np.mean(F,axis=1)))
+    F = np.delete(F, 29, 0)
+    print(np.argmax(np.mean(F, axis=1)))
+    # plt.plot(F[1])
+    # plt.plot(F[24])
+    # plt.plot(F[40])
+    np.save(folder + filename + "df_f_exc.npy", F)

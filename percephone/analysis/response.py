@@ -100,7 +100,7 @@ def resp_matrice(rec, df_data):
     workers = cpu_count()
     pool = Pool(processes=workers)
     # async_results = [resp_single_neuron(i, random_timing, rec) for i in df_data]
-    async_results = [pool.apply_async(resp_single_neuron, args=(i, random_timing,rec)) for i in df_data]
+    async_results = [pool.apply_async(resp_single_neuron, args=(i, random_timing, rec)) for i in df_data]
     resp_mat = [ar.get() for ar in async_results]
     return resp_mat
 

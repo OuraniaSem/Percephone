@@ -36,7 +36,7 @@ def cross_cor(rec,fig, ax):
     fig.suptitle('Cross cor for whole recording', fontsize=16)
 
 
-def cross_cor_prestim(rec, fig, ax):
+def cross_cor_prestim(rec, ax, title):
     order = []
     for label in np.unique(rec.mlr_labels_exc['neuron_labels'], axis=0):
         indexes = np.all(rec.mlr_labels_exc['neuron_labels'] == label, axis=1)
@@ -54,8 +54,8 @@ def cross_cor_prestim(rec, fig, ax):
     h = ax.imshow(corr[order_s][:, order_s], cmap="seismic", vmin=-1, vmax=+1, interpolation="none")
     ax.set_xlabel("Neuron i")
     ax.set_ylabel("Neuron j")
-    ax.set_title(str(rec.filename) + " " + rec.genotype)
-    fig.suptitle('Cross cor during pre stim (baseline)', fontsize=16)
+    ax.set_title( title)
+
 
 
 def cross_cor_stim(rec, fig, ax):

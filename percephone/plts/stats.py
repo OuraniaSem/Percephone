@@ -11,7 +11,7 @@ import scipy.stats as ss
 import math
 from matplotlib.ticker import AutoMinorLocator
 
-plt.rcParams['font.size'] = 40
+plt.rcParams['font.size'] = 30
 plt.rcParams['axes.linewidth'] = 3
 plt.rcParams['svg.fonttype'] = 'none'
 plt.rcParams['lines.linewidth'] = 3
@@ -24,7 +24,7 @@ ko_color = "#CC0000"
 light_ko_color = "#ff8080"
 
 
-def boxplot(wt, ko, ylabel):
+def boxplot(wt, ko, ylabel, ylim=[]):
     """
     create boxplot for two data groups.
 
@@ -66,11 +66,14 @@ def boxplot(wt, ko, ylabel):
     ax.yaxis.set_minor_locator(AutoMinorLocator(2))
     ax.tick_params(axis='both', which='major', length=6, width=3)
     ax.tick_params(axis='both', which='minor', length=4, width=3)
-    max_y = max(max(wt), max(ko))
-    lim_max = max(int(max_y)*0.15, int(math.ceil(max_y / 2 + 0.5)) * 2)
-    min_y = min(min(wt), min(ko))
-    lim_inf = min(0, min_y + 0.15*min_y)
-    ax.set_ylim(ymin=lim_inf, ymax=lim_max)
+    if len(ylim)!=0:
+        ax.set_ylim(ylim)
+    else:
+        max_y = max(max(wt), max(ko))
+        lim_max = max(int(max_y*0.15 + max_y), int(math.ceil(max_y / 2 )) * 2)
+        min_y = min(min(wt), min(ko))
+        lim_inf = min(0, min_y + 0.15*min_y)
+        ax.set_ylim(ymin=lim_inf, ymax=lim_max)
     yticks = list(ax.get_yticks())
     ax.set_yticks(sorted(yticks))
     ax.spines[['right', 'top', 'bottom']].set_visible(False)
@@ -216,13 +219,13 @@ def paired_boxplot(ax, det, undet, ylabel, title):
                boxprops=dict(linewidth=lw, facecolor='white', color=light_ko_color),
                capprops=dict(linewidth=lw, color=light_ko_color),
                whiskerprops=dict(linewidth=lw, color=light_ko_color),
-               medianprops=dict(linewidth=lw, color=light_ko_color), )
+               medianprops=dict(linewidth=lw, color=light_ko_color))
     ax.boxplot([undet], positions=[0.40], patch_artist=True, showfliers=False, widths=0.2,
                meanprops=dict(marker='o', markerfacecolor=ko_color, markeredgecolor='black'),
                boxprops=dict(linewidth=lw, facecolor='white', color=ko_color),
                capprops=dict(linewidth=lw, color=ko_color),
                whiskerprops=dict(linewidth=lw, color=ko_color),
-               medianprops=dict(linewidth=lw, color=ko_color), )
+               medianprops=dict(linewidth=lw, color=ko_color))
     for i in range(len(det)):
         ax.plot([0.15, 0.40], [det[i], undet[i]], marker="o", color=light_ko_color, alpha=0.9, linewidth=1.5,
         markersize=10, markeredgewidth=2, markeredgecolor=ko_color, markerfacecolor=light_ko_color)
@@ -277,3 +280,86 @@ def paired_boxplot(ax, det, undet, ylabel, title):
     ax.tick_params(axis="x", which="both", bottom=False)
     ax.set_title(title)
 
+
+def boxplot_anova(group1_data, group2_data, group3_data, lim_y, label_y, filename, color1, color2, color3, annot_text=[]
+                  , title="", thickformater=True):
+
+    fig = plt.figure(figsize=(6, 8))
+    fig.subplots_adjust(hspace=0.5, wspace=0.4)
+    plt.Axes(fig, [0., 0.5, 1., 1.])
+    ax1 = fig.add_subplot(1, 1, 1, title=title)
+    band = [0, 0.8]
+    plt.xlim(band)
+    linewidth = 5
+    a = ax1.boxplot([group1_data, group2_data, group3_data],
+                    positions=[0.15, 0.40, 0.65],
+                    showfliers=False,
+                    widths=0.2,
+                    boxprops=dict(linewidth=linewidth, color=color2),
+                    whiskerprops=dict(color=color2, linewidth=linewidth),
+                    capprops=dict(color=color2, linewidth=linewidth),
+                    medianprops=dict(color=color2, linewidth=linewidth),
+                    meanline=True,
+                    showmeans=True)
+    a["boxes"][0].set(color=color1, linewidth=linewidth)
+    a["boxes"][2].set(color=color3, linewidth=linewidth)
+    a["whiskers"][0].set(color=color1, linewidth=linewidth)
+    a["whiskers"][1].set(color=color1, linewidth=linewidth)
+    a["whiskers"][4].set(color=color3, linewidth=linewidth)
+    a["whiskers"][5].set(color=color3, linewidth=linewidth)
+    a["caps"][0].set(color=color1, linewidth=linewidth)
+    a["caps"][1].set(color=color1, linewidth=linewidth)
+    a["caps"][4].set(color=color3, linewidth=linewidth)
+    a["caps"][5].set(color=color3, linewidth=linewidth)
+    a["medians"][0].set(color=color1, linewidth=linewidth)
+    a["medians"][1].set(color=color2, linewidth=linewidth)
+    a["medians"][2].set(color=color3, linewidth=linewidth)
+    a["means"][0].set(linewidth=linewidth)
+    a["means"][1].set(linewidth=linewidth)
+    a["means"][2].set(linewidth=linewidth)
+    plt.xticks([0.15, 0.40], ['', ""])
+    plt.ylim(lim_y)
+    plt.ylabel(label_y)
+    ax1.get_yaxis().set_major_formatter(mpl.ticker.ScalarFormatter())
+    y = group1_data
+    x = np.random.normal(0.15, 0.02, size=len(y))
+    y1 = group2_data
+    x1 = np.random.normal(0.40, 0.02, size=len(y1))
+    y2 = group3_data
+    x2 = np.random.normal(0.65, 0.02, size=len(y2))
+    ax1.plot(x, y, ".", alpha=0.5, ms=28, markerfacecolor='none', markeredgecolor=color1, markeredgewidth=4)
+    ax1.plot(x1, y1, ".", alpha=0.5, ms=28, markerfacecolor='none', markeredgecolor=color2, markeredgewidth=4)
+    ax1.plot(x2, y2, ".", alpha=0.5, ms=28, markerfacecolor='none', markeredgecolor=color3, markeredgewidth=4)
+    ax1.tick_params(axis='both', labelsize=35)
+    ax1.spines['right'].set_visible(False)
+    ax1.spines['top'].set_visible(False)
+    ax1.spines['bottom'].set_visible(False)
+    ax1.tick_params(which='both', width=4)
+    ax1.tick_params(which='major', length=10)
+    ax1.tick_params(which='minor', length=8)
+    if thickformater:
+        ax1.yaxis.set_major_formatter(mpl.ticker.StrMethodFormatter('{x:,.1f}'))
+    plt.tick_params(axis="x", which="both", bottom=False, top=False)
+    ax1.yaxis.labelpad = 10
+    plt.subplots_adjust(left=None, bottom=0.2, right=0.99, top=0.9, wspace=None, hspace=None)
+    # stats and annotations
+    print(" ")
+    print("##############################")
+    print(label_y)
+    print(np.mean(group1_data))
+    print(np.mean(group2_data))
+    print(np.mean(group3_data))
+    # if sc.shapiro(group1_data)
+
+    x1, x2, x3 = 0.15, 0.40, 0.65
+    max_d = np.concatenate([group1_data, group2_data, group3_data]).max()
+    y, h, col = max_d + abs(0.10 * max_d), 0.025 * abs(max_d), 'k'
+    plt.plot([x1, x1, x2, x2], [y, y + h, y + h, y], lw=3, c=col)
+    plt.plot([x2, x2, x3, x3], [y + + 3 * h, y + 4 * h, y + 4 * h, y + 3 * h], lw=3, c=col)
+    plt.plot([x1, x1, x3, x3], [y + 7 * h, y + 8 * h, y + 8 * h, y + 7 * h], lw=3, c=col)
+
+    plt.text((x1 + x2) * .5, y + h, annot_text[0], ha='center', va='bottom', color=col, weight='bold')
+    plt.text((x2 + x3) * .5, y + 4 * h, annot_text[2], ha='center', va='bottom', color=col, weight='bold')
+    plt.text((x1 + x3) * .5, y + 8 * h, annot_text[1], ha='center', va='bottom', color=col, weight='bold')
+    fig.tight_layout()
+    # fig.savefig(filename)

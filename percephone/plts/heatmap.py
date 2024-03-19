@@ -298,7 +298,7 @@ def intereactive_heatmap(rec, activity):
     plt.show()
 
 
-def amp_tuning_heatmap(ax, rec, activity):
+def amp_tuning_heatmap(ax, rec, activity, title=""):
     cmap = 'inferno'
     amps_reponses = []
     for amp in [2, 4, 6, 8, 10, 12]:
@@ -319,3 +319,4 @@ def amp_tuning_heatmap(ax, rec, activity):
     ax.set_xticklabels(["2", "4", "6", "8", "10", "12"])
     ax.set_xlabel("Amplitude Stim")
     ax.set_ylabel("Neurons")
+    ax.set_title(title)

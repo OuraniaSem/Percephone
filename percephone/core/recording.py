@@ -23,8 +23,8 @@ plt.switch_backend("Qt5Agg")
 
 
 class Recording:
-    def __init__(self, input_path, foldername, rois):
-        self.filename, inhibitory_ids, self.sf, self.genotype = read_info(foldername, rois)
+    def __init__(self, input_path, foldername, rois, cache):
+        self.filename, inhibitory_ids, self.sf, self.genotype, self.threshold = read_info(foldername, rois)
         self.input_path = input_path
         self.matrices = {"EXC": {"Responsivity": [], "AUC": [], "Delay_onset": []},
                          "INH": {"Responsivity": [], "AUC": [], "Delay_onset": []}}
@@ -36,13 +36,20 @@ class Recording:
         is_exh_inh = np.append(iscell, exh_inh, axis=1)  # add the array in the iscell to have a 3rd column with exh/inh
         cells_list = np.concatenate(np.argwhere(is_exh_inh[:, 0]))
         excitatory_ids = np.concatenate(np.argwhere(is_exh_inh[cells_list, 2]))  # list with excitatory cells
-
-        self.df_f_exc = self.compute_df_f(excitatory_ids, input_path + 'df_f_exc.npy')
-        self.df_f_inh = self.compute_df_f(inhibitory_ids, input_path + 'df_f_inh.npy')
+        if os.path.exists(input_path + 'df_f_exc.npy') and cache:
+            self.df_f_exc  = np.load(input_path + 'df_f_exc.npy')
+            self.df_f_inh = np.load(input_path + 'df_f_inh.npy')
+        else:
+            self.df_f_exc = self.compute_df_f(excitatory_ids, input_path + 'df_f_exc.npy')
+            self.df_f_inh = self.compute_df_f(inhibitory_ids, input_path + 'df_f_inh.npy')
         if os.path.exists(input_path + 'spks.npy'):
             spks = np.load(self.input_path + "spks.npy")
             self.spks_exc = spks[excitatory_ids]
             self.spks_inh = spks[inhibitory_ids]
+        if os.path.exists(input_path + 'matrice_resp_exc.npy') and os.path.exists(input_path + 'matrice_resp_inh.npy'):
+            self.matrices["EXC"]["Responsivity"] = np.load(self.input_path + "matrice_resp_exc.npy")
+            self.matrices["INH"]["Responsivity"] = np.load(self.input_path + "matrice_resp_inh.npy")
+
 
     def compute_df_f(self, cell_ids, save_path):
         """
@@ -68,6 +75,7 @@ class Recording:
         df_f_percen : numpy.ndarray
             DF/F of all the cells selected
         """
+        print("Calculation Delta F / F.")
         f_ = np.load(self.input_path + 'F.npy', allow_pickle=True)
         f_neu = np.load(self.input_path + 'Fneu.npy', allow_pickle=True)
         f_ = f_[cell_ids, :]
@@ -104,9 +112,11 @@ class Recording:
         return df_f_percen
 
     def responsivity(self):
+        print("Calcul of repsonsivity.")
         self.matrices["EXC"]["Responsivity"] = resp_matrice(self, self.zscore_exc)
         self.matrices["INH"]["Responsivity"] = resp_matrice(self, self.zscore_inh)
-
+        np.save(self.input_path +"matrice_resp_exc.npy", self.matrices["EXC"]["Responsivity"])
+        np.save(self.input_path +"matrice_resp_inh.npy", self.matrices["INH"]["Responsivity"])
     def delay_onset_map(self):
         self.matrices["EXC"]["Delay_onset"] = delay_matrice(self, self.df_f_exc, self.stim_time,
                                                             self.matrices["EXC"]["Responsivity"])
@@ -196,7 +206,7 @@ class RecordingStimulusOnly(Recording):
 class RecordingAmplDet(Recording):
     def __init__(self, input_path, starting_trial, foldername, rois, tuple_mesc=(0, 0), correction=True,
                  cache=True):
-        super().__init__(input_path, foldername, rois)
+        super().__init__(input_path, foldername, rois, cache)
         self.xls = pd.read_excel(input_path + 'bpod.xls', header=None)
         self.stim_time = []
         self.stim_ampl = []
