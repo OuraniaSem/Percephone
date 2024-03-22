@@ -24,7 +24,7 @@ ko_color = "#CC0000"
 light_ko_color = "#ff8080"
 
 
-def boxplot(wt, ko, ylabel, ylim=[]):
+def boxplot(ax, wt, ko, ylabel, ylim=[]):
     """
     create boxplot for two data groups.
 
@@ -38,9 +38,10 @@ def boxplot(wt, ko, ylabel, ylim=[]):
         columns names
 
     """
+    # wt = np.array(wt)[~np.isnan(np.array(wt))]
+    # ko = np.array(ko)[~np.isnan(np.array(ko))]
     print("Boxplot plotting.")
     lw = 5
-    fig, ax = plt.subplots(1, 1, figsize=(6, 8), sharey=True)
     ax.set_ylabel(ylabel)
     ax.boxplot([wt], positions=[0.15], patch_artist=True, showfliers=False, widths=0.2,
                meanprops=dict(marker='o', markerfacecolor=wt_color, markeredgecolor='black'),
@@ -109,10 +110,10 @@ def boxplot(wt, ko, ylabel, ylim=[]):
     else:
         sig_symbol = 'ns'
     ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col)
-    plt.tick_params(axis="x", which="both", bottom=False)
-    plt.xticks([0.15, 0.40], ['', ""])
-    plt.tight_layout()
-    plt.show()
+    # plt.tick_params(axis="x", which="both", bottom=False)
+    # plt.xticks([0.15, 0.40], ['', ""])
+    # plt.tight_layout()
+    # plt.show()
 
 
 def barplot(wt, ko, ylabel):
