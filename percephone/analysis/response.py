@@ -50,8 +50,8 @@ def resp_single_neuron(neuron_df_data_, random_timing, rec):
         signal_neg = signal_inverted  # + abs(min(signal_inverted ))
         bootstrap_responses.append(ss.iqr(signal_pos, nan_policy='omit'))
         bootstrap_neg.append(ss.iqr(signal_neg, nan_policy='omit'))
-    threshold_high = np.nanpercentile(bootstrap_responses, 99)  # 2 * np.nanper... before 11-09-2023
-    threshold_low = -(np.nanpercentile(bootstrap_neg, 99)) #- abs(min(signal_inverted)))
+    threshold_high = 2*np.nanpercentile(bootstrap_responses, 99)  # 2 * np.nanper... before 11-09-2023
+    threshold_low = -2*(np.nanpercentile(bootstrap_neg, 99)) #- abs(min(signal_inverted)))
     # calculation of the durations
 
     durations = np.zeros(len(rec.stim_time), dtype=int)

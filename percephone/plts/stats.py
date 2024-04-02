@@ -38,8 +38,6 @@ def boxplot(ax, wt, ko, ylabel, ylim=[]):
         columns names
 
     """
-    # wt = np.array(wt)[~np.isnan(np.array(wt))]
-    # ko = np.array(ko)[~np.isnan(np.array(ko))]
     print("Boxplot plotting.")
     lw = 5
     ax.set_ylabel(ylabel)
@@ -198,7 +196,7 @@ def barplot(wt, ko, ylabel):
     ax.text((x1 + x2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col)
 
 
-def paired_boxplot(ax, det, undet, ylabel, title):
+def paired_boxplot(ax, det, undet, ylabel, title, ylim=[]):
     """
     create boxplot for two data groups.
 
@@ -238,10 +236,14 @@ def paired_boxplot(ax, det, undet, ylabel, title):
     ax.tick_params(axis='both', which='major', length=6, width=3)
     ax.tick_params(axis='both', which='minor', length=4, width=3)
     max_y = max(max(det), max(undet))
-    lim_max = max(int(max_y)*0.15, int(math.ceil(max_y / 2 + 0.5)) * 2)
-    min_y = min(min(det), min(undet))
-    lim_inf = min(0, min_y + 0.15*min_y)
-    ax.set_ylim(ymin=lim_inf, ymax=lim_max)
+    if len(ylim)!=0:
+        ax.set_ylim(ylim)
+    else:
+        max_y = max(max(det), max(undet))
+        lim_max = max(int(max_y*0.15 + max_y), int(math.ceil(max_y / 2 )) * 2)
+        min_y = min(min(det), min(undet))
+        lim_inf = min(0, min_y + 0.15*min_y)
+        ax.set_ylim(ymin=lim_inf, ymax=lim_max)
     yticks = list(ax.get_yticks())
     ax.set_yticks(sorted(yticks))
     ax.spines[['right', 'top', 'bottom']].set_visible(False)

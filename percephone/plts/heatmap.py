@@ -221,7 +221,7 @@ def plot_dff_stim_detected_lick(rec, dff, filename):
 
 
 def intereactive_heatmap(rec, activity):
-    rec.responsivity()
+    # rec.responsivity()
     def find_nearest(array, value):
         array = np.asarray(array)
         idx = (np.abs(array - value)).argmin()

@@ -347,7 +347,6 @@ class RecordingAmplDet(Recording):
                 licks_to_analog.append(licks[icount])
                 ampl_recording.append(self.json[icount]["amp"])
         ampl_recording_iter = iter(ampl_recording)
-
         for icount_time in range(len(index_iti_final)):
             ITI_time_analog = self.analog.at[index_iti_final[icount_time], 't']
             reward_time_analog = ITI_time_analog + reward_to_analog[icount_time]
@@ -380,7 +379,6 @@ class RecordingAmplDet(Recording):
                     self.detected_stim.append(True)
                 else:
                     self.detected_stim.append(False)
-
         stim_ampl = np.around(self.stim_ampl, decimals=1)
         stim_ampl_sort = np.sort(np.unique(stim_ampl))
         convert = {4: [4, 6, 8, 10], 5: [4, 6, 8, 10, 12], 6: [2, 4, 6, 8, 10, 12], 7: [0, 2, 4, 6, 8, 10, 12]}
@@ -438,3 +436,34 @@ class RecordingAmplDet(Recording):
 
                 with open(self.input_path + name_model + ".json", "w") as jsn:
                     json.dump(to_save_list, jsn)
+
+
+if __name__ == '__main__':
+    directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
+    roi_info = pd.read_excel(directory + "/FmKO_ROIs&inhibitory.xlsx")
+    folder = "20220710_4445_00_synchro"
+    rec = RecordingAmplDet(directory + folder + "/", 0,  folder, roi_info, cache=False)
+    # print(rec.detected_stim[rec.stim_ampl == 2])
+    # amp = 8
+    # print(sum(rec.detected_stim[rec.stim_ampl == amp])/len(rec.detected_stim[rec.stim_ampl == amp]))
+    # with open(directory + folder + "/" + 'params_trial.json', "r") as events_file:
+    #     le_j = json.load(events_file)
+    #
+    # amps=[]
+    # for trial in le_j[:86]:
+    #     amps.append(trial["amp"])
+    #
+    # amps_converted = []
+    #
+    # stim_ampl = np.around( amps, decimals=1)
+    # stim_ampl_sort = np.sort(np.unique(stim_ampl))
+    # for i in range(len(stim_ampl_sort)):
+    #     stim_ampl[stim_ampl == stim_ampl_sort[i]] = [0, 2, 4, 6, 8, 10, 12][i]
+    # # rec.stim_ampl = stim_ampl
+    from percephone.plts.heatmap import intereactive_heatmap
+    # rec.responsivity()
+    intereactive_heatmap(rec, rec.zscore_exc)
+    #784767
+    # an = pd.read_csv(directory + folder + "/" +"analog.txt", sep="\t")
+    # an.iloc[784766, 2]= 78476.7
+    # an.to_csv(directory + folder + "\analog.txt", sep="\t", index=False)
