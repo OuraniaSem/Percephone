@@ -124,5 +124,3 @@ def biphase_stim_model(rec):
 #     end_duration = rec.stim_durations[rec.detected_stim]/2  # 0.1 s
 #     end_stim = regressor_labels(rec, rec.reward_time, reward_duration, len(rec.zscore_exc[0]), 200)
 #     return np.array([start_stim,  end_stim])
-
-#temp

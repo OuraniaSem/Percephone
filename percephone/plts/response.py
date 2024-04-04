@@ -41,7 +41,7 @@ def superimposed_response(rec, zscore, onset_stim):
     ax.spines[['right', 'top']].set_visible(False)
     ax.set_xticks([-1, 0, 0.5, 2])
     ax.set_ylim([-3, 6])
-    ax.axvline(0, 0, 1, color='#ffc266', linestyle='--', lw = 4, label='stim')
+    ax.axvline(0, 0, 1, color='#ffc266', linestyle='--', lw=4, label='stim')
     ax.axvline(0.5, 0, 1, color='#e68a00', linestyle='--', lw=4, label='end stim')
     ax.text(0, 1.05, 'stim', transform=ax.get_xaxis_transform(), fontsize=25,
             verticalalignment='center', horizontalalignment='center', color='#ffc266')
@@ -49,4 +49,3 @@ def superimposed_response(rec, zscore, onset_stim):
             verticalalignment='center', horizontalalignment='center', color='#e68a00')
     fig.tight_layout()
     plt.show()
-

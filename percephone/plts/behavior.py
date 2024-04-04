@@ -36,11 +36,11 @@ def psycho_like_plot_and_synchro(rec, roi_info, ax):
     seq = roi_info["Stimulus detection"][roi_info["Number"] == rec.filename].values
     converted_list = [float(x) for x in seq[0].split(',')]
     to_plot = []
-    for amp in [2, 4, 6, 8, 10, 12]:
+    for amp in [0, 2, 4, 6, 8, 10, 12]:
         res = sum(rec.detected_stim[rec.stim_ampl == amp]) / len(rec.detected_stim[rec.stim_ampl == amp])
         to_plot.append(res)
-    ax.plot([2, 4, 6, 8, 10, 12], converted_list)
-    ax.plot([2, 4, 6, 8, 10, 12], to_plot, linestyle='--')
-    ax.set_xticks([2, 4, 6, 8, 10, 12])
+    ax.plot([0, 2, 4, 6, 8, 10, 12], converted_list)
+    ax.plot([0, 2, 4, 6, 8, 10, 12], to_plot, linestyle='--')
+    ax.set_xticks([0 ,2, 4, 6, 8, 10, 12])
     ax.set_ylim([0, 1])
 

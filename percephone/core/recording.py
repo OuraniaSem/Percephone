@@ -205,7 +205,7 @@ class RecordingStimulusOnly(Recording):
 
 class RecordingAmplDet(Recording):
     def __init__(self, input_path, starting_trial, foldername, rois, tuple_mesc=(0, 0), correction=True,
-                 cache=True):
+                 cache=True, analog_sf=10000):
         super().__init__(input_path, foldername, rois, cache)
         self.xls = pd.read_excel(input_path + 'bpod.xls', header=None)
         self.stim_time = []
@@ -242,7 +242,7 @@ class RecordingAmplDet(Recording):
                     return
             self.analog = pd.read_csv(input_path + 'analog.txt', sep="\t", header=None)
             self.analog[0] = (self.analog[0] * 10).astype(int)
-            self.synchronization_with_iti(starting_trial)
+            self.synchronization_with_iti(starting_trial, analog_sf)
 
         self.zscore_exc = self.zscore(self.df_f_exc)
         self.zscore_inh = self.zscore(self.df_f_inh)
@@ -271,7 +271,7 @@ class RecordingAmplDet(Recording):
         zsc = np.divide(np.subtract(dff, mean_bsl[:, np.newaxis]), std[:, np.newaxis])
         return zsc
 
-    def synchronization_with_iti(self, starting_trial):
+    def synchronization_with_iti(self, starting_trial, analog_s):
         """
         Update the analog file with information on stimulus time, reward time and timeout time
 
@@ -285,6 +285,7 @@ class RecordingAmplDet(Recording):
         -------
         excel file, analog file, starting trial for the recording (relative to the behavioral trials)
 
+        analog_s analog sampling frequency
         starting_trial
         Output
         ------
@@ -299,7 +300,7 @@ class RecordingAmplDet(Recording):
         data_stimulus = self.xls[self.xls[0] == 'STATE'][self.xls[4] == 'Stimulus']
 
         splitted = np.split(self.xls, self.xls[self.xls[4] == 'The trial ended'].index)
-        licks = [np.round(((split[2][(split[0] == 'EVENT') & (split[4] == 94)].values - 2) * 10000).astype(float)) for
+        licks = [np.round(((split[2][(split[0] == 'EVENT') & (split[4] == 94)].values - 2) * analog_s).astype(float)) for
                  split in splitted]
 
         # get the time for ITI2, reward, timeout and stimulus
@@ -309,9 +310,9 @@ class RecordingAmplDet(Recording):
         stimulus_time = data_stimulus[2].values.astype(float)
 
         # calculate the time of reward and timeout relative to ITI2
-        reward_time_to_ITI = np.around((reward_time - 2) * 10000).tolist()  # in ms
-        timeout_time_to_ITI = np.around((timeout_time - 2) * 10000).tolist()  # in ms
-        stimulus_time_to_ITI = np.around((stimulus_time - 2) * 10000).tolist()  # in ms
+        reward_time_to_ITI = np.around((reward_time - 2) * analog_s).tolist()  # in ms
+        timeout_time_to_ITI = np.around((timeout_time - 2) * analog_s).tolist()  # in ms
+        stimulus_time_to_ITI = np.around((stimulus_time - 2) * analog_s).tolist()  # in ms
 
         self.analog.columns = ['t', 'stimulus', 't_iti', 'iti']
         self.analog['reward'] = 0
@@ -360,20 +361,20 @@ class RecordingAmplDet(Recording):
                 index_licks = self.analog.index[self.analog['t'] == lick].to_list()
                 if len(index_licks) != 0:
                     self.analog.at[index_licks[0], 'licks'] = 4
-                    self.lick_time.append(int((index_licks[0] / 10000) * self.sf))
+                    self.lick_time.append(int((index_licks[0] / analog_s) * self.sf))
             if len(index_reward) != 0:
                 self.analog.at[index_reward[0], 'reward'] = 2
-                self.reward_time.append(int((index_reward[0] / 10000) * self.sf))
+                self.reward_time.append(int((index_reward[0] / analog_s) * self.sf))
             if len(index_timeout) != 0:
                 self.analog.at[index_timeout[0], 'timeout'] = 3
-                self.timeout_time.append(int((index_timeout[0] / 10000) * self.sf))
+                self.timeout_time.append(int((index_timeout[0] / analog_s) * self.sf))
                 if len(index_stimulus) == 0:
                     timeout_trial = next(ampl_recording_iter)
             if len(index_stimulus) != 0:
                 amp = next(ampl_recording_iter)
                 self.analog.at[index_stimulus[0], 'stimulus_xls'] = amp
-                index_stim = int((index_stimulus[0] / 10000) * self.sf)
-                self.stim_time.append(index_stim - int(((1 / self.sf) * (index_stimulus[0] / 10000)) * (1 / 3)))
+                index_stim = int((index_stimulus[0] / analog_s) * self.sf)
+                self.stim_time.append(index_stim - int(((1 / self.sf) * (index_stimulus[0] / analog_s)) * (1 / 3)))
                 self.stim_ampl.append(amp)
                 if len(index_reward) != 0:
                     self.detected_stim.append(True)
@@ -439,31 +440,15 @@ class RecordingAmplDet(Recording):
 
 
 if __name__ == '__main__':
+    import pandas as pd
+    import math
+    import percephone.plts.heatmap as hm
+
     directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
     roi_info = pd.read_excel(directory + "/FmKO_ROIs&inhibitory.xlsx")
-    folder = "20220710_4445_00_synchro"
-    rec = RecordingAmplDet(directory + folder + "/", 0,  folder, roi_info, cache=False)
-    # print(rec.detected_stim[rec.stim_ampl == 2])
-    # amp = 8
-    # print(sum(rec.detected_stim[rec.stim_ampl == amp])/len(rec.detected_stim[rec.stim_ampl == amp]))
-    # with open(directory + folder + "/" + 'params_trial.json', "r") as events_file:
-    #     le_j = json.load(events_file)
-    #
-    # amps=[]
-    # for trial in le_j[:86]:
-    #     amps.append(trial["amp"])
-    #
-    # amps_converted = []
-    #
-    # stim_ampl = np.around( amps, decimals=1)
-    # stim_ampl_sort = np.sort(np.unique(stim_ampl))
-    # for i in range(len(stim_ampl_sort)):
-    #     stim_ampl[stim_ampl == stim_ampl_sort[i]] = [0, 2, 4, 6, 8, 10, 12][i]
-    # # rec.stim_ampl = stim_ampl
-    from percephone.plts.heatmap import intereactive_heatmap
-    # rec.responsivity()
-    intereactive_heatmap(rec, rec.zscore_exc)
-    #784767
-    # an = pd.read_csv(directory + folder + "/" +"analog.txt", sep="\t")
-    # an.iloc[784766, 2]= 78476.7
-    # an.to_csv(directory + folder + "\analog.txt", sep="\t", index=False)
+    folder = '20240329_6601_00_synchro'
+    path = directory + folder + "/"
+
+    rec = RecordingAmplDet(path, 0, folder, roi_info)
+    hm.intereactive_heatmap(rec, rec.df_f_exc)
+

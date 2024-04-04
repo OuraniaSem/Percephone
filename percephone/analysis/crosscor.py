@@ -15,7 +15,7 @@ plt.switch_backend("Qt5Agg")
 # compute the correlation matrix for every neuron against every neuron
 
 
-def cross_cor(rec,fig, ax):
+def cross_cor(rec, fig, ax):
     order = []
     for label in np.unique(rec.mlr_labels_exc['neuron_labels'], axis=0):
         indexes = np.all(rec.mlr_labels_exc['neuron_labels'] == label, axis=1)
