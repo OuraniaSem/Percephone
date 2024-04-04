@@ -13,7 +13,7 @@ import pandas as pd
 import scipy.signal as ss
 import matplotlib.pyplot as plt
 from percephone.utils.io import read_info
-from percephone.analysis.response import resp_matrice, auc_matrice, delay_matrice, peak_matrice
+from percephone.analysis.response import resp_matrice, auc_matrice, delay_matrice, peak_matrices
 from percephone.analysis.mlr import mlr
 from percephone.analysis.mlr_models import classic_model
 from percephone.utils.io import extract_analog_from_mesc
@@ -113,8 +113,8 @@ class Recording:
 
     def responsivity(self):
         print("Calcul of repsonsivity.")
-        self.matrices["EXC"]["Responsivity"] = resp_matrice(self, self.zscore_exc)
-        self.matrices["INH"]["Responsivity"] = resp_matrice(self, self.zscore_inh)
+        self.matrices["EXC"]["Responsivity"] = np.array(resp_matrice(self, self.zscore_exc))
+        self.matrices["INH"]["Responsivity"] = np.array(resp_matrice(self, self.zscore_inh))
         np.save(self.input_path +"matrice_resp_exc.npy", self.matrices["EXC"]["Responsivity"])
         np.save(self.input_path +"matrice_resp_inh.npy", self.matrices["INH"]["Responsivity"])
 
@@ -128,9 +128,15 @@ class Recording:
         self.matrices["EXC"]["AUC"] = auc_matrice(self, self.df_f_exc, self.matrices["EXC"]["Responsivity"])
         self.matrices["INH"]["AUC"] = auc_matrice(self, self.df_f_inh, self.matrices["INH"]["Responsivity"])
 
-    def peak_delay(self):
-        self.matrices["EXC"]["Peak_delay"] = peak_matrice(self, self.zscore_exc, self.matrices["EXC"]["Responsivity"])
-        self.matrices["INH"]["Peak_delay"] = peak_matrice(self, self.zscore_inh, self.matrices["INH"]["Responsivity"])
+    def peak_delay_amp(self):
+        self.matrices["EXC"]["Peak_delay"], self.matrices["EXC"]["Peak_amplitude"] = peak_matrices(self,
+                                                                                                   self.zscore_exc,
+                                                                                                   self.matrices["EXC"][
+                                                                                                       "Responsivity"])
+        self.matrices["INH"]["Peak_delay"], self.matrices["INH"]["Peak_amplitude"] = peak_matrices(self,
+                                                                                                   self.zscore_inh,
+                                                                                                   self.matrices["INH"][
+                                                                                                       "Responsivity"])
 
 
 class RecordingStimulusOnly(Recording):
