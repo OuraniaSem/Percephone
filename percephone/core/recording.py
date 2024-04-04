@@ -13,7 +13,7 @@ import pandas as pd
 import scipy.signal as ss
 import matplotlib.pyplot as plt
 from percephone.utils.io import read_info
-from percephone.analysis.response import resp_matrice, auc_matrice, delay_matrice
+from percephone.analysis.response import resp_matrice, auc_matrice, delay_matrice, peak_matrice
 from percephone.analysis.mlr import mlr
 from percephone.analysis.mlr_models import classic_model
 from percephone.utils.io import extract_analog_from_mesc
@@ -117,6 +117,7 @@ class Recording:
         self.matrices["INH"]["Responsivity"] = resp_matrice(self, self.zscore_inh)
         np.save(self.input_path +"matrice_resp_exc.npy", self.matrices["EXC"]["Responsivity"])
         np.save(self.input_path +"matrice_resp_inh.npy", self.matrices["INH"]["Responsivity"])
+
     def delay_onset_map(self):
         self.matrices["EXC"]["Delay_onset"] = delay_matrice(self, self.df_f_exc, self.stim_time,
                                                             self.matrices["EXC"]["Responsivity"])
@@ -126,6 +127,10 @@ class Recording:
     def auc(self):
         self.matrices["EXC"]["AUC"] = auc_matrice(self, self.df_f_exc, self.matrices["EXC"]["Responsivity"])
         self.matrices["INH"]["AUC"] = auc_matrice(self, self.df_f_inh, self.matrices["INH"]["Responsivity"])
+
+    def peak_delay(self):
+        self.matrices["EXC"]["Peak_delay"] = peak_matrice(self, self.zscore_exc, self.matrices["EXC"]["Responsivity"])
+        self.matrices["INH"]["Peak_delay"] = peak_matrice(self, self.zscore_inh, self.matrices["INH"]["Responsivity"])
 
 
 class RecordingStimulusOnly(Recording):

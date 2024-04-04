@@ -192,3 +192,24 @@ def group_matrices(recs, savename, no_cache=False):
                                 "AUC INH": auc_inh
                                 }, ignore_index=True)
     output.to_csv(savename)
+
+
+def peak_matrice(rec, zscore_data, resp_mask):
+    # get the zscore at each point for each stimulation for each neuron
+    data = zscore_data[:, np.linspace(rec.stim_time,
+                                      rec.stim_time + int(0.5 * rec.sf),
+                                      num=int(0.5 * rec.sf) + 1, dtype=int)]
+    data1 = np.swapaxes(data, 1, 2)
+
+    result = np.empty_like(resp_mask, dtype=float)
+    neuron_list, stim_list = resp_mask.shape
+    for neuron in range(neuron_list):
+        for stim in range(stim_list):
+            if resp_mask[neuron, stim] == 1:
+                result[neuron, stim] = np.argmax(data1[neuron, stim])
+            elif resp_mask[neuron, stim] == -1:
+                result[neuron, stim] = np.argmin(data1[neuron, stim])
+            # if there is no response, -1 is added in the matrix
+            elif resp_mask[neuron, stim] == 0:
+                result[neuron, stim] = -1
+    return result

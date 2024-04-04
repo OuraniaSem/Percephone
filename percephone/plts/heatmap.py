@@ -288,7 +288,9 @@ def intereactive_heatmap(rec, activity):
             ax.hlines(0, -1, 2)
             ax.set_title("Resp: " + str(
                 rec.matrices["EXC"]["Responsivity"][dn_exc['leaves'][math.ceil(event.ydata)]][
-                    rand_stim]) + "  ")  # +      "Onset: " + str(rec.matrices["EXC"]["Delay_onset"][rand_neu][rand_stim]) + "  " + "AUC: " + str(rec.matrices["EXC"]["AUC"][rand_neu][rand_stim]
+                    rand_stim]) + " - Peak: " + str(
+                rec.matrices["EXC"]["Peak_delay"][dn_exc['leaves'][math.ceil(event.ydata)]][
+                    rand_stim]))  # +      "Onset: " + str(rec.matrices["EXC"]["Delay_onset"][rand_neu][rand_stim]) + "  " + "AUC: " + str(rec.matrices["EXC"]["AUC"][rand_neu][rand_stim]
             ax.vlines(0, min(trace), max(trace), lw=2, color="red")
             ax.vlines(durations[rand_stim] / rec.sf, min(trace), max(trace), lw=2, color="black", linestyles="--")
             ax.vlines(0.5, min(trace), max(trace), lw=2, color="red")
