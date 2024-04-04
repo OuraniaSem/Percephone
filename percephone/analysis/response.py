@@ -21,7 +21,7 @@ matplotlib.use("Qt5Agg")
 plt.switch_backend("Qt5Agg")
 
 sf = 30.9609  # Hz
-pre_boundary = int(0.25 * sf)  # index
+pre_boundary = int(0.5 * sf)  # index
 post_boundary = int(0.5 * sf)  # index
 
 
@@ -50,8 +50,8 @@ def resp_single_neuron(neuron_df_data_, random_timing, rec):
         signal_neg = signal_inverted  # + abs(min(signal_inverted ))
         bootstrap_responses.append(ss.iqr(signal_pos, nan_policy='omit'))
         bootstrap_neg.append(ss.iqr(signal_neg, nan_policy='omit'))
-    threshold_high = 2*np.nanpercentile(bootstrap_responses, 99)  # 2 * np.nanper... before 11-09-2023
-    threshold_low = -2*(np.nanpercentile(bootstrap_neg, 99)) #- abs(min(signal_inverted)))
+    threshold_high = 1.5*np.nanpercentile(bootstrap_responses, 99)  # 2 * np.nanper... before 11-09-2023
+    threshold_low = -1.5*np.nanpercentile(bootstrap_neg, 99) #- abs(min(signal_inverted)))
     # calculation of the durations
 
     durations = np.zeros(len(rec.stim_time), dtype=int)
@@ -67,8 +67,8 @@ def resp_single_neuron(neuron_df_data_, random_timing, rec):
         bsl_activity = np.mean(neuron_df_data_[(stim_i - pre_boundary):stim_i])
         peak_high = np.max(neuron_df_data_[stim_i:(stim_i + durations[y])])
         peak_low = np.min(neuron_df_data_[stim_i:(stim_i + durations[y])])
-        true_response_high = peak_high
-        true_response_low = peak_low
+        true_response_high = peak_high - bsl_activity
+        true_response_low = peak_low - bsl_activity
         if true_response_high > threshold_high:
             resp.append(1)
         elif true_response_low < threshold_low:
@@ -87,14 +87,18 @@ def resp_matrice(rec, df_data):
     df_data :  numpy array
         delta f over f (neurons,time) can be exc or inh
     """
-    pre_boundary = int(0.25 * rec.sf)  # index
-    post_boundary = int(0.5 * rec.sf)
-    exclude_windows = [list(range(t, t + post_boundary)) for t in rec.stim_time]
-    exclude_windows.append(list(range(0, pre_boundary)))  # to not have edge problem
-    exclude_windows.append(
-        list(range(len(df_data[0]) - post_boundary, len(df_data[0]))))  # to not have edge problem
-    range_iti = set(range(len(df_data[0]))).difference(set(np.concatenate(exclude_windows)))
-    random_timing = rnd.sample(list(range_iti), k=1999)
+    # pre_boundary = int(0.25 * rec.sf)  # index
+    # post_boundary = int(0.5 * rec.sf)
+    # exclude_windows = [list(range(t, t + post_boundary)) for t in rec.stim_time]
+    # exclude_windows.append(list(range(0, pre_boundary)))  # to not have edge problem
+    # exclude_windows.append(
+    #     list(range(len(df_data[0]) - post_boundary, len(df_data[0]))))  # to not have edge problem
+    # range_iti = set(range(len(df_data[0]))).difference(set(np.concatenate(exclude_windows)))
+
+    #04-04-2024
+    pre_boundary = int(5 * rec.sf)  # index
+    baseline_timings = [list(range(t - pre_boundary, t)) for t in rec.stim_time]
+    random_timing = rnd.sample(list(np.concatenate(baseline_timings)), k=1999)
 
     from multiprocessing import Pool, cpu_count
     workers = cpu_count()

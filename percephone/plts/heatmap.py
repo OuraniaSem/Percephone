@@ -321,3 +321,7 @@ def amp_tuning_heatmap(ax, rec, activity, title=""):
     ax.set_xlabel("Amplitude Stim")
     ax.set_ylabel("Neurons")
     ax.set_title(title)
+
+def responsivity(heatmap):
+
+    ax
