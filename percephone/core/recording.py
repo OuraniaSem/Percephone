@@ -253,7 +253,7 @@ class RecordingAmplDet(Recording):
                     return
             self.analog = pd.read_csv(input_path + 'analog.txt', sep="\t", header=None)
             self.analog[0] = (self.analog[0] * 10).astype(int)
-            self.synchronization_with_iti(starting_trial, analog_sf)
+            self.synchronization_with_iti(starting_trial, analog_sf, correction)
 
         self.zscore_exc = self.zscore(self.df_f_exc)
         self.zscore_inh = self.zscore(self.df_f_inh)
@@ -282,7 +282,7 @@ class RecordingAmplDet(Recording):
         zsc = np.divide(np.subtract(dff, mean_bsl[:, np.newaxis]), std[:, np.newaxis])
         return zsc
 
-    def synchronization_with_iti(self, starting_trial, analog_s):
+    def synchronization_with_iti(self, starting_trial, analog_s, correction):
         """
         Update the analog file with information on stimulus time, reward time and timeout time
 
@@ -385,7 +385,10 @@ class RecordingAmplDet(Recording):
                 amp = next(ampl_recording_iter)
                 self.analog.at[index_stimulus[0], 'stimulus_xls'] = amp
                 index_stim = int((index_stimulus[0] / analog_s) * self.sf)
-                self.stim_time.append(index_stim - int(((1 / self.sf) * (index_stimulus[0] / analog_s)) * (1 / 3)))
+                if correction:
+                    self.stim_time.append(index_stim - int(((1 / self.sf) * (index_stimulus[0] / analog_s)) * (1 / 3)))
+                else:
+                    self.stim_time.append(index_stim)
                 self.stim_ampl.append(amp)
                 if len(index_reward) != 0:
                     self.detected_stim.append(True)
@@ -429,7 +432,7 @@ class RecordingAmplDet(Recording):
                 print('MLR model already computed')
                 with open(self.input_path + name_model + '.json', "r") as events_file:
                     events = json.load(events_file)
-                    self.mlr_labels_exc= events["exc"]
+                    self.mlr_labels_exc = events["exc"]
                     self.mlr_labels_inh = events["inh"]
 
             else:

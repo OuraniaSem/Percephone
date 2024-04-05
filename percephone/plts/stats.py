@@ -196,7 +196,7 @@ def barplot(wt, ko, ylabel):
     ax.text((x1 + x2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col)
 
 
-def paired_boxplot(ax, det, undet, ylabel, title, ylim=[]):
+def paired_boxplot(ax, det, undet, ylabel, title, ylim=[],colors = [ko_color,light_ko_color]):
     """
     create boxplot for two data groups.
 
@@ -214,20 +214,20 @@ def paired_boxplot(ax, det, undet, ylabel, title, ylim=[]):
     lw = 5
     ax.set_ylabel(ylabel)
     ax.boxplot([det], positions=[0.15], patch_artist=True, showfliers=False, widths=0.2,
-               meanprops=dict(marker='o', markerfacecolor=light_ko_color, markeredgecolor='black'),
-               boxprops=dict(linewidth=lw, facecolor='white', color=light_ko_color),
-               capprops=dict(linewidth=lw, color=light_ko_color),
-               whiskerprops=dict(linewidth=lw, color=light_ko_color),
-               medianprops=dict(linewidth=lw, color=light_ko_color))
+               meanprops=dict(marker='o', markerfacecolor=colors[1], markeredgecolor='black'),
+               boxprops=dict(linewidth=lw, facecolor='white', color=colors[1]),
+               capprops=dict(linewidth=lw, color=colors[1]),
+               whiskerprops=dict(linewidth=lw, color=colors[1]),
+               medianprops=dict(linewidth=lw, color=colors[1]))
     ax.boxplot([undet], positions=[0.40], patch_artist=True, showfliers=False, widths=0.2,
-               meanprops=dict(marker='o', markerfacecolor=ko_color, markeredgecolor='black'),
-               boxprops=dict(linewidth=lw, facecolor='white', color=ko_color),
-               capprops=dict(linewidth=lw, color=ko_color),
-               whiskerprops=dict(linewidth=lw, color=ko_color),
-               medianprops=dict(linewidth=lw, color=ko_color))
+               meanprops=dict(marker='o', markerfacecolor=colors[0], markeredgecolor='black'),
+               boxprops=dict(linewidth=lw, facecolor='white', color=colors[0]),
+               capprops=dict(linewidth=lw, color=colors[0]),
+               whiskerprops=dict(linewidth=lw, color=colors[0]),
+               medianprops=dict(linewidth=lw, color=colors[0]))
     for i in range(len(det)):
-        ax.plot([0.15, 0.40], [det[i], undet[i]], marker="o", color=light_ko_color, alpha=0.9, linewidth=1.5,
-        markersize=10, markeredgewidth=2, markeredgecolor=ko_color, markerfacecolor=light_ko_color)
+        ax.plot([0.15, 0.40], [det[i], undet[i]], marker="o", color=colors[1], alpha=0.9, linewidth=1.5,
+        markersize=10, markeredgewidth=2, markeredgecolor=colors[0], markerfacecolor=colors[1])
 
     ax.grid(False)
     ax.set_title(None)
@@ -251,7 +251,7 @@ def paired_boxplot(ax, det, undet, ylabel, title, ylim=[]):
 
     x_1, x_2 = [0.15, 0.40]
     max_data = max([max(det), max(undet)])
-    y, col = max_data + 0.05 * abs(max_data), 'k'
+    y, col = max_data + 0.15 * abs(max_data), 'k'
     ax.plot([x_1, x_2], [y, y], lw=3, c=col)
 
     def stat_paired_boxplot(sb_det, sb_undet, ylabel):

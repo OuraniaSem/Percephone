@@ -41,28 +41,28 @@ def opening_rec(fil, i):
     return rec
 
 
-workers = cpu_count()
-pool = Pool(processes=workers)
-async_results = [pool.apply_async(opening_rec, args=(file, i)) for i, file in enumerate(files_)]
-recs = [ar.get() for ar in async_results]
-
-
-y, i = 0, 0
-amps = [2, 6, 4, 4, 4, 8, 4, 4, 12, 8, 6, 12, 12]  # manual selection of the threshold amp for each animal from psychometric curves
-fig, ax = plt.subplots(4, 7, figsize=(35, 20))
-
-for rec, amp in zip(recs, amps):
-        if rec.genotype == "WT":
-            pbh.psycho_like_plot(rec, roi_info, ax[0, i])
-            cosine_matrix(ax[1, i], rec, amp)
-            i = i + 1
-        else:
-            pbh.psycho_like_plot(rec, roi_info, ax[2, y])
-            cosine_matrix(ax[3, y], rec, amp)
-            y = y + 1
-
-np.ravel(ax)[-1].set_axis_off()
-ax[2, 6].set_axis_off()
-fig.suptitle('Cosine similarity for undetected trials', fontsize=26)
-
-
+# workers = cpu_count()
+# pool = Pool(processes=workers)
+# async_results = [pool.apply_async(opening_rec, args=(file, i)) for i, file in enumerate(files_)]
+# recs = [ar.get() for ar in async_results]
+#
+#
+# y, i = 0, 0
+# amps = [2, 6, 4, 4, 4, 8, 4, 4, 12, 8, 6, 12, 12]  # manual selection of the threshold amp for each animal from psychometric curves
+# fig, ax = plt.subplots(4, 7, figsize=(35, 20))
+#
+# for rec, amp in zip(recs, amps):
+#         if rec.genotype == "WT":
+#             pbh.psycho_like_plot(rec, roi_info, ax[0, i])
+#             cosine_matrix(ax[1, i], rec, amp)
+#             i = i + 1
+#         else:
+#             pbh.psycho_like_plot(rec, roi_info, ax[2, y])
+#             cosine_matrix(ax[3, y], rec, amp)
+#             y = y + 1
+#
+# np.ravel(ax)[-1].set_axis_off()
+# ax[2, 6].set_axis_off()
+# fig.suptitle('Cosine similarity for undetected trials', fontsize=26)
+#
+#
