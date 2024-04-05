@@ -289,7 +289,7 @@ def intereactive_heatmap(rec, activity):
             ax.set_title("Resp: " +
                          str(rec.matrices["EXC"]["Responsivity"][dn_exc['leaves'][math.ceil(event.ydata)]][rand_stim]) +
                          " - Peak n°" +
-                         str(int(rec.matrices["EXC"]["Peak_delay"][dn_exc['leaves'][math.ceil(event.ydata)]][rand_stim])) +
+                         str(rec.matrices["EXC"]["Peak_delay"][dn_exc['leaves'][math.ceil(event.ydata)]][rand_stim]) +
                          " amp: " +
                          str(rec.matrices["EXC"]["Peak_amplitude"][dn_exc['leaves'][math.ceil(event.ydata)]][rand_stim])
                          )
