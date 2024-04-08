@@ -75,7 +75,7 @@ def boxplot(ax, wt, ko, ylabel, ylim=[]):
         lim_inf = min(0, min_y + 0.15*min_y)
         ax.set_ylim(ymin=lim_inf, ymax=lim_max)
     yticks = list(ax.get_yticks())
-    ax.set_yticks(sorted(yticks), fontsize=font_s)
+    ax.set_yticks(sorted(yticks))
     ax.spines[['right', 'top', 'bottom']].set_visible(False)
     ax.set_xticks([])
 
