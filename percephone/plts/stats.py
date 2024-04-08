@@ -216,17 +216,17 @@ def paired_boxplot(ax, det, undet, ylabel, title, ylim=[],colors = [ko_color,lig
     lw = 5
     ax.set_ylabel(ylabel, fontsize=font_s)
     ax.boxplot([det], positions=[0.15], patch_artist=True, showfliers=False, widths=0.2,
-               meanprops=dict(marker='o', markerfacecolor=colors[1], markeredgecolor='black'),
-               boxprops=dict(linewidth=lw, facecolor='white', color=colors[1]),
-               capprops=dict(linewidth=lw, color=colors[1]),
-               whiskerprops=dict(linewidth=lw, color=colors[1]),
-               medianprops=dict(linewidth=lw, color=colors[1]))
-    ax.boxplot([undet], positions=[0.40], patch_artist=True, showfliers=False, widths=0.2,
                meanprops=dict(marker='o', markerfacecolor=colors[0], markeredgecolor='black'),
                boxprops=dict(linewidth=lw, facecolor='white', color=colors[0]),
                capprops=dict(linewidth=lw, color=colors[0]),
                whiskerprops=dict(linewidth=lw, color=colors[0]),
                medianprops=dict(linewidth=lw, color=colors[0]))
+    ax.boxplot([undet], positions=[0.40], patch_artist=True, showfliers=False, widths=0.2,
+               meanprops=dict(marker='o', markerfacecolor=colors[1], markeredgecolor='black'),
+               boxprops=dict(linewidth=lw, facecolor='white', color=colors[1]),
+               capprops=dict(linewidth=lw, color=colors[1]),
+               whiskerprops=dict(linewidth=lw, color=colors[1]),
+               medianprops=dict(linewidth=lw, color=colors[1]))
     for i in range(len(det)):
         ax.plot([0.15, 0.40], [det[i], undet[i]], marker="o", color=colors[1], alpha=0.9, linewidth=1.5,
         markersize=10, markeredgewidth=2, markeredgecolor=colors[0], markerfacecolor=colors[1])
