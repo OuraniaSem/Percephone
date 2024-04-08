@@ -108,7 +108,7 @@ def boxplot(ax, wt, ko, ylabel, ylim=[]):
         sig_symbol = '*'
     else:
         sig_symbol = 'n.s'
-    ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_s-15, weight='bold')
+    ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_s-8, weight='bold')
     ax.tick_params(axis='y', labelsize=font_s)
     # plt.tick_params(axis="x", which="both", bottom=False)
     # plt.xticks([0.15, 0.40], ['', ""])
@@ -280,7 +280,7 @@ def paired_boxplot(ax, det, undet, ylabel, title, ylim=[],colors = [ko_color,lig
         sig_symbol = '*'
     else:
         sig_symbol = 'ns'
-    ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_s-15, weight='bold')
+    ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_s-8, weight='bold')
     ax.set_xticks([0.15, 0.40], ['', ""])
     ax.tick_params(axis="x", which="both", bottom=False)
     ax.set_title(title)
