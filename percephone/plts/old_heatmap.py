@@ -16,7 +16,7 @@ import scipy.interpolate as si
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 plt.switch_backend("Qt5Agg")
-plt.rcParams['font.sans-serif'] = ['Helvetica Neue']
+# plt.rcParams['font.sans-serif'] = ['Helvetica Neue']
 plt.rcParams['font.size'] = 40
 plt.rcParams['axes.linewidth'] = 3
 plt.rcParams['svg.fonttype'] = 'none'

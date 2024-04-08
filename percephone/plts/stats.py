@@ -108,7 +108,7 @@ def boxplot(ax, wt, ko, ylabel, ylim=[]):
         sig_symbol = '*'
     else:
         sig_symbol = 'n.s'
-    ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_s-15, weight='bold')
+    ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_s-8, weight='bold')
     ax.tick_params(axis='y', labelsize=font_s)
     # plt.tick_params(axis="x", which="both", bottom=False)
     # plt.xticks([0.15, 0.40], ['', ""])
@@ -216,17 +216,17 @@ def paired_boxplot(ax, det, undet, ylabel, title, ylim=[],colors = [ko_color,lig
     lw = 5
     ax.set_ylabel(ylabel, fontsize=font_s)
     ax.boxplot([det], positions=[0.15], patch_artist=True, showfliers=False, widths=0.2,
-               meanprops=dict(marker='o', markerfacecolor=colors[1], markeredgecolor='black'),
-               boxprops=dict(linewidth=lw, facecolor='white', color=colors[1]),
-               capprops=dict(linewidth=lw, color=colors[1]),
-               whiskerprops=dict(linewidth=lw, color=colors[1]),
-               medianprops=dict(linewidth=lw, color=colors[1]))
-    ax.boxplot([undet], positions=[0.40], patch_artist=True, showfliers=False, widths=0.2,
                meanprops=dict(marker='o', markerfacecolor=colors[0], markeredgecolor='black'),
                boxprops=dict(linewidth=lw, facecolor='white', color=colors[0]),
                capprops=dict(linewidth=lw, color=colors[0]),
                whiskerprops=dict(linewidth=lw, color=colors[0]),
                medianprops=dict(linewidth=lw, color=colors[0]))
+    ax.boxplot([undet], positions=[0.40], patch_artist=True, showfliers=False, widths=0.2,
+               meanprops=dict(marker='o', markerfacecolor=colors[1], markeredgecolor='black'),
+               boxprops=dict(linewidth=lw, facecolor='white', color=colors[1]),
+               capprops=dict(linewidth=lw, color=colors[1]),
+               whiskerprops=dict(linewidth=lw, color=colors[1]),
+               medianprops=dict(linewidth=lw, color=colors[1]))
     for i in range(len(det)):
         ax.plot([0.15, 0.40], [det[i], undet[i]], marker="o", color=colors[1], alpha=0.9, linewidth=1.5,
         markersize=10, markeredgewidth=2, markeredgecolor=colors[0], markerfacecolor=colors[1])
@@ -280,7 +280,7 @@ def paired_boxplot(ax, det, undet, ylabel, title, ylim=[],colors = [ko_color,lig
         sig_symbol = '*'
     else:
         sig_symbol = 'ns'
-    ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_s-15, weight='bold')
+    ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_s-8, weight='bold')
     ax.set_xticks([0.15, 0.40], ['', ""])
     ax.tick_params(axis="x", which="both", bottom=False)
     ax.set_title(title)
