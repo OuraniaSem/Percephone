@@ -23,7 +23,7 @@ plt.rcParams["ytick.major.width"] = 3
 sampling_rate = 30.9609  # Hz
 wt_color = "#326993"
 ko_color = "#CC0000"
-
+font_s=30
 
 def psycho_like_plot(rec, roi_info, ax):
     seq = roi_info["Stimulus detection"][roi_info["Number"] == rec.filename].values
@@ -31,6 +31,7 @@ def psycho_like_plot(rec, roi_info, ax):
     ax.plot([0, 2, 4, 6, 8, 10, 12], converted_list)
     ax.set_xticks([0, 2, 4, 6, 8, 10, 12])
     ax.set_ylim([0, 1])
+    ax.tick_params(axis='both', labelsize=font_s)
 
 def psycho_like_plot_and_synchro(rec, roi_info, ax):
     seq = roi_info["Stimulus detection"][roi_info["Number"] == rec.filename].values
@@ -43,4 +44,5 @@ def psycho_like_plot_and_synchro(rec, roi_info, ax):
     ax.plot([0, 2, 4, 6, 8, 10, 12], to_plot, linestyle='--')
     ax.set_xticks([0, 2, 4, 6, 8, 10, 12])
     ax.set_ylim([0, 1])
+    ax.tick_params(axis='both', labelsize=font_s)
 
