@@ -22,6 +22,7 @@ wt_color = "#326993"
 light_wt_color = "#8db7d8"
 ko_color = "#CC0000"
 light_ko_color = "#ff8080"
+font_s = 30
 
 
 def boxplot(ax, wt, ko, ylabel, ylim=[]):
@@ -38,7 +39,6 @@ def boxplot(ax, wt, ko, ylabel, ylim=[]):
         columns names
 
     """
-    font_s = 40
     print("Boxplot plotting.")
     lw = 5
     ax.set_ylabel(ylabel,fontsize=font_s)
@@ -63,7 +63,7 @@ def boxplot(ax, wt, ko, ylabel, ylim=[]):
     ax.grid(False)
     ax.set_title(None)
     ax.set_xlabel(None)
-    ax.yaxis.set_minor_locator(AutoMinorLocator(2))
+    # ax.yaxis.set_minor_locator(AutoMinorLocator(2))
     ax.tick_params(axis='both', which='major', length=6, width=3)
     ax.tick_params(axis='both', which='minor', length=4, width=3)
     if len(ylim)!=0:
@@ -75,13 +75,13 @@ def boxplot(ax, wt, ko, ylabel, ylim=[]):
         lim_inf = min(0, min_y + 0.15*min_y)
         ax.set_ylim(ymin=lim_inf, ymax=lim_max)
     yticks = list(ax.get_yticks())
-    ax.set_yticks(sorted(yticks), fontsize=font_s)
+    ax.set_yticks(sorted(yticks))
     ax.spines[['right', 'top', 'bottom']].set_visible(False)
     ax.set_xticks([])
 
     x_1, x_2 = [0.15, 0.40]
     max_data = max([max(wt), max(ko)])
-    y, col = max_data + 0.05 * abs(max_data), 'k'
+    y, col = max_data + 0.10 * abs(max_data), 'k'
     ax.plot([x_1, x_2], [y, y], lw=3, c=col)
 
     def stat_boxplot(sb_wt, sb_ko, ylabel):
@@ -107,8 +107,8 @@ def boxplot(ax, wt, ko, ylabel, ylim=[]):
     elif pval < 0.05:
         sig_symbol = '*'
     else:
-        sig_symbol = 'ns'
-    ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_s-10)
+        sig_symbol = 'n.s'
+    ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_s-15, weight='bold')
     ax.tick_params(axis='y', labelsize=font_s)
     # plt.tick_params(axis="x", which="both", bottom=False)
     # plt.xticks([0.15, 0.40], ['', ""])
@@ -195,7 +195,7 @@ def barplot(wt, ko, ylabel):
         sig_symbol = '*'
     else:
         sig_symbol = 'ns'
-    ax.text((x1 + x2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col)
+    ax.text((x1 + x2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, weight='bold')
 
 
 def paired_boxplot(ax, det, undet, ylabel, title, ylim=[],colors = [ko_color,light_ko_color]):
@@ -214,7 +214,7 @@ def paired_boxplot(ax, det, undet, ylabel, title, ylim=[],colors = [ko_color,lig
     """
     print("Boxplot plotting.")
     lw = 5
-    ax.set_ylabel(ylabel)
+    ax.set_ylabel(ylabel, fontsize=font_s)
     ax.boxplot([det], positions=[0.15], patch_artist=True, showfliers=False, widths=0.2,
                meanprops=dict(marker='o', markerfacecolor=colors[1], markeredgecolor='black'),
                boxprops=dict(linewidth=lw, facecolor='white', color=colors[1]),
@@ -234,7 +234,7 @@ def paired_boxplot(ax, det, undet, ylabel, title, ylim=[],colors = [ko_color,lig
     ax.grid(False)
     ax.set_title(None)
     ax.set_xlabel(None)
-    ax.yaxis.set_minor_locator(AutoMinorLocator(2))
+    # ax.yaxis.set_minor_locator(AutoMinorLocator(2))
     ax.tick_params(axis='both', which='major', length=6, width=3)
     ax.tick_params(axis='both', which='minor', length=4, width=3)
     max_y = max(max(det), max(undet))
@@ -253,7 +253,7 @@ def paired_boxplot(ax, det, undet, ylabel, title, ylim=[],colors = [ko_color,lig
 
     x_1, x_2 = [0.15, 0.40]
     max_data = max([max(det), max(undet)])
-    y, col = max_data + 0.15 * abs(max_data), 'k'
+    y, col = max_data + 0.10 * abs(max_data), 'k'
     ax.plot([x_1, x_2], [y, y], lw=3, c=col)
 
     def stat_paired_boxplot(sb_det, sb_undet, ylabel):
@@ -280,10 +280,12 @@ def paired_boxplot(ax, det, undet, ylabel, title, ylim=[],colors = [ko_color,lig
         sig_symbol = '*'
     else:
         sig_symbol = 'ns'
-    ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col)
+    ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_s-15, weight='bold')
     ax.set_xticks([0.15, 0.40], ['', ""])
     ax.tick_params(axis="x", which="both", bottom=False)
     ax.set_title(title)
+    ax.tick_params(axis='y', labelsize=font_s)
+
 
 
 def boxplot_anova(group1_data, group2_data, group3_data, lim_y, label_y, filename, color1, color2, color3, annot_text=[]
