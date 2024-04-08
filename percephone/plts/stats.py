@@ -22,6 +22,7 @@ wt_color = "#326993"
 light_wt_color = "#8db7d8"
 ko_color = "#CC0000"
 light_ko_color = "#ff8080"
+font_s = 30
 
 
 def boxplot(ax, wt, ko, ylabel, ylim=[]):
@@ -38,7 +39,6 @@ def boxplot(ax, wt, ko, ylabel, ylim=[]):
         columns names
 
     """
-    font_s = 40
     print("Boxplot plotting.")
     lw = 5
     ax.set_ylabel(ylabel,fontsize=font_s)
@@ -107,8 +107,8 @@ def boxplot(ax, wt, ko, ylabel, ylim=[]):
     elif pval < 0.05:
         sig_symbol = '*'
     else:
-        sig_symbol = 'ns'
-    ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_s-10)
+        sig_symbol = 'n.s'
+    ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_s-15)
     ax.tick_params(axis='y', labelsize=font_s)
     # plt.tick_params(axis="x", which="both", bottom=False)
     # plt.xticks([0.15, 0.40], ['', ""])
@@ -214,7 +214,7 @@ def paired_boxplot(ax, det, undet, ylabel, title, ylim=[],colors = [ko_color,lig
     """
     print("Boxplot plotting.")
     lw = 5
-    ax.set_ylabel(ylabel)
+    ax.set_ylabel(ylabel,fontsize=font_s)
     ax.boxplot([det], positions=[0.15], patch_artist=True, showfliers=False, widths=0.2,
                meanprops=dict(marker='o', markerfacecolor=colors[1], markeredgecolor='black'),
                boxprops=dict(linewidth=lw, facecolor='white', color=colors[1]),
@@ -280,10 +280,12 @@ def paired_boxplot(ax, det, undet, ylabel, title, ylim=[],colors = [ko_color,lig
         sig_symbol = '*'
     else:
         sig_symbol = 'ns'
-    ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col)
+    ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_s-15)
     ax.set_xticks([0.15, 0.40], ['', ""])
     ax.tick_params(axis="x", which="both", bottom=False)
     ax.set_title(title)
+    ax.tick_params(axis='y', labelsize=font_s)
+
 
 
 def boxplot_anova(group1_data, group2_data, group3_data, lim_y, label_y, filename, color1, color2, color3, annot_text=[]
