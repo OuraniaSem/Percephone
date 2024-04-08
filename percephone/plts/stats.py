@@ -63,7 +63,7 @@ def boxplot(ax, wt, ko, ylabel, ylim=[]):
     ax.grid(False)
     ax.set_title(None)
     ax.set_xlabel(None)
-    ax.yaxis.set_minor_locator(AutoMinorLocator(2))
+    # ax.yaxis.set_minor_locator(AutoMinorLocator(2))
     ax.tick_params(axis='both', which='major', length=6, width=3)
     ax.tick_params(axis='both', which='minor', length=4, width=3)
     if len(ylim)!=0:
@@ -108,7 +108,7 @@ def boxplot(ax, wt, ko, ylabel, ylim=[]):
         sig_symbol = '*'
     else:
         sig_symbol = 'n.s'
-    ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_s-15)
+    ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_s-15, weight='bold')
     ax.tick_params(axis='y', labelsize=font_s)
     # plt.tick_params(axis="x", which="both", bottom=False)
     # plt.xticks([0.15, 0.40], ['', ""])
@@ -195,7 +195,7 @@ def barplot(wt, ko, ylabel):
         sig_symbol = '*'
     else:
         sig_symbol = 'ns'
-    ax.text((x1 + x2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col)
+    ax.text((x1 + x2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, weight='bold')
 
 
 def paired_boxplot(ax, det, undet, ylabel, title, ylim=[],colors = [ko_color,light_ko_color]):
@@ -214,7 +214,7 @@ def paired_boxplot(ax, det, undet, ylabel, title, ylim=[],colors = [ko_color,lig
     """
     print("Boxplot plotting.")
     lw = 5
-    ax.set_ylabel(ylabel,fontsize=font_s)
+    ax.set_ylabel(ylabel, fontsize=font_s)
     ax.boxplot([det], positions=[0.15], patch_artist=True, showfliers=False, widths=0.2,
                meanprops=dict(marker='o', markerfacecolor=colors[1], markeredgecolor='black'),
                boxprops=dict(linewidth=lw, facecolor='white', color=colors[1]),
@@ -234,7 +234,7 @@ def paired_boxplot(ax, det, undet, ylabel, title, ylim=[],colors = [ko_color,lig
     ax.grid(False)
     ax.set_title(None)
     ax.set_xlabel(None)
-    ax.yaxis.set_minor_locator(AutoMinorLocator(2))
+    # ax.yaxis.set_minor_locator(AutoMinorLocator(2))
     ax.tick_params(axis='both', which='major', length=6, width=3)
     ax.tick_params(axis='both', which='minor', length=4, width=3)
     max_y = max(max(det), max(undet))
@@ -280,7 +280,7 @@ def paired_boxplot(ax, det, undet, ylabel, title, ylim=[],colors = [ko_color,lig
         sig_symbol = '*'
     else:
         sig_symbol = 'ns'
-    ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_s-15)
+    ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_s-15, weight='bold')
     ax.set_xticks([0.15, 0.40], ['', ""])
     ax.tick_params(axis="x", which="both", bottom=False)
     ax.set_title(title)
