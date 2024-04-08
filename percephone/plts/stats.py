@@ -11,7 +11,7 @@ import scipy.stats as ss
 import math
 from matplotlib.ticker import AutoMinorLocator
 
-plt.rcParams['font.size'] = 30
+plt.rcParams['font.size'] = 40
 plt.rcParams['axes.linewidth'] = 3
 plt.rcParams['svg.fonttype'] = 'none'
 plt.rcParams['lines.linewidth'] = 3
@@ -38,9 +38,10 @@ def boxplot(ax, wt, ko, ylabel, ylim=[]):
         columns names
 
     """
+    font_s = 40
     print("Boxplot plotting.")
     lw = 5
-    ax.set_ylabel(ylabel)
+    ax.set_ylabel(ylabel,fontsize=font_s)
     ax.boxplot([wt], positions=[0.15], patch_artist=True, showfliers=False, widths=0.2,
                meanprops=dict(marker='o', markerfacecolor=wt_color, markeredgecolor='black'),
                boxprops=dict(linewidth=lw, facecolor='white', color=wt_color),
@@ -74,7 +75,7 @@ def boxplot(ax, wt, ko, ylabel, ylim=[]):
         lim_inf = min(0, min_y + 0.15*min_y)
         ax.set_ylim(ymin=lim_inf, ymax=lim_max)
     yticks = list(ax.get_yticks())
-    ax.set_yticks(sorted(yticks))
+    ax.set_yticks(sorted(yticks), fontsize=font_s)
     ax.spines[['right', 'top', 'bottom']].set_visible(False)
     ax.set_xticks([])
 
@@ -107,7 +108,8 @@ def boxplot(ax, wt, ko, ylabel, ylim=[]):
         sig_symbol = '*'
     else:
         sig_symbol = 'ns'
-    ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col)
+    ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_s-10)
+    ax.tick_params(axis='y', labelsize=font_s)
     # plt.tick_params(axis="x", which="both", bottom=False)
     # plt.xticks([0.15, 0.40], ['', ""])
     # plt.tight_layout()
