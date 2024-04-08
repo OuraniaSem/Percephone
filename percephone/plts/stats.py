@@ -81,7 +81,7 @@ def boxplot(ax, wt, ko, ylabel, ylim=[]):
 
     x_1, x_2 = [0.15, 0.40]
     max_data = max([max(wt), max(ko)])
-    y, col = max_data + 0.05 * abs(max_data), 'k'
+    y, col = max_data + 0.10 * abs(max_data), 'k'
     ax.plot([x_1, x_2], [y, y], lw=3, c=col)
 
     def stat_boxplot(sb_wt, sb_ko, ylabel):
@@ -253,7 +253,7 @@ def paired_boxplot(ax, det, undet, ylabel, title, ylim=[],colors = [ko_color,lig
 
     x_1, x_2 = [0.15, 0.40]
     max_data = max([max(det), max(undet)])
-    y, col = max_data + 0.15 * abs(max_data), 'k'
+    y, col = max_data + 0.10 * abs(max_data), 'k'
     ax.plot([x_1, x_2], [y, y], lw=3, c=col)
 
     def stat_paired_boxplot(sb_det, sb_undet, ylabel):
