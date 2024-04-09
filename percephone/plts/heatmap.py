@@ -276,27 +276,42 @@ def intereactive_heatmap(rec, activity):
     def on_click(event):
         if event.button is MouseButton.RIGHT:
             fig, ax = plt.subplots(1, 1, figsize=(18, 10))
-            pre_b = 5
-            post_b = 5
-            time = np.linspace(-pre_b, post_b, int((pre_b + post_b) * rec.sf) - 1)
+            pre_b = 1
+            post_b = 1
+            time = np.linspace(-pre_b, post_b, int((pre_b + post_b) * rec.sf))
+            # time = np.arange(-pre_b + 1/rec.sf, post_b - 1/rec.sf, 1/rec.sf)
             rand_stim = find_nearest(rec.stim_time, int(event.xdata * rec.sf))
             trace = rec.zscore_exc[dn_exc['leaves'][math.ceil(event.ydata)],
-                    rec.stim_time[rand_stim] - int(pre_b * rec.sf):rec.stim_time[rand_stim] + int(
-                        post_b * rec.sf)]
+                    rec.stim_time[rand_stim] - round(pre_b * rec.sf):rec.stim_time[rand_stim] + round(post_b * rec.sf)-1]
             ax.plot(time, trace)
-            # onset_line = rec.matrices["EXC"]["Delay_onset"][rand_neu][rand_stim]
-            ax.hlines(0, -1, 2)
-            ax.set_title("Resp: " +
-                         str(rec.matrices["EXC"]["Responsivity"][dn_exc['leaves'][math.ceil(event.ydata)]][rand_stim]) +
-                         " - Peak n°" +
-                         str(rec.matrices["EXC"]["Peak_delay"][dn_exc['leaves'][math.ceil(event.ydata)]][rand_stim]) +
-                         " amp: " +
-                         str(rec.matrices["EXC"]["Peak_amplitude"][dn_exc['leaves'][math.ceil(event.ydata)]][rand_stim])
-                         )
-            # +      "Onset: " + str(rec.matrices["EXC"]["Delay_onset"][rand_neu][rand_stim]) + "  " + "AUC: " + str(rec.matrices["EXC"]["AUC"][rand_neu][rand_stim]
+
+            # Get the values of various parameters
+            lick_time = (durations[rand_stim]) / rec.sf
+            time_lick = np.linspace(0,0.5,16)
+            lick_time = time_lick[durations[rand_stim]]
+            value_resp = rec.matrices["EXC"]["Responsivity"][dn_exc['leaves'][math.ceil(event.ydata)]][rand_stim]
+            value_peak_ind = rec.matrices["EXC"]["Peak_delay"][dn_exc['leaves'][math.ceil(event.ydata)]][rand_stim]
+            value_peak_amp = rec.matrices["EXC"]["Peak_amplitude"][dn_exc['leaves'][math.ceil(event.ydata)]][rand_stim]
+            value_auc = rec.matrices["EXC"]["AUC"][dn_exc['leaves'][math.ceil(event.ydata)]][rand_stim]
+
+            # Plot the lines
+            ax.hlines(0, -1, 2, color="green")
             ax.vlines(0, min(trace), max(trace), lw=2, color="red")
-            ax.vlines(durations[rand_stim] / rec.sf, min(trace), max(trace), lw=2, color="black", linestyles="--")
+            ax.vlines(lick_time, min(trace), max(trace), lw=3, color="black", linestyles="--")
             ax.vlines(0.5, min(trace), max(trace), lw=2, color="red")
+
+            # Interpolation of values for AUC
+            time_inter = np.array([np.linspace(start, end, num=10)[:-1] for start, end in zip(time[:-1], time[1:])]).flatten()
+            trace_inter = np.array([np.linspace(start, end, num=10)[:-1] for start, end in zip(trace[:-1], trace[1:])]).flatten()
+
+            # Fill the AUC
+            if value_resp > 0:
+                ax.fill_between(time_inter, 0, trace_inter, where=(trace_inter > 0) & (time_inter >= 0) & (time_inter <= lick_time), color='red', alpha=0.3)
+            elif value_resp < 0:
+                ax.fill_between(time_inter, 0, trace_inter, where=(trace_inter < 0) & (time_inter >= 0) & (time_inter <= lick_time), color='red', alpha=0.3)
+
+            # Set the title
+            ax.set_title(f"Resp:{value_resp} - Peak n°{value_peak_ind} - amp: {value_peak_amp:.4} - AUC: {value_auc:.4}")
 
     plt.connect('button_press_event', on_click)
     plt.show()

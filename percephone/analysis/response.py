@@ -13,7 +13,7 @@ import scipy.stats as ss
 from scipy.signal import savgol_filter
 import matplotlib.pyplot as plt
 import random as rnd
-from scipy.integrate import simps
+from scipy.integrate import simpson
 from sklearn.linear_model import LinearRegression
 from tqdm import tqdm
 from percephone.analysis.utils import kernel_biexp
@@ -109,7 +109,7 @@ def resp_matrice(rec, df_data):
     return resp_mat
 
 
-def auc_matrice(rec, df_data, resp_mask):
+def auc_matrice(rec, zscore_data, resp_mask):
     """
     Perform Area Under the Curve for evey responses trace to the stimulations
     Parameters
@@ -125,25 +125,33 @@ def auc_matrice(rec, df_data, resp_mask):
     -------
     auc_mat: array
         AUC matrice (n neurones x n stims) for each response in every neurons
-
-
     """
+    result_auc = np.empty_like(resp_mask, dtype=float)
+    neuron_list, stim_list = resp_mask.shape
+    for neuron in range(neuron_list):
+        for stim in range(stim_list):
+            # Get the times and associated zscores for the stimulation
+            x_window = np.linspace(rec.stim_time[stim],
+                                   rec.stim_time[stim] + rec.stim_durations[stim],
+                                   num=int(rec.stim_durations[stim]) + 1,
+                                   dtype=int)
+            window = zscore_data[neuron, x_window]
 
-    def auc(signal, responsive):
-        if responsive==0:
-            return False
-        signal[signal < 0] = 0
-        return simps(signal, dx=1 / rec.sf)
+            # Interpolation of values
+            x_window_inter = np.array([np.linspace(start, end, num=10)[:-1] for start, end in zip(x_window[:-1], x_window[1:])]).flatten()
+            window_inter = np.array([np.linspace(start, end, num=10)[:-1] for start, end in zip(window[:-1], window[1:])]).flatten()
 
-    timings = rec.stim_time
-    if rec.stim_time[-1] + int(0.5 * rec.sf) >= len(df_data[0]):
-        timings = rec.stim_time[0:-1]
-    data = df_data[:, np.linspace(timings,
-                                  timings + int(0.5 * rec.sf),
-                                  num=int(0.5 * rec.sf) + 1, dtype=int)]
-    data1 = np.swapaxes(data, 1, 2)
-    auc_mat = [list(map(auc, x, responsive)) for x, responsive in zip(data1, resp_mask)]
-    return auc_mat
+            if resp_mask[neuron, stim] == 1:
+                window_inter[window_inter < 0] = 0
+                result_auc[neuron, stim] = simpson(window_inter, x=x_window_inter)/ rec.sf
+            elif resp_mask[neuron, stim] == -1:
+                window_inter[window_inter > 0] = 0
+                result_auc[neuron, stim] = simpson(window_inter, x=x_window_inter)/ rec.sf
+            # if there is no response, NaN is added in the matrix
+            elif resp_mask[neuron, stim] == 0:
+                result_auc[neuron, stim] = np.NaN
+    return result_auc
+
 
 
 def delay_response(signal, responsive):

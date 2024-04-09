@@ -125,8 +125,8 @@ class Recording:
                                                             self.matrices["INH"]["Responsivity"])
 
     def auc(self):
-        self.matrices["EXC"]["AUC"] = auc_matrice(self, self.df_f_exc, self.matrices["EXC"]["Responsivity"])
-        self.matrices["INH"]["AUC"] = auc_matrice(self, self.df_f_inh, self.matrices["INH"]["Responsivity"])
+        self.matrices["EXC"]["AUC"] = auc_matrice(self, self.zscore_exc, self.matrices["EXC"]["Responsivity"])
+        self.matrices["INH"]["AUC"] = auc_matrice(self, self.zscore_inh, self.matrices["INH"]["Responsivity"])
 
     def peak_delay_amp(self):
         self.matrices["EXC"]["Peak_delay"], self.matrices["EXC"]["Peak_amplitude"] = peak_matrices(self,
