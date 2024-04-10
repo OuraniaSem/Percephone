@@ -22,4 +22,7 @@ h5py
 ipywidgets
 openpyxl
 xlrd
+sphinx==7.2.6
 sphinx-rtd-theme
+pillow
+mock
