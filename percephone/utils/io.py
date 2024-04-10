@@ -45,9 +45,9 @@ def extract_analog_from_mesc(path_mesc, tuple_mesc, frame_rate, savepath=""):
     file = h5py.File(path_mesc)
     dset = file['MSession_' + str(tuple_mesc[0])]
     unit = dset['MUnit_' + str(tuple_mesc[1])]
-    iti = unit['Curve_2']
+    iti = unit['Curve_3']
     iti_curve = np.array(iti['CurveDataYRawData'])
-    timings = unit['Curve_0']
+    timings = unit['Curve_1']
     timing_curve = np.array(timings['CurveDataYRawData'])
 
     fig, ax = plt.subplots(1, 1, figsize=(18, 10))

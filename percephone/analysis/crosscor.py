@@ -54,7 +54,7 @@ def cross_cor_prestim(rec, ax, title):
     h = ax.imshow(corr[order_s][:, order_s], cmap="seismic", vmin=-1, vmax=+1, interpolation="none")
     ax.set_xlabel("Neuron i")
     ax.set_ylabel("Neuron j")
-    ax.set_title( title)
+    ax.set_title(title)
 
 
 

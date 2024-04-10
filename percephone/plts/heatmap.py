@@ -71,7 +71,7 @@ def plot_dff_stim(rec, filename):
     plt.show()
 
 
-def plot_dff_stim_detected(rec, dff, filename):
+def plot_dff_stim_detected(rec, dff):
     cmap = 'inferno'
     time_range = np.linspace(0, (len(dff[0]) / sampling_rate) - 1, len(dff[0]))
     fig, ax = plt.subplots(1, 1, figsize=(18, 10))
@@ -106,11 +106,11 @@ def plot_dff_stim_detected(rec, dff, filename):
     cbar.set_label(r'Z-score')
     ax.set_xlabel('Time (s)')
     ax.set_ylabel('Neurons')
-    tax1.set_title(filename)
+    tax1.set_title(rec.filename)
     plt.show()
 
 
-def plot_dff_stim_detected_timeout(rec, dff, filename):
+def plot_dff_stim_detected_timeout(rec, dff):
     """
 
     Parameters
@@ -160,12 +160,12 @@ def plot_dff_stim_detected_timeout(rec, dff, filename):
     cbar.set_label(r'Z-score')
     ax.set_xlabel('Time (s)')
     ax.set_ylabel('Neurons')
-    tax1.set_title(filename)
+    tax1.set_title(rec.filename)
     plt.show()
     return fig
 
 
-def plot_dff_stim_detected_lick(rec, dff, filename):
+def plot_dff_stim_detected_lick(rec, dff):
     """
 
     Parameters
@@ -215,7 +215,7 @@ def plot_dff_stim_detected_lick(rec, dff, filename):
     cbar.set_label(r'Z-score')
     ax.set_xlabel('Time (s)')
     ax.set_ylabel('Neurons')
-    tax1.set_title(filename)
+    tax1.set_title(rec.filename)
     plt.show()
     return fig
 

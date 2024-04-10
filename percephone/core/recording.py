@@ -252,7 +252,8 @@ class RecordingAmplDet(Recording):
                     print("No analog.txt either mesc file in the folder!")
                     return
             self.analog = pd.read_csv(input_path + 'analog.txt', sep="\t", header=None)
-            self.analog[0] = (self.analog[0] * 10).astype(int)
+            if analog_sf == 10000:
+                self.analog[0] = (self.analog[0] * 10).astype(int)
             self.synchronization_with_iti(starting_trial, analog_sf, correction)
 
         self.zscore_exc = self.zscore(self.df_f_exc)
@@ -326,10 +327,6 @@ class RecordingAmplDet(Recording):
         stimulus_time_to_ITI = np.around((stimulus_time - 2) * analog_s).tolist()  # in ms
 
         self.analog.columns = ['t', 'stimulus', 't_iti', 'iti']
-        self.analog['reward'] = 0
-        self.analog['timeout'] = 0
-        self.analog['stimulus_xls'] = 888
-        self.analog['licks'] = 0
         # Get the ITI2 from the analog file, as the first "1" value in the digital input of the analog file
         index_iti_final = []
         index_iti_analog = self.analog.index[self.analog['iti'] == 1].tolist()
@@ -371,19 +368,15 @@ class RecordingAmplDet(Recording):
             for lick in licks_time_analog:
                 index_licks = self.analog.index[self.analog['t'] == lick].to_list()
                 if len(index_licks) != 0:
-                    self.analog.at[index_licks[0], 'licks'] = 4
                     self.lick_time.append(int((index_licks[0] / analog_s) * self.sf))
             if len(index_reward) != 0:
-                self.analog.at[index_reward[0], 'reward'] = 2
                 self.reward_time.append(int((index_reward[0] / analog_s) * self.sf))
             if len(index_timeout) != 0:
-                self.analog.at[index_timeout[0], 'timeout'] = 3
                 self.timeout_time.append(int((index_timeout[0] / analog_s) * self.sf))
                 if len(index_stimulus) == 0:
                     timeout_trial = next(ampl_recording_iter)
             if len(index_stimulus) != 0:
                 amp = next(ampl_recording_iter)
-                self.analog.at[index_stimulus[0], 'stimulus_xls'] = amp
                 index_stim = int((index_stimulus[0] / analog_s) * self.sf)
                 if correction:
                     self.stim_time.append(index_stim - int(((1 / self.sf) * (index_stimulus[0] / analog_s)) * (1 / 3)))
@@ -460,9 +453,9 @@ if __name__ == '__main__':
 
     directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
     roi_info = pd.read_excel(directory + "/FmKO_ROIs&inhibitory.xlsx")
-    folder = '20240329_6601_00_synchro'
+    folder = '20220715_4456_00_synchro'
     path = directory + folder + "/"
-
-    rec = RecordingAmplDet(path, 0, folder, roi_info)
+    rec = RecordingAmplDet(path, 0, folder, roi_info, analog_sf=10000, cache=False, correction=False)
+    hm.plot_dff_stim_detected(rec, rec.zscore_exc)
     hm.intereactive_heatmap(rec, rec.df_f_exc)
 
