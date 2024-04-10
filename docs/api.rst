@@ -6,7 +6,7 @@ percephone.core
 
 
 .. autoclass:: percephone.core.recording.Recording
-    :members: compute_df_f, compute_responsivity, responsivity, delay_onset_map, auc, peak_delay_amp
+    :members: compute_df_f, responsivity, delay_onset_map, auc, peak_delay_amp
 
 
 
