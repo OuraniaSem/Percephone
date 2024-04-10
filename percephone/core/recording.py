@@ -128,6 +128,15 @@ class Recording:
                                                             self.matrices["INH"]["Responsivity"])
 
     def auc(self):
+        """
+        Computes the AUC matrices of the signal during the response period.
+
+        Note
+        ---------
+        Computes the AUC between 0 (the neurone normalized baseline) and the positive part of the curve for positive
+        responses, or between 0 and the negative part of the curve for negative responses.
+        10 interpolated values are added between each frame for a more precise calculation of the AUC.
+        """
         self.matrices["EXC"]["AUC"] = auc_matrice(self, self.zscore_exc, self.matrices["EXC"]["Responsivity"])
         self.matrices["INH"]["AUC"] = auc_matrice(self, self.zscore_inh, self.matrices["INH"]["Responsivity"])
 
