@@ -112,6 +112,9 @@ class Recording:
         return df_f_percen
 
     def responsivity(self):
+        """
+            Compute responsivity matrices for both exc and inh neurons
+        """
         print("Calcul of repsonsivity.")
         self.matrices["EXC"]["Responsivity"] = np.array(resp_matrice(self, self.zscore_exc))
         self.matrices["INH"]["Responsivity"] = np.array(resp_matrice(self, self.zscore_inh))
@@ -141,6 +144,16 @@ class Recording:
 
 class RecordingStimulusOnly(Recording):
     def __init__(self, input_path, starting_trial, inhibitory_ids, sf, correction=True):
+        """
+
+        Parameters
+        ----------
+        input_path
+        starting_trial
+        inhibitory_ids
+        sf
+        correction
+        """
         super().__init__(input_path, inhibitory_ids, sf)
         self.analog = pd.read_csv(input_path + 'analog.txt', sep="\t")
         if os.path.exists(input_path + 'stim_ampl_time.csv'):
