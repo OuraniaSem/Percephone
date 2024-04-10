@@ -16,7 +16,7 @@ import os
 import sys
 sys.path.insert(0, os.path.abspath('../percephone'))
 autodoc_mock_imports = ['h5py', 'matplotlib', 'PyQt5', 'PyQt5-sip',  'PyQt5-Qt5', 'PyQt5.QtGui', 'PyQt5.QtCore',
-                        'PyQt5.QtWidgets', 'sphinx_rtd_theme']
+                        'PyQt5.QtWidgets', 'sphinx-rtd-theme']
 print(sys.executable)
 # -- Project information -----------------------------------------------------
 
