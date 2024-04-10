@@ -5,10 +5,10 @@ percephone.core
 ---------------
 
 
-.. autoclass:: core.recording.Recording
+.. autoclass:: percephone.core.recording.Recording
     :members: compute_df_f, compute_responsivity
 
 
 
-.. autoclass:: core.recording.RecordingAmplDet
+.. autoclass:: percephone.core.recording.RecordingAmplDet
     :members: zscore, synchronization_with_iti
