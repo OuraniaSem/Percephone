@@ -5,7 +5,7 @@ percephone.core
 ---------------
 
 
-.. autoclass:: core.recordingRecording
+.. autoclass:: core.recording.Recording
     :members: compute_df_f, compute_responsivity
 
 
