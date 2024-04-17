@@ -26,11 +26,8 @@ class Recording:
     """
     The Recording class represents a recording session for one mouse and provides methods to analyze the data.
 
-    .. attribute:: filename
-        The filename of the recording session.
-
-    Notes
-    -----
+    Attributes
+    ----------
     filename : int
         The filename of the recording session.
     sf : float
@@ -50,7 +47,7 @@ class Recording:
         Stores the computed ΔF/F values for excitatory neurons at each timestep as a 2D numpy.ndarray (nb neurons * nb frames)
     df_f_inh : numpy.ndarray
         Stores the computed ΔF/F values for inhibitory neurons at each timestep as a 2D numpy.ndarray (nb neurons * nb frames)
-    spks_exc : numpy.ndarray
+    spks_exc : numpy.ndarray #TODO: check where it is computed
         Stores the spikes trains for excitatory neurons at each timestep as a 2D numpy.ndarray (nb neurons * nb frames)
     spks_inh : numpy.ndarray
         Stores the spikes trains for inhibitory neurons at each timestep as a 2D numpy.ndarray (nb neurons * nb frames)
@@ -117,7 +114,7 @@ class Recording:
         cell_ids: list
             ids of cells for which the df_f will be computed.
         save_path : str
-            folder where the df_f matrix will be saved (same as the input path)
+            The folder where the df_f matrix will be saved (same as the input path)
 
         Returns
         -------
@@ -168,6 +165,8 @@ class Recording:
         - 1 if there is an increase in the neuron's activity
         - 0 if there is no change in the neuron's activity
         - -1 if there is a decrease in the neuron's activity
+
+        This method updates the 'Responsivity' matrices for the excitatory and inhibitory neurons in the 'matrices' attribute.
         """
         print("Calcul of repsonsivity.")
         self.matrices["EXC"]["Responsivity"] = np.array(resp_matrice(self, self.zscore_exc))
@@ -179,12 +178,6 @@ class Recording:
         """
         Calculate the delay onset map for the excitatory and inhibitory neurons.
 
-        Parameters:
-            None
-
-        Returns:
-            None
-
         This method updates the 'Delay_onset' matrices for the excitatory and inhibitory neurons in the 'matrices' attribute.
         """
         self.matrices["EXC"]["Delay_onset"] = delay_matrice(self, self.df_f_exc, self.stim_time,
@@ -194,22 +187,29 @@ class Recording:
 
     def auc(self):
         """
-        Computes the AUC matrices of the signal during the response period.
+        Computes the zscore AUC matrices of the signal during the response period.
 
         Note
         ---------
-        Computes the AUC between 0 (the neurone normalized baseline) and the positive part of the curve for positive
+        Computes the AUC between 0 (the neuron normalized baseline) and the positive part of the curve for positive
         responses, or between 0 and the negative part of the curve for negative responses.
         10 interpolated values are added between each frame for a more precise calculation of the AUC.
+
+
+        This method updates the 'AUC' matrices for the excitatory and inhibitory neurons in the 'matrices' attribute.
         """
         self.matrices["EXC"]["AUC"] = auc_matrice(self, self.zscore_exc, self.matrices["EXC"]["Responsivity"])
         self.matrices["INH"]["AUC"] = auc_matrice(self, self.zscore_inh, self.matrices["INH"]["Responsivity"])
 
     def peak_delay_amp(self):
         """
-        Calculate the peak delay and peak amplitude for each neuron and each stimulation. The peak is the maximum
+        Calculate the zscore peak delay and peak amplitude for each neuron and each stimulation. The peak is the maximum
         amplitude when the responsivity is 1 or the minimum amplitude when the responsivity is -1. numpy.NaN is added to
         the matrix when the responsivity is 0.
+
+
+        This method updates the "Peak_delay" and "Peak_amplitude" matrices for the excitatory and inhibitory neurons in
+        the "matrices" attribute.
         """
         self.matrices["EXC"]["Peak_delay"], self.matrices["EXC"]["Peak_amplitude"] = peak_matrices(self,
                                                                                                    self.zscore_exc,
@@ -222,18 +222,36 @@ class Recording:
 
 
 class RecordingStimulusOnly(Recording):
-    def __init__(self, input_path, starting_trial, inhibitory_ids, sf, correction=True):
+    """
+    The RecordingStimulusOnly class represents a recording session for one mouse and provides methods to analyze the data.
+
+    Attributes
+    ----------
+    analog : pandas.DataFrame
+        Analog file stored as a pandas DataFrame.
+    stim_time : list[int]
+        A list of the stimulation times in ms.
+    stim_ampl : list[float]
+        A list of the stimulation amplitudes.
+    """
+    def __init__(self, input_path, inhibitory_ids, sf, correction=True):
         """
+        This method initializes an instance of the class. It reads the 'analog.txt' file from the input path and checks
+        if the "stim_ampl_time.csv" file exists. If it exists, it reads the stimulus time and amplitude data from it.
+        If it doesn't exist, it calls the "synchronization_no_iti" method with the provided correction boolean.
 
         Parameters
         ----------
-        input_path
-        starting_trial
-        inhibitory_ids
-        sf
-        correction
+        input_path : str
+            Path to the folder that contains the input files.
+        inhibitory_ids : list
+            The list of inhibitory neuron IDs.
+        sf : float
+            The sampling frequency of the recording session.
+        correction : bool, optional
+            Whether to perform correction. Default is True.
         """
-        super().__init__(input_path, inhibitory_ids, sf)
+        super().__init__(input_path, inhibitory_ids, sf) #TODO: bad initialization of the instance
         self.analog = pd.read_csv(input_path + 'analog.txt', sep="\t")
         if os.path.exists(input_path + 'stim_ampl_time.csv'):
             print('Analog information already computed. Reading stimulus time and amplitude.')
@@ -244,8 +262,8 @@ class RecordingStimulusOnly(Recording):
 
     def synchronization_no_iti(self, correction_shift):
         """
-        Get the stimulus time and amplitude from the analog file and
-        save a csv file with the stimulus amplitude and time (stimulus starting time) in ms
+        Get the stimulus time and amplitude from the analog file and save a csv file with the stimulus amplitude and
+        time (stimulus starting time) in ms.
 
         Note
         -------
@@ -257,7 +275,7 @@ class RecordingStimulusOnly(Recording):
         Parameters
         -------
         correction_shift : bool
-            indicate if the correction of the shift of frame should be executed.
+            Indicate if the correction of the shift of frame should be executed.
         """
         print('Obtaining time and amplitude from analog.')
         analog_trace = self.analog.iloc[:, 1].to_numpy()
@@ -306,8 +324,62 @@ class RecordingStimulusOnly(Recording):
 
 
 class RecordingAmplDet(Recording):
+    """
+    Class for analyzing recording data with amplitude detection. Inherits from the Recording class.
+
+    Attributes
+    ----------
+    analog : pandas.DataFrame
+        Analog file stored as a pandas DataFrame.
+    xls : pandas.DataFrame
+        bpod file stored as a pandas DataFrame.
+    stim_time : numpy.ndarray of int
+        A 1D numpy.ndarray of the stimulation times in frames.
+    stim_ampl : numpy.ndarray of float #TODO: why not int
+        A 1D numpy.ndarray of the stimulation amplitudes.
+    stim_durations : numpy.ndarray of float #TODO: why not int
+        A 1D numpy.ndarray of the stimulation's durations
+    reward_time : numpy.ndarray of int
+        A 1D numpy.ndarray of the reward times in frames.
+    timeout_time : numpy.ndarray of int
+        A 1D numpy.ndarray of the timeout (no-go times) in frames.
+    lick_time : numpy.ndarray of int
+        A 1D numpy.ndarray of the lick times in frames.
+    detected_stim : numpy.ndarray of bool
+        A 1D numpy.ndarray of if the mouse responded to a stimulation.
+    mlr_labels_exc :
+        #TODO: to fill
+    mlr_labels_inh :
+        #TODO: to fill
+    json : list[dict]
+        Read of the file params_trials.json
+    zscore_exc : numpy.ndarray of float
+        A 2D numpy.ndarray of the zscore of each excitatory neuron at each frame of the recording (nb neurons * nb frames)
+    zscore_inh : numpy.ndarray of float
+        A 2D numpy.ndarray of the zscore of each inhibitory neuron at each frame of the recording (nb neurons * nb frames)
+    """
     def __init__(self, input_path, starting_trial, foldername, rois, tuple_mesc=(0, 0), correction=True,
                  cache=True, analog_sf=10000):
+        """
+        Parameters
+        ----------
+        input_path : str
+            Path to the folder that contains the input files.
+        starting_trial : int
+            The starting trial number.
+        foldername : str
+            Name of the folder containing the files.
+        rois: panda.Dataframe
+            Excel ROI file imported as a pandas dataframe.
+        tuple_mesc : tuple, optional
+            Tuple representing the measurements per second (mesc) values for extraction, default is (0, 0).
+        correction : bool, optional
+            Flag indicating whether to apply correction, default is True.
+        cache: bool
+            Boolean value indicating whether to use cached files if available.
+        analog_sf : int, optional
+            Sampling frequency of the analog data, default is 10000.
+        """
         super().__init__(input_path, foldername, rois, cache)
         self.xls = pd.read_excel(input_path + 'bpod.xls', header=None)
         self.stim_time = []
@@ -352,6 +424,7 @@ class RecordingAmplDet(Recording):
 
     def zscore(self, dff):
         """
+        Computes the standardized zscore from the ΔF/F.
 
         Parameters
         ----------
