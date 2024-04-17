@@ -38,35 +38,21 @@ class Recording:
         The threshold stimulation amplitude.
     input_path : str
         The path to the folder containing the recording data (ending with /).
-    matrices : dict[str, dict[str, np.ndarray]]
-        Stores the different matrices computed from the recording as 2D np.ndarray.
+    matrices : dict[str, dict[str, numpy.ndarray]]
+        Stores the different matrices computed from the recording as 2D numpy.ndarray.
         The first dictionary has 2 keys : "EXC" and "INH" neurons, each having a dictionary as value.
         Both dictionaries are then keyed by the computed parameters ("Responsivity", "AUC", etc...) and have a
         2D np.ndarray (nb neurons * nb stimulations) as value.
-    df_f_exc : np.ndarray
-        Stores the computed ΔF/F values for excitatory neurons at each timestep as a 2D np.ndarray (nb neurons * nb frames)
-    df_f_inh : np.ndarray
-        Stores the computed ΔF/F values for inhibitory neurons at each timestep as a 2D np.ndarray (nb neurons * nb frames)
-    spks_exc : np.ndarray
-        #TODO: complete
-    spks_inh : np.ndarray
-        #TODO: complete
-
-    Methods
-    -------
-    __init__(input_path, foldername, rois, cache)
-        Initializes the Recording object with the given input path, foldername, rois, and cache parameters.
-    compute_df_f(cell_ids, save_path)
-        Computes DF/F and saves it as a numpy array.
-    responsivity()
-        Computes the responsivity matrices for both excitatory and inhibitory neurons.
-    delay_onset_map()
-        Computes the delay onset matrices for both excitatory and inhibitory neurons.
-    auc()
-        Computes the AUC matrices for both excitatory and inhibitory neurons.
-    peak_delay_amp()
-        Computes the peak delay and peak amplitude matrices for both excitatory and inhibitory neurons.
+    df_f_exc : numpy.ndarray
+        Stores the computed ΔF/F values for excitatory neurons at each timestep as a 2D numpy.ndarray (nb neurons * nb frames)
+    df_f_inh : numpy.ndarray
+        Stores the computed ΔF/F values for inhibitory neurons at each timestep as a 2D numpy.ndarray (nb neurons * nb frames)
+    spks_exc : numpy.ndarray
+        Stores the spikes trains for excitatory neurons at each timestep as a 2D numpy.ndarray (nb neurons * nb frames)
+    spks_inh : numpy.ndarray
+        Stores the spikes trains for inhibitory neurons at each timestep as a 2D numpy.ndarray (nb neurons * nb frames)
     """
+
     def __init__(self, input_path, foldername, rois, cache):
         """
         Initializes the Recording object with the given input path, foldername, rois, and cache parameters.
@@ -74,13 +60,13 @@ class Recording:
         Parameters
         ----------
         input_path: str
-            Path to the input files.
+            Path to the folder that contains the input files.
         foldername: str
             Name of the folder containing the files.
-        rois: list
-            List of ROI IDs.
+        rois: panda.Dataframe
+            Excel ROI file imported as a pandas dataframe.
         cache: bool
-            Boolean value indicating whether to use cached files if available.
+            Boolean value indicating whether to use cached files if available (for ΔF/F).
         """
         self.filename, inhibitory_ids, self.sf, self.genotype, self.threshold = read_info(foldername, rois)
         self.input_path = input_path
@@ -96,7 +82,7 @@ class Recording:
         excitatory_ids = np.concatenate(np.argwhere(is_exh_inh[cells_list, 2]))  # list with excitatory cells
 
         if os.path.exists(input_path + 'df_f_exc.npy') and cache:
-            self.df_f_exc  = np.load(input_path + 'df_f_exc.npy')
+            self.df_f_exc = np.load(input_path + 'df_f_exc.npy')
             self.df_f_inh = np.load(input_path + 'df_f_inh.npy')
         else:
             self.df_f_exc = self.compute_df_f(excitatory_ids, input_path + 'df_f_exc.npy')
@@ -111,30 +97,29 @@ class Recording:
             self.matrices["EXC"]["Responsivity"] = np.load(self.input_path + "matrice_resp_exc.npy")
             self.matrices["INH"]["Responsivity"] = np.load(self.input_path + "matrice_resp_inh.npy")
 
-
     def compute_df_f(self, cell_ids, save_path):
         """
-        Compute DF/F and save it as npy matrix
+        Compute ΔF/F and save it as a numpy.ndarray
 
         Note
         ---------
         Defining The Baseline F0:
-        Portera-Cailliau baseline (He et al, Goel et al):
-        baseline period is the 10-s period with the lowest variation (s.d.) in ΔF/F.
-        Since to get the DF/F we already need to define a baseline,
-        here the Baseline Period was defined as the 10s period with the lowest variation in F_neuropil_corrected
+        Portera-Cailliau baseline (He et al, Goel et al): "baseline period is the 10-s period with the lowest variation
+        (s.d.) in ΔF/F."
+        Since to get the ΔF/F we already need to define a baseline, here the Baseline Period was defined as the 10s
+        period with the lowest variation in F_neuropil_corrected
 
         Parameters
         ----------
         cell_ids: list
-            ids of cells for wich the df_f will be computed
+            ids of cells for which the df_f will be computed.
         save_path : str
             folder where the df_f matrix will be saved (same as the input path)
 
         Returns
         -------
         df_f_percen : numpy.ndarray
-            DF/F of all the cells selected
+            ΔF/F of all the cells selected (nb neurons * nb frames)
         """
         print("Calculation Delta F / F.")
         f_ = np.load(self.input_path + 'F.npy', allow_pickle=True)
@@ -174,13 +159,17 @@ class Recording:
 
     def responsivity(self):
         """
-            Compute responsivity matrices for both exc and inh neurons
+        Compute responsivity matrices for both excitatory and inhibitory neurons. For a given neuron and a given
+        stimulation, one integer among the following is added to the matrix :
+        - 1 if there is an increase in the neuron's activity
+        - 0 if there is no change in the neuron's activity
+        - -1 if there is a decrease in the neuron's activity
         """
         print("Calcul of repsonsivity.")
         self.matrices["EXC"]["Responsivity"] = np.array(resp_matrice(self, self.zscore_exc))
         self.matrices["INH"]["Responsivity"] = np.array(resp_matrice(self, self.zscore_inh))
-        np.save(self.input_path +"matrice_resp_exc.npy", self.matrices["EXC"]["Responsivity"])
-        np.save(self.input_path +"matrice_resp_inh.npy", self.matrices["INH"]["Responsivity"])
+        np.save(self.input_path + "matrice_resp_exc.npy", self.matrices["EXC"]["Responsivity"])
+        np.save(self.input_path + "matrice_resp_inh.npy", self.matrices["INH"]["Responsivity"])
 
     def delay_onset_map(self):
         self.matrices["EXC"]["Delay_onset"] = delay_matrice(self, self.df_f_exc, self.stim_time,
@@ -202,6 +191,11 @@ class Recording:
         self.matrices["INH"]["AUC"] = auc_matrice(self, self.zscore_inh, self.matrices["INH"]["Responsivity"])
 
     def peak_delay_amp(self):
+        """
+        Calculate the peak delay and peak amplitude for each neuron and each stimulation. The peak is the maximum
+        amplitude when the responsivity is 1 or the minimum amplitude when the responsivity is -1. numpy.NaN is added to
+        the matrix when the responsivity is 0.
+        """
         self.matrices["EXC"]["Peak_delay"], self.matrices["EXC"]["Peak_amplitude"] = peak_matrices(self,
                                                                                                    self.zscore_exc,
                                                                                                    self.matrices["EXC"][
@@ -395,7 +389,8 @@ class RecordingAmplDet(Recording):
         data_stimulus = self.xls[self.xls[0] == 'STATE'][self.xls[4] == 'Stimulus']
 
         splitted = np.split(self.xls, self.xls[self.xls[4] == 'The trial ended'].index)
-        licks = [np.round(((split[2][(split[0] == 'EVENT') & (split[4] == 94)].values - 2) * analog_s).astype(float)) for
+        licks = [np.round(((split[2][(split[0] == 'EVENT') & (split[4] == 94)].values - 2) * analog_s).astype(float))
+                 for
                  split in splitted]
 
         # get the time for ITI2, reward, timeout and stimulus
@@ -504,29 +499,29 @@ class RecordingAmplDet(Recording):
 
     def mlr(self, mlr_model, name_model):
 
-            if os.path.exists(self.input_path + name_model + '.json'):
-                print('MLR model already computed')
-                with open(self.input_path + name_model + '.json', "r") as events_file:
-                    events = json.load(events_file)
-                    self.mlr_labels_exc = events["exc"]
-                    self.mlr_labels_inh = events["inh"]
+        if os.path.exists(self.input_path + name_model + '.json'):
+            print('MLR model already computed')
+            with open(self.input_path + name_model + '.json', "r") as events_file:
+                events = json.load(events_file)
+                self.mlr_labels_exc = events["exc"]
+                self.mlr_labels_inh = events["inh"]
 
-            else:
+        else:
 
-                self.mlr_labels_exc["text_labels"], self.mlr_labels_exc["n_neurons_per_label"], self.mlr_labels_exc[
-                    "neuron_labels"], self.mlr_labels_exc["indices_r2"] = mlr(self.zscore_exc, mlr_model, self.sf)
-                self.mlr_labels_inh["text_labels"], self.mlr_labels_inh["n_neurons_per_label"], self.mlr_labels_inh[
-                    "neuron_labels"], self.mlr_labels_inh["indices_r2"] = mlr(self.zscore_inh, mlr_model, self.sf)
+            self.mlr_labels_exc["text_labels"], self.mlr_labels_exc["n_neurons_per_label"], self.mlr_labels_exc[
+                "neuron_labels"], self.mlr_labels_exc["indices_r2"] = mlr(self.zscore_exc, mlr_model, self.sf)
+            self.mlr_labels_inh["text_labels"], self.mlr_labels_inh["n_neurons_per_label"], self.mlr_labels_inh[
+                "neuron_labels"], self.mlr_labels_inh["indices_r2"] = mlr(self.zscore_inh, mlr_model, self.sf)
 
-                def convert_to_list(obj):
-                    return {key: value.tolist() for key, value in obj.items()}
+            def convert_to_list(obj):
+                return {key: value.tolist() for key, value in obj.items()}
 
-                exc_list = convert_to_list(self.mlr_labels_exc)
-                inh_list = convert_to_list(self.mlr_labels_inh)
-                to_save_list = {"exc": exc_list, "inh": inh_list}
+            exc_list = convert_to_list(self.mlr_labels_exc)
+            inh_list = convert_to_list(self.mlr_labels_inh)
+            to_save_list = {"exc": exc_list, "inh": inh_list}
 
-                with open(self.input_path + name_model + ".json", "w") as jsn:
-                    json.dump(to_save_list, jsn)
+            with open(self.input_path + name_model + ".json", "w") as jsn:
+                json.dump(to_save_list, jsn)
 
 
 if __name__ == '__main__':
@@ -541,4 +536,3 @@ if __name__ == '__main__':
     rec = RecordingAmplDet(path, 0, folder, roi_info, analog_sf=10000, cache=False, correction=False)
     hm.plot_dff_stim_detected(rec, rec.zscore_exc)
     hm.intereactive_heatmap(rec, rec.df_f_exc)
-
