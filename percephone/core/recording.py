@@ -26,7 +26,7 @@ class Recording:
     """
     The Recording class represents a recording session for one mouse and provides methods to analyze the data.
 
-    Parameters
+    Attributes
     ----------
     filename : int
         The filename of the recording session.
