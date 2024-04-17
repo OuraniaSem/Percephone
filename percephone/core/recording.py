@@ -23,7 +23,65 @@ plt.switch_backend("Qt5Agg")
 
 
 class Recording:
+    """
+    The Recording class represents a recording session for one mouse and provides methods to analyze the data.
+
+    Attributes
+    ----------
+    filename : int
+        The filename of the recording session.
+    sf : float
+        The sampling frequency of the recording session.
+    genotype : str
+        The genotype of the mouse recorded.
+    threshold : float
+        The threshold stimulation amplitude.
+    input_path : str
+        The path to the folder containing the recording data (ending with /).
+    matrices : dict[str, dict[str, np.ndarray]]
+        Stores the different matrices computed from the recording as 2D np.ndarray.
+        The first dictionary has 2 keys : "EXC" and "INH" neurons, each having a dictionary as value.
+        Both dictionaries are then keyed by the computed parameters ("Responsivity", "AUC", etc...) and have a
+        2D np.ndarray (nb neurons * nb stimulations) as value.
+    df_f_exc : np.ndarray
+        Stores the computed ΔF/F values for excitatory neurons at each timestep as a 2D np.ndarray (nb neurons * nb frames)
+    df_f_inh : np.ndarray
+        Stores the computed ΔF/F values for inhibitory neurons at each timestep as a 2D np.ndarray (nb neurons * nb frames)
+    spks_exc : np.ndarray
+        #TODO: complete
+    spks_inh : np.ndarray
+        #TODO: complete
+
+    Methods
+    -------
+    __init__(input_path, foldername, rois, cache)
+        Initializes the Recording object with the given input path, foldername, rois, and cache parameters.
+    compute_df_f(cell_ids, save_path)
+        Computes DF/F and saves it as a numpy array.
+    responsivity()
+        Computes the responsivity matrices for both excitatory and inhibitory neurons.
+    delay_onset_map()
+        Computes the delay onset matrices for both excitatory and inhibitory neurons.
+    auc()
+        Computes the AUC matrices for both excitatory and inhibitory neurons.
+    peak_delay_amp()
+        Computes the peak delay and peak amplitude matrices for both excitatory and inhibitory neurons.
+    """
     def __init__(self, input_path, foldername, rois, cache):
+        """
+        Initializes the Recording object with the given input path, foldername, rois, and cache parameters.
+
+        Parameters
+        ----------
+        input_path: str
+            Path to the input files.
+        foldername: str
+            Name of the folder containing the files.
+        rois: list
+            List of ROI IDs.
+        cache: bool
+            Boolean value indicating whether to use cached files if available.
+        """
         self.filename, inhibitory_ids, self.sf, self.genotype, self.threshold = read_info(foldername, rois)
         self.input_path = input_path
         self.matrices = {"EXC": {"Responsivity": [], "AUC": [], "Delay_onset": []},
@@ -36,16 +94,19 @@ class Recording:
         is_exh_inh = np.append(iscell, exh_inh, axis=1)  # add the array in the iscell to have a 3rd column with exh/inh
         cells_list = np.concatenate(np.argwhere(is_exh_inh[:, 0]))
         excitatory_ids = np.concatenate(np.argwhere(is_exh_inh[cells_list, 2]))  # list with excitatory cells
+
         if os.path.exists(input_path + 'df_f_exc.npy') and cache:
             self.df_f_exc  = np.load(input_path + 'df_f_exc.npy')
             self.df_f_inh = np.load(input_path + 'df_f_inh.npy')
         else:
             self.df_f_exc = self.compute_df_f(excitatory_ids, input_path + 'df_f_exc.npy')
             self.df_f_inh = self.compute_df_f(inhibitory_ids, input_path + 'df_f_inh.npy')
+
         if os.path.exists(input_path + 'spks.npy'):
             spks = np.load(self.input_path + "spks.npy")
             self.spks_exc = spks[excitatory_ids]
             self.spks_inh = spks[inhibitory_ids]
+
         if os.path.exists(input_path + 'matrice_resp_exc.npy') and os.path.exists(input_path + 'matrice_resp_inh.npy'):
             self.matrices["EXC"]["Responsivity"] = np.load(self.input_path + "matrice_resp_exc.npy")
             self.matrices["INH"]["Responsivity"] = np.load(self.input_path + "matrice_resp_inh.npy")
