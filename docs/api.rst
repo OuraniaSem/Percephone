@@ -6,7 +6,6 @@ percephone.core
 
 
 .. autoclass:: percephone.core.recording.Recording
-    .. autoattribute::
     :members:
 
 
