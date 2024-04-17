@@ -26,7 +26,7 @@ class Recording:
     """
     The Recording class represents a recording session for one mouse and provides methods to analyze the data.
 
-    Attributes
+    Parameters
     ----------
     filename : int
         The filename of the recording session.
@@ -161,6 +161,7 @@ class Recording:
         """
         Compute responsivity matrices for both excitatory and inhibitory neurons. For a given neuron and a given
         stimulation, one integer among the following is added to the matrix :
+
         - 1 if there is an increase in the neuron's activity
         - 0 if there is no change in the neuron's activity
         - -1 if there is a decrease in the neuron's activity
@@ -172,6 +173,9 @@ class Recording:
         np.save(self.input_path + "matrice_resp_inh.npy", self.matrices["INH"]["Responsivity"])
 
     def delay_onset_map(self):
+        """
+        Computes the delay onset map for excitatory and inhibitory matrices.
+        """
         self.matrices["EXC"]["Delay_onset"] = delay_matrice(self, self.df_f_exc, self.stim_time,
                                                             self.matrices["EXC"]["Responsivity"])
         self.matrices["INH"]["Delay_onset"] = delay_matrice(self, self.df_f_inh, self.stim_time,
