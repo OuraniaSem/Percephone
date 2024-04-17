@@ -25,7 +25,7 @@ plt.switch_backend("Qt5Agg")
 class Recording:
     """
     The Recording class represents a recording session for one mouse and provides methods to analyze the data.
-
+    #TODO: Display attributes as a list like parameters in read the docs
     Attributes
     ----------
     filename : int
@@ -174,7 +174,15 @@ class Recording:
 
     def delay_onset_map(self):
         """
-        Computes the delay onset map for excitatory and inhibitory matrices.
+        Calculate the delay onset map for the excitatory and inhibitory neurons.
+
+        Parameters:
+            None
+
+        Returns:
+            None
+
+        This method updates the 'Delay_onset' matrices for the excitatory and inhibitory neurons in the 'matrices' attribute.
         """
         self.matrices["EXC"]["Delay_onset"] = delay_matrice(self, self.df_f_exc, self.stim_time,
                                                             self.matrices["EXC"]["Responsivity"])
@@ -246,8 +254,7 @@ class RecordingStimulusOnly(Recording):
         Parameters
         -------
         correction_shift : bool
-            indicate if the correction of the shift of frame should be executed
-
+            indicate if the correction of the shift of frame should be executed.
         """
         print('Obtaining time and amplitude from analog.')
         analog_trace = self.analog.iloc[:, 1].to_numpy()
@@ -345,14 +352,13 @@ class RecordingAmplDet(Recording):
 
         Parameters
         ----------
-        dff: np.ndarray
+        dff: numpy.ndarray
             delta f over f array from inh or exc
 
         Returns
-            zscore: np.ndarray
-                zscore for one set of neurons (inh or exc)
         -------
-
+        zscore: numpy.ndarray
+            zscore for one set of neurons (inh or exc)
         """
         data = np.concatenate(np.stack(
             dff[:,
