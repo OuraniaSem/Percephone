@@ -70,8 +70,8 @@ class Recording:
         """
         self.filename, inhibitory_ids, self.sf, self.genotype, self.threshold = read_info(foldername, rois)
         self.input_path = input_path
-        self.matrices = {"EXC": {"Responsivity": [], "AUC": [], "Delay_onset": []},
-                         "INH": {"Responsivity": [], "AUC": [], "Delay_onset": []}}
+        self.matrices = {"EXC": {},
+                         "INH": {}}
 
         iscell = np.load(input_path + 'iscell.npy', allow_pickle=True)
         # Create a dimension in iscell to define excitatory and inhibitory cells
