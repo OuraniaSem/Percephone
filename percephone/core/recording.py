@@ -44,34 +44,37 @@ class Recording:
         Both dictionaries are then keyed by the computed parameters ("Responsivity", "AUC", etc...) and have a
         2D np.ndarray (nb neurons * nb stimulations) as value.
     df_f_exc : numpy.ndarray
-        Stores the computed ΔF/F values for excitatory neurons at each timestep as a 2D numpy.ndarray (nb neurons * nb frames)
+        Stores the computed ΔF/F values for excitatory neurons at each timestep as a 2D numpy.ndarray
+        (nb neurons * nb frames)
     df_f_inh : numpy.ndarray
-        Stores the computed ΔF/F values for inhibitory neurons at each timestep as a 2D numpy.ndarray (nb neurons * nb frames)
+        Stores the computed ΔF/F values for inhibitory neurons at each timestep as a 2D numpy.ndarray
+        (nb neurons * nb frames)
     spks_exc : numpy.ndarray #TODO: check where it is computed
         Stores the spikes trains for excitatory neurons at each timestep as a 2D numpy.ndarray (nb neurons * nb frames)
     spks_inh : numpy.ndarray
         Stores the spikes trains for inhibitory neurons at each timestep as a 2D numpy.ndarray (nb neurons * nb frames)
     """
 
-    def __init__(self, input_path, foldername, rois, cache):
+    def __init__(self, input_path, rois_path, cache=True):
         """
-        Initializes the Recording object with the given input path, foldername, rois, and cache parameters.
+        Initializes the Recording object with the given input path, the rois file path, and cache parameters.
 
         Parameters
         ----------
         input_path: str
-            Path to the folder that contains the input files.
-        foldername: str
-            Name of the folder containing the files.
-        rois: panda.Dataframe
-            Excel ROI file imported as a pandas dataframe.
-        cache: bool
+            Path to the folder that contains the input recording files.
+        rois_path: str
+            Path to the Excel ROI file.
+        cache: bool, optional (default: True)
             Boolean value indicating whether to use cached files if available (for ΔF/F).
         """
-        self.filename, inhibitory_ids, self.sf, self.genotype, self.threshold = read_info(foldername, rois)
+
+        # Initialization of the instance attributes by reading the ROIs file
+        folder_name = os.path.basename(os.path.normpath(input_path)) + "/"
+        rois = pd.read_excel(rois_path)
+        self.filename, inhibitory_ids, self.sf, self.genotype, self.threshold = read_info(folder_name, rois)
         self.input_path = input_path
-        self.matrices = {"EXC": {},
-                         "INH": {}}
+        self.matrices = {"EXC": {}, "INH": {}}
 
         iscell = np.load(input_path + 'iscell.npy', allow_pickle=True)
         # Create a dimension in iscell to define excitatory and inhibitory cells
@@ -104,7 +107,7 @@ class Recording:
         Note
         ---------
         Defining The Baseline F0:
-        Portera-Cailliau baseline (He et al, Goel et al): "baseline period is the 10-s period with the lowest variation
+        Portera-Cailliau baseline (He et al., Goel et al.): "baseline period is the 10-s period with the lowest variation
         (s.d.) in ΔF/F."
         Since to get the ΔF/F we already need to define a baseline, here the Baseline Period was defined as the 10s
         period with the lowest variation in F_neuropil_corrected
@@ -166,7 +169,8 @@ class Recording:
         - 0 if there is no change in the neuron's activity
         - -1 if there is a decrease in the neuron's activity
 
-        This method updates the 'Responsivity' matrices for the excitatory and inhibitory neurons in the 'matrices' attribute.
+        This method updates the 'Responsivity' matrices for the excitatory and inhibitory neurons in the 'matrices'
+        attribute.
         """
         print("Calcul of repsonsivity.")
         self.matrices["EXC"]["Responsivity"] = np.array(resp_matrice(self, self.zscore_exc))
@@ -178,7 +182,8 @@ class Recording:
         """
         Calculate the delay onset map for the excitatory and inhibitory neurons.
 
-        This method updates the 'Delay_onset' matrices for the excitatory and inhibitory neurons in the 'matrices' attribute.
+        This method updates the 'Delay_onset' matrices for the excitatory and inhibitory neurons in the 'matrices'
+        attribute.
         """
         self.matrices["EXC"]["Delay_onset"] = delay_matrice(self, self.df_f_exc, self.stim_time,
                                                             self.matrices["EXC"]["Responsivity"])
@@ -223,7 +228,8 @@ class Recording:
 
 class RecordingStimulusOnly(Recording):
     """
-    The RecordingStimulusOnly class represents a recording session for one mouse and provides methods to analyze the data.
+    The RecordingStimulusOnly class represents a recording session for one mouse and provides methods to analyze the
+    data.
 
     Attributes
     ----------
@@ -251,7 +257,7 @@ class RecordingStimulusOnly(Recording):
         correction : bool, optional
             Whether to perform correction. Default is True.
         """
-        super().__init__(input_path, inhibitory_ids, sf) #TODO: bad initialization of the instance
+        super().__init__(input_path, inhibitory_ids, sf)  # TODO: bad initialization of the instance
         self.analog = pd.read_csv(input_path + 'analog.txt', sep="\t")
         if os.path.exists(input_path + 'stim_ampl_time.csv'):
             print('Analog information already computed. Reading stimulus time and amplitude.')
@@ -308,7 +314,7 @@ class RecordingStimulusOnly(Recording):
         stim_onsets = np.array([int((stim / 1000) * self.sf) for stim in stim_onset_time])
 
         def correction(idx):
-            """ Perform a frames correction. 8 is the number of frames that the last stimulus will be shifted before"""
+            """ Perform a frames' correction. 8 is the number of frames that the last stimulus will be shifted before"""
             coeff = ((8 / len(self.df_f_exc[0])) / (stim_onsets[-1] - stim_onsets[0]))
             b = coeff * stim_onsets[0]
             return int(idx - (((coeff * idx) - b) * len(self.df_f_inh[0])))
@@ -354,11 +360,13 @@ class RecordingAmplDet(Recording):
     json : list[dict]
         Read of the file params_trials.json
     zscore_exc : numpy.ndarray of float
-        A 2D numpy.ndarray of the zscore of each excitatory neuron at each frame of the recording (nb neurons * nb frames)
+        A 2D numpy.ndarray of the zscore of each excitatory neuron at each frame of the recording
+        (nb neurons * nb frames)
     zscore_inh : numpy.ndarray of float
-        A 2D numpy.ndarray of the zscore of each inhibitory neuron at each frame of the recording (nb neurons * nb frames)
+        A 2D numpy.ndarray of the zscore of each inhibitory neuron at each frame of the recording
+        (nb neurons * nb frames)
     """
-    def __init__(self, input_path, starting_trial, foldername, rois, tuple_mesc=(0, 0), correction=True,
+    def __init__(self, input_path, starting_trial, rois_path, tuple_mesc=(0, 0), correction=True,
                  cache=True, analog_sf=10000):
         """
         Parameters
@@ -367,10 +375,8 @@ class RecordingAmplDet(Recording):
             Path to the folder that contains the input files.
         starting_trial : int
             The starting trial number.
-        foldername : str
-            Name of the folder containing the files.
-        rois: panda.Dataframe
-            Excel ROI file imported as a pandas dataframe.
+        rois_path: str
+            Path to the Excel ROI file.
         tuple_mesc : tuple, optional
             Tuple representing the measurements per second (mesc) values for extraction, default is (0, 0).
         correction : bool, optional
@@ -380,7 +386,7 @@ class RecordingAmplDet(Recording):
         analog_sf : int, optional
             Sampling frequency of the analog data, default is 10000.
         """
-        super().__init__(input_path, foldername, rois, cache)
+        super().__init__(input_path, rois_path, cache=cache)
         self.xls = pd.read_excel(input_path + 'bpod.xls', header=None)
         self.stim_time = []
         self.stim_ampl = []
@@ -452,8 +458,8 @@ class RecordingAmplDet(Recording):
 
         Note
         -------
-        Get the ITI2, stimulus and reward time from the excel
-        Synchronize the ITI2 from the excel with the ITI from the analog
+        Get the ITI2, stimulus and reward time from the Excel
+        Synchronize the ITI2 from the Excel with the ITI from the analog
 
 
         Parameters
@@ -611,7 +617,6 @@ class RecordingAmplDet(Recording):
 
 
 if __name__ == '__main__':
-    import pandas as pd
     import math
     import percephone.plts.heatmap as hm
 
