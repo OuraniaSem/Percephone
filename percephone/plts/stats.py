@@ -25,6 +25,22 @@ light_ko_color = "#ff8080"
 font_s = 30
 
 
+def stat_boxplot(sb_wt, sb_ko, ylabel):
+    print(ylabel)
+    data_wt = sb_wt
+    data_ko = sb_ko
+    print(ss.shapiro(data_wt))
+    print(ss.shapiro(data_ko))
+    stat, pvalue_WT = ss.shapiro(data_wt)
+    stat, pvalue_KO = ss.shapiro(data_ko)
+    if pvalue_WT > 0.05 and pvalue_KO > 0.05:
+        stat, pvalue = ss.ttest_ind(data_wt, data_ko)
+        print(ss.ttest_ind(data_wt, data_ko))
+    else:
+        stat, pvalue = ss.mannwhitneyu(data_wt, data_ko)
+        print(ss.mannwhitneyu(data_wt, data_ko))
+    return pvalue
+
 def boxplot(ax, wt, ko, ylabel, ylim=[]):
     """
     create boxplot for two data groups.
@@ -70,7 +86,7 @@ def boxplot(ax, wt, ko, ylabel, ylim=[]):
         ax.set_ylim(ylim)
     else:
         max_y = max(max(wt), max(ko))
-        lim_max = max(int(max_y*0.15 + max_y), int(math.ceil(max_y / 2 )) * 2)
+        lim_max = max(int(max_y*0.15 + max_y), int(math.ceil(max_y / 2)) * 2)
         min_y = min(min(wt), min(ko))
         lim_inf = min(0, min_y + 0.15*min_y)
         ax.set_ylim(ymin=lim_inf, ymax=lim_max)
@@ -84,21 +100,7 @@ def boxplot(ax, wt, ko, ylabel, ylim=[]):
     y, col = max_data + 0.10 * abs(max_data), 'k'
     ax.plot([x_1, x_2], [y, y], lw=3, c=col)
 
-    def stat_boxplot(sb_wt, sb_ko, ylabel):
-        print(ylabel)
-        data_wt = sb_wt
-        data_ko = sb_ko
-        print(ss.shapiro(data_wt))
-        print(ss.shapiro(data_ko))
-        stat, pvalue_WT = ss.shapiro(data_wt)
-        stat, pvalue_KO = ss.shapiro(data_ko)
-        if pvalue_WT > 0.05 and pvalue_KO > 0.05:
-            stat, pvalue = ss.ttest_ind(data_wt, data_ko)
-            print(ss.ttest_ind(data_wt, data_ko))
-        else:
-            stat, pvalue = ss.mannwhitneyu(data_wt, data_ko)
-            print(ss.mannwhitneyu(data_wt, data_ko))
-        return pvalue
+
     pval = stat_boxplot(wt, ko, ylabel)
     if pval < 0.001:
         sig_symbol = '***'
@@ -370,3 +372,81 @@ def boxplot_anova(group1_data, group2_data, group3_data, lim_y, label_y, filenam
     plt.text((x1 + x3) * .5, y + 8 * h, annot_text[1], ha='center', va='bottom', color=col, weight='bold')
     fig.tight_layout()
     # fig.savefig(filename)
+
+
+def boxplot_3_conditions(group1_data, group2_data, lim_y, label_y, filename, color1, color2, title="", thickformater=True):
+    """
+    group1_data: list of 3 lists, one list per condition
+    group2_data:  list of 3 lists, one list per condition
+    Returns
+    -------
+    object
+    """
+    linewidth = 5
+
+    fig, axs = plt.subplots(1, 3, figsize=(14, 8), sharey="all")
+    for i, ax in enumerate(axs.flat):
+        bx = ax.boxplot([group1_data[i],group2_data[i]],
+                    positions=[0.15, 0.40],
+                    showfliers=False,
+                    widths=0.2,
+                    boxprops=dict(linewidth=linewidth, color=color2),
+                    whiskerprops=dict(color=color2, linewidth=linewidth),
+                    capprops=dict(color=color2, linewidth=linewidth),
+                    medianprops=dict(color=color2, linewidth=linewidth),
+                    meanline=True,
+                    showmeans=True)
+        bx["boxes"][0].set(color=color1, linewidth=linewidth)
+        bx["whiskers"][0].set(color=color1, linewidth=linewidth)
+        bx["whiskers"][1].set(color=color1, linewidth=linewidth)
+        bx["caps"][0].set(color=color1, linewidth=linewidth)
+        bx["caps"][1].set(color=color1, linewidth=linewidth)
+        bx["medians"][0].set(color=color1, linewidth=linewidth)
+        bx["means"][0].set(linewidth=linewidth)
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
+        ax.set_xticks([0.15, 0.40], ['', ""])
+        y = group1_data[i]
+        x = np.random.normal(0.15, 0.02, size=len(y))
+        y1 = group2_data[i]
+        x1 = np.random.normal(0.40, 0.02, size=len(y1))
+        ax.plot(x1, y1, ".", alpha=0.5, ms=28, markerfacecolor='none', markeredgecolor=color2, markeredgewidth=4)
+        ax.plot(x, y, ".", alpha=0.5, ms=28, markerfacecolor='none', markeredgecolor=color1, markeredgewidth=4)
+        if i >0:
+            ax.spines['left'].set_visible(False)
+            ax.tick_params(axis="y", which="both", left=False)
+        ax.tick_params(axis="x", which="both", bottom=False, top=False)
+        pval = stat_boxplot(group1_data[i],group2_data[i], "group comp")
+        if pval < 0.001:
+            sig_symbol = '***'
+        elif pval < 0.01:
+            sig_symbol = '**'
+        elif pval < 0.05:
+            sig_symbol = '*'
+        else:
+            sig_symbol = 'n.s'
+        x1, x2, = 0.15, 0.40
+        max_d = np.concatenate([np.concatenate(group1_data), np.concatenate(group2_data)]).max()
+        y, h, col = max_d + abs(0.10 * max_d), 0.025 * abs(max_d), 'k'
+        axs[i].plot([x1, x1, x2, x2], [y, y + h, y + h, y], lw=3, c=col)
+        axs[i].text((x1 + x2) * .5, y + h, sig_symbol, ha='center', va='bottom', color=col, weight='bold', fontsize=20)
+
+    axs[0].set_ylabel(label_y)
+    axs[0].yaxis.set_minor_locator(AutoMinorLocator(2))
+    axs[0].tick_params(which='both', width=4)
+    axs[0].tick_params(which='major', length=10)
+    axs[0].tick_params(which='minor', length=8)
+
+    plt.ylim(lim_y)
+    plt.subplots_adjust(left=None, bottom=None, right=None, top=None, wspace=-0.2, hspace=None)
+    # fig.tight_layout(pad=0.1)
+    # fig.savefig(filename)
+
+
+if __name__ == '__main__':
+    group1 = [[12, 3, 4, 4, 8, 8, 8], [8, 8, 9, 12], [14, 10, 5, 8, 10]]
+    group2 = [[8, 8, 9, 12], [12, 3, 4, 4, 8, 8, 8], [14, 10, 5, 8, 10]]
+    boxplot_3_conditions(group1, group2, [0, 20],"test", "test.png",
+                         color1=wt_color,
+                         color2=ko_color)

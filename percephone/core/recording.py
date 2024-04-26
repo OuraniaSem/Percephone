@@ -423,6 +423,8 @@ class RecordingAmplDet(Recording):
             self.analog = pd.read_csv(input_path + 'analog.txt', sep="\t", header=None)
             if analog_sf == 10000:
                 self.analog[0] = (self.analog[0] * 10).astype(int)
+            if analog_sf == 1000:
+                self.analog[0] = (self.analog[0]).astype(int)
             self.synchronization_with_iti(starting_trial, analog_sf, correction)
 
         self.zscore_exc = self.zscore(self.df_f_exc)
@@ -538,7 +540,10 @@ class RecordingAmplDet(Recording):
             for lick in licks_time_analog:
                 index_licks = self.analog.index[self.analog['t'] == lick].to_list()
                 if len(index_licks) != 0:
-                    self.lick_time.append(int((index_licks[0] / analog_s) * self.sf))
+                    lick_time = int((index_licks[0] / analog_s) * self.sf)
+                    if correction:
+                        lick_time = lick_time - int(((1 / self.sf) * (index_licks[0] / analog_s)) * (1 / 3))
+                    self.lick_time.append(lick_time)
             if len(index_reward) != 0:
                 self.reward_time.append(int((index_reward[0] / analog_s) * self.sf))
             if len(index_timeout) != 0:
@@ -617,13 +622,18 @@ class RecordingAmplDet(Recording):
 
 
 if __name__ == '__main__':
-    import math
     import percephone.plts.heatmap as hm
 
     directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
-    roi_info = pd.read_excel(directory + "/FmKO_ROIs&inhibitory.xlsx")
-    folder = '20220715_4456_00_synchro'
-    path = directory + folder + "/"
-    rec = RecordingAmplDet(path, 0, folder, roi_info, analog_sf=10000, cache=False, correction=False)
-    hm.plot_dff_stim_detected(rec, rec.zscore_exc)
+    path = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
+    roi_info = directory + "/FmKO_ROIs&inhibitory.xlsx"
+    # folder = "20240404_6601_04_synchro_temp"
+    folder = "20240404_6602_01_synchro_temp"
+    # path_to_mesc = path + folder + "/20240404_6601_det.mesc"
+    path_to_mesc = path + "/20240404_6602_det.mesc"
+
+    extract_analog_from_mesc(path_to_mesc, (0, 1), 30.9609, 10000, path + folder + "/")
+    rec = RecordingAmplDet(path + folder + "/", 0, roi_info, analog_sf=1000, cache=False, correction=False)
     hm.intereactive_heatmap(rec, rec.df_f_exc)
+
+
