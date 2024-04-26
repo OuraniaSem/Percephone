@@ -29,7 +29,7 @@ def read_info(folder_name, rois):
             row["Frame Rate (Hz)"].values[0], row["Genotype"].values[0], row["Threshold"].values[0])
 
 
-def extract_analog_from_mesc(path_mesc, tuple_mesc, frame_rate, savepath=""):
+def extract_analog_from_mesc(path_mesc, tuple_mesc, frame_rate,analog_fs =20000, savepath=""):
     """
     Extract analog from mesc file for ITI curve. Save it as analog.txt in order to be used by percephone
     Parameters
@@ -41,13 +41,14 @@ def extract_analog_from_mesc(path_mesc, tuple_mesc, frame_rate, savepath=""):
     savepath:
         path where to save the analog.txt
     """
+    factor = int(analog_fs /10000)
     print("Analog signal extraction from .mesc file.")
     file = h5py.File(path_mesc)
     dset = file['MSession_' + str(tuple_mesc[0])]
     unit = dset['MUnit_' + str(tuple_mesc[1])]
-    iti = unit['Curve_3']
+    iti = unit['Curve_2']  # 3
     iti_curve = np.array(iti['CurveDataYRawData'])
-    timings = unit['Curve_1']
+    timings = unit['Curve_0']  # 1
     timing_curve = np.array(timings['CurveDataYRawData'])
 
     fig, ax = plt.subplots(1, 1, figsize=(18, 10))
@@ -58,44 +59,36 @@ def extract_analog_from_mesc(path_mesc, tuple_mesc, frame_rate, savepath=""):
     print(end_timings)
     end_timings_frames = len(timing_curve)*frame_rate
     print(end_timings_frames)
-    end_timings_iti = len(iti_curve[::2])/10
+    end_timings_iti = len(iti_curve[::factor])/10
     print(end_timings_iti)
-    nb_points = int(len(iti_curve[::2]))  # int(end_timings_frames*10)  #int(end_timings*10)
+    nb_points = int(len(iti_curve[::factor])) # int(end_timings_frames*10)  #int(end_timings*10)
     timings = np.linspace(0,  end_timings_frames, nb_points)
     analog_np = np.zeros((4, nb_points))
     analog_np[0] = timings
     analog_np[1] = analog_np[1]  # no stim analog in the new format
     analog_np[2] = timings
-    iti_curve_ = iti_curve[::2]
+    iti_curve_ = iti_curve[::factor]
     analog_np[3] = iti_curve_[:nb_points]
     analog_t = np.transpose(analog_np)
     np.savetxt(savepath + 'analog.txt', analog_t, fmt='%.8g', delimiter="\t")
+    print(f"len analog : {analog_np.shape}")
+    print(f"last analog : {analog_np[:,-1]}")
     print("Analog saved.")
 
 
 if __name__ == '__main__':
-    folder = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
-    roi_info = pd.read_excel(folder + "/FmKO_ROIs&inhibitory.xlsx")
-    # filename = "20231009_5896_04_synchro/"
-    # path_mesc = folder + "20231009_5896_det.mesc"
-    # tuple_mesc = (0, 4, 0)
-    # frame_rate = 30.9609
-    # extract_analog_from_mesc(path_mesc, tuple_mesc, frame_rate, savepath=folder + filename)
-    #
     import percephone.core.recording as pc
-    # import percephone.plts.heatmap as hm
-    # rec = pc.RecordingAmplDet(folder+filename, 0, filename, roi_info, cache=False)
-    # hm.plot_dff_stim_detected_lick(rec, rec.zscore_exc, str(rec.filename))
+    import percephone.plts.heatmap as hm
 
+    path = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
+    roi_info = path + "/FmKO_ROIs&inhibitory.xlsx"
+    # folder = "20240404_6601_04_synchro_temp"
+    # folder = "20240404_6602_01_synchro_temp"
+    # path_to_mesc = path + "/20240404_6602_det.mesc"
+    folder = "20231009_5896_04_synchro"
+    path_to_mesc = path + "20231009_5896_det.mesc"
 
+    extract_analog_from_mesc(path_to_mesc, (0, 4), 30.9609, 20000, path + folder + "/")
+    rec = pc.RecordingAmplDet(path + folder + "/", 0, roi_info, analog_sf=10000, cache=False, correction=False)
+    hm.intereactive_heatmap(rec, rec.zscore_exc)
 
-    filename= "20220715_4456_00_synchro/"
-    rec = pc.RecordingAmplDet(folder + filename, 0, filename, roi_info, cache=False)
-    F = np.load(folder + filename + "df_f_exc.npy")
-    print(np.argmax(np.mean(F,axis=1)))
-    F = np.delete(F, 29, 0)
-    print(np.argmax(np.mean(F, axis=1)))
-    # plt.plot(F[1])
-    # plt.plot(F[24])
-    # plt.plot(F[40])
-    np.save(folder + filename + "df_f_exc.npy", F)
