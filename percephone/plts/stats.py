@@ -25,21 +25,92 @@ light_ko_color = "#ff8080"
 font_s = 30
 
 
-def stat_boxplot(sb_wt, sb_ko, ylabel):
-    print(ylabel)
-    data_wt = sb_wt
-    data_ko = sb_ko
-    print(ss.shapiro(data_wt))
-    print(ss.shapiro(data_ko))
-    stat, pvalue_WT = ss.shapiro(data_wt)
-    stat, pvalue_KO = ss.shapiro(data_ko)
-    if pvalue_WT > 0.05 and pvalue_KO > 0.05:
-        stat, pvalue = ss.ttest_ind(data_wt, data_ko)
-        print(ss.ttest_ind(data_wt, data_ko))
+def symbol_pval(pval):
+    """
+    Returns the significance symbol associated with the given pvalue.
+
+    Parameters
+    ----------
+    pval : float
+        The p-value used to determine the significance level.
+
+    Returns
+    -------
+    sig_symbol : str
+        The symbol representing the significance level. '***' denotes extremely significant,
+        '**' denotes very significant, '*' denotes significant, and 'n.s' denotes not significant.
+    """
+    if pval < 0.001:
+        sig_symbol = '***'
+    elif pval < 0.01:
+        sig_symbol = '**'
+    elif pval < 0.05:
+        sig_symbol = '*'
     else:
-        stat, pvalue = ss.mannwhitneyu(data_wt, data_ko)
-        print(ss.mannwhitneyu(data_wt, data_ko))
+        sig_symbol = 'n.s'
+    return sig_symbol
+
+
+def stat_boxplot(group_1, group_2, ylabel, paired=False):
+    """
+    Returns the p-value for the comparison between 2 independant or paired sample's distribution.
+
+    Parameters
+    ----------
+    group_1 : array_like
+        The data for the first group.
+    group_2 : array_like
+        The data for the second group.
+    ylabel : str
+        The label for the y-axis of the boxplot.
+    paired : bool, optional
+        Boolean indicating if the 2 samples are paired or not
+
+    Returns
+    -------
+    pvalue : float
+        The p-value resulting from the statistical test.
+
+    Notes
+    -----
+    * The threshold pvalue used for tests is 0.05.
+    * The Shapiro-Wilk test is used to test the normality of the distribution of each sample.
+    * For independant samples:
+        * If the normality can be assumed, the Levene test is used to test the equality of the samples' variance. If the
+    variances are equal a standard t-test is used, otherwise, a Welch's t-test is performed.
+        * If the normality can't be assumed, a Mann-Whitney U test is performed.
+    * For paired samples: If the normality can be assumed a standard t-test is used, otherwise, a Wilcoxon signed-rank
+    test is performed.
+    """
+    print(f"--- {ylabel} ---")
+    print(ss.shapiro(group_1))
+    print(ss.shapiro(group_2))
+    # Normality of the distribution testing
+    pvalue_n1 = ss.shapiro(group_1).pvalue
+    pvalue_n2 = ss.shapiro(group_2).pvalue
+    if pvalue_n1 > 0.05 and pvalue_n2 > 0.05:   # Normality of the samples
+        if paired:
+            pvalue = ss.ttest_rel(group_1, group_2).pvalue
+            print(ss.ttest_rel(group_1, group_2))
+        else:
+            # Equality of the variances testing
+            pvalue_v = ss.levene(group_1, group_2).pvalue
+            print(ss.levene(group_1, group_2))
+            if pvalue_v > 0.05:
+                pvalue = ss.ttest_ind(group_1, group_2).pvalue
+                print(f"Equal variances :{ss.ttest_ind(group_1, group_2)}")
+            else:
+                pvalue = ss.ttest_ind(group_1, group_2, equal_var=False).pvalue
+                print(f"Unequal variances: {ss.ttest_ind(group_1, group_2)}")
+    else:   # Non-Normality of the samples
+        if paired:
+            pvalue = ss.wilcoxon(group_1, group_2).pvalue
+            print(ss.wilcoxon(group_1, group_2))
+        else:
+            pvalue = ss.mannwhitneyu(group_1, group_2).pvalue
+            print(ss.mannwhitneyu(group_1, group_2))
     return pvalue
+
 
 def boxplot(ax, wt, ko, ylabel, ylim=[]):
     """
@@ -100,16 +171,9 @@ def boxplot(ax, wt, ko, ylabel, ylim=[]):
     y, col = max_data + 0.10 * abs(max_data), 'k'
     ax.plot([x_1, x_2], [y, y], lw=3, c=col)
 
+    pval = stat_boxplot(wt, ko, ylabel, paired=False)
+    sig_symbol = symbol_pval(pval)
 
-    pval = stat_boxplot(wt, ko, ylabel)
-    if pval < 0.001:
-        sig_symbol = '***'
-    elif pval < 0.01:
-        sig_symbol = '**'
-    elif pval < 0.05:
-        sig_symbol = '*'
-    else:
-        sig_symbol = 'n.s'
     ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_s-8, weight='bold')
     ax.tick_params(axis='y', labelsize=font_s)
     # plt.tick_params(axis="x", which="both", bottom=False)
@@ -189,14 +253,8 @@ def barplot(wt, ko, ylabel):
         return pvalue
 
     pval = stat_varplot(wt, ko, ylabel)
-    if pval < 0.001:
-        sig_symbol = '***'
-    elif pval < 0.01:
-        sig_symbol = '**'
-    elif pval < 0.05:
-        sig_symbol = '*'
-    else:
-        sig_symbol = 'ns'
+    sig_symbol = symbol_pval(pval)
+
     ax.text((x1 + x2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, weight='bold')
 
 
@@ -258,30 +316,9 @@ def paired_boxplot(ax, det, undet, ylabel, title, ylim=[],colors = [ko_color,lig
     y, col = max_data + 0.10 * abs(max_data), 'k'
     ax.plot([x_1, x_2], [y, y], lw=3, c=col)
 
-    def stat_paired_boxplot(sb_det, sb_undet, ylabel):
-        print(ylabel)
-        data_det = sb_det
-        data_undet = sb_undet
-        print(ss.shapiro(data_det))
-        print(ss.shapiro(data_undet))
-        stat, pvalue_det = ss.shapiro(data_det)
-        stat, pvalue_undet = ss.shapiro(data_undet)
-        if pvalue_det > 0.05 and pvalue_undet > 0.05:
-            stat, pvalue = ss.ttest_rel(data_det, data_undet)
-            print(ss.ttest_rel(data_det, data_undet))
-        else:
-            stat, pvalue = ss.wilcoxon(data_det, data_undet)
-            print(ss.wilcoxon(data_det, data_undet))
-        return pvalue
-    pval = stat_paired_boxplot(det, undet, ylabel)
-    if pval < 0.001:
-        sig_symbol = '***'
-    elif pval < 0.01:
-        sig_symbol = '**'
-    elif pval < 0.05:
-        sig_symbol = '*'
-    else:
-        sig_symbol = 'ns'
+    pval = stat_boxplot(det, undet, ylabel, paired=True)
+    sig_symbol = symbol_pval(pval)
+
     ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_s-8, weight='bold')
     ax.set_xticks([0.15, 0.40], ['', ""])
     ax.tick_params(axis="x", which="both", bottom=False)
@@ -417,15 +454,9 @@ def boxplot_3_conditions(group1_data, group2_data, lim_y, label_y, filename, col
             ax.spines['left'].set_visible(False)
             ax.tick_params(axis="y", which="both", left=False)
         ax.tick_params(axis="x", which="both", bottom=False, top=False)
-        pval = stat_boxplot(group1_data[i],group2_data[i], "group comp")
-        if pval < 0.001:
-            sig_symbol = '***'
-        elif pval < 0.01:
-            sig_symbol = '**'
-        elif pval < 0.05:
-            sig_symbol = '*'
-        else:
-            sig_symbol = 'n.s'
+        pval = stat_boxplot(group1_data[i], group2_data[i], "group comp")
+        sig_symbol = symbol_pval(pval)
+
         x1, x2, = 0.15, 0.40
         max_d = np.concatenate([np.concatenate(group1_data), np.concatenate(group2_data)]).max()
         y, h, col = max_d + abs(0.10 * max_d), 0.025 * abs(max_d), 'k'
