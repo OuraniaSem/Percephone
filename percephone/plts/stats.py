@@ -411,7 +411,15 @@ def boxplot_anova(group1_data, group2_data, group3_data, lim_y, label_y, filenam
     # fig.savefig(filename)
 
 
-def boxplot_3_conditions(group1_data, group2_data, lim_y, label_y, filename, color1, color2, title="", thickformater=True):
+def boxplot_3_conditions(group1_data, group2_data, cond_labels=["A", "B", "C"],
+                         title="",
+                         lim_y="auto",
+                         label_y=None,
+                         y_percent=False,
+                         color1=wt_color,
+                         color2=ko_color,
+                         legend_labels=None,
+                         filename=None):
     """
     group1_data: list of 3 lists, one list per condition
     group2_data:  list of 3 lists, one list per condition
@@ -424,15 +432,15 @@ def boxplot_3_conditions(group1_data, group2_data, lim_y, label_y, filename, col
     fig, axs = plt.subplots(1, 3, figsize=(14, 8), sharey="all")
     for i, ax in enumerate(axs.flat):
         bx = ax.boxplot([group1_data[i],group2_data[i]],
-                    positions=[0.15, 0.40],
-                    showfliers=False,
-                    widths=0.2,
-                    boxprops=dict(linewidth=linewidth, color=color2),
-                    whiskerprops=dict(color=color2, linewidth=linewidth),
-                    capprops=dict(color=color2, linewidth=linewidth),
-                    medianprops=dict(color=color2, linewidth=linewidth),
-                    meanline=True,
-                    showmeans=True)
+                        positions=[0.15, 0.40],
+                        showfliers=False,
+                        widths=0.2,
+                        boxprops=dict(linewidth=linewidth, color=color2),
+                        whiskerprops=dict(color=color2, linewidth=linewidth),
+                        capprops=dict(color=color2, linewidth=linewidth),
+                        medianprops=dict(color=color2, linewidth=linewidth),
+                        meanline=True,
+                        showmeans=True)
         bx["boxes"][0].set(color=color1, linewidth=linewidth)
         bx["whiskers"][0].set(color=color1, linewidth=linewidth)
         bx["whiskers"][1].set(color=color1, linewidth=linewidth)
@@ -440,21 +448,25 @@ def boxplot_3_conditions(group1_data, group2_data, lim_y, label_y, filename, col
         bx["caps"][1].set(color=color1, linewidth=linewidth)
         bx["medians"][0].set(color=color1, linewidth=linewidth)
         bx["means"][0].set(linewidth=linewidth)
+        bx["means"][1].set(linewidth=linewidth)
         ax.spines['right'].set_visible(False)
         ax.spines['top'].set_visible(False)
         ax.spines['bottom'].set_visible(False)
         ax.set_xticks([0.15, 0.40], ['', ""])
+        ax.set_xlabel(cond_labels[i], fontsize=font_s)
+        ax.grid(False)
+        ax.set_facecolor("white")
         y = group1_data[i]
         x = np.random.normal(0.15, 0.02, size=len(y))
         y1 = group2_data[i]
         x1 = np.random.normal(0.40, 0.02, size=len(y1))
         ax.plot(x1, y1, ".", alpha=0.5, ms=28, markerfacecolor='none', markeredgecolor=color2, markeredgewidth=4)
         ax.plot(x, y, ".", alpha=0.5, ms=28, markerfacecolor='none', markeredgecolor=color1, markeredgewidth=4)
-        if i >0:
+        if i > 0:
             ax.spines['left'].set_visible(False)
             ax.tick_params(axis="y", which="both", left=False)
         ax.tick_params(axis="x", which="both", bottom=False, top=False)
-        pval = stat_boxplot(group1_data[i], group2_data[i], "group comp")
+        pval = stat_boxplot(group1_data[i], group2_data[i], f"{cond_labels[i]} group comp")
         sig_symbol = symbol_pval(pval)
 
         x1, x2, = 0.15, 0.40
@@ -463,21 +475,39 @@ def boxplot_3_conditions(group1_data, group2_data, lim_y, label_y, filename, col
         axs[i].plot([x1, x1, x2, x2], [y, y + h, y + h, y], lw=3, c=col)
         axs[i].text((x1 + x2) * .5, y + h, sig_symbol, ha='center', va='bottom', color=col, weight='bold', fontsize=20)
 
-    axs[0].set_ylabel(label_y)
+    axs[0].set_ylabel(label_y, fontsize=font_s)
+    axs[0].tick_params(axis='y', labelsize=font_s)
+    axs[0].yaxis.set_visible(True)
     axs[0].yaxis.set_minor_locator(AutoMinorLocator(2))
+    if y_percent:
+        axs[0].yaxis.set_major_formatter(mpl.ticker.PercentFormatter(1.0))
     axs[0].tick_params(which='both', width=4)
     axs[0].tick_params(which='major', length=10)
     axs[0].tick_params(which='minor', length=8)
 
-    plt.ylim(lim_y)
+    if legend_labels is not None:
+        hB, = ax.plot([1, 1], wt_color)
+        hR, = ax.plot([1, 1], ko_color)
+        ax.legend((hB, hR), legend_labels)
+        hB.set_visible(False)
+        hR.set_visible(False)
+
+    if lim_y != "auto":
+        plt.ylim(lim_y)
     plt.subplots_adjust(left=None, bottom=None, right=None, top=None, wspace=-0.2, hspace=None)
+    plt.yticks(fontsize=30)
+    plt.suptitle(title)
+
+    if filename is not None:
+        fig.savefig(filename)
+    plt.show()
     # fig.tight_layout(pad=0.1)
-    # fig.savefig(filename)
 
 
 if __name__ == '__main__':
     group1 = [[12, 3, 4, 4, 8, 8, 8], [8, 8, 9, 12], [14, 10, 5, 8, 10]]
     group2 = [[8, 8, 9, 12], [12, 3, 4, 4, 8, 8, 8], [14, 10, 5, 8, 10]]
-    boxplot_3_conditions(group1, group2, [0, 20],"test", "test.png",
-                         color1=wt_color,
-                         color2=ko_color)
+    boxplot_3_conditions(group1, group2, ["Spe", "Sen", "Acc"],
+                         legend_labels=("WT", "KO-Hypo"),
+                         title="Nice plot",
+                         y_percent=True)
