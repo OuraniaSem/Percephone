@@ -7,23 +7,22 @@ import matplotlib
 import numpy as np
 from scipy.cluster.hierarchy import dendrogram, linkage
 
-matplotlib.use("Qt5Agg")
-import matplotlib.pyplot as plt
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-
-plt.switch_backend("Qt5Agg")
-# plt.rcParams['font.sans-serif'] = ['Helvetica Neue']
-plt.rcParams['font.size'] = 40
-plt.rcParams['axes.linewidth'] = 3
-plt.rcParams['svg.fonttype'] = 'none'
-plt.rcParams['lines.linewidth'] = 3
-plt.rcParams["xtick.major.width"] = 3
-plt.rcParams["ytick.major.width"] = 3
-
-sampling_rate = 30.9609  # Hz
-wt_color = "#326993"
-ko_color = "#CC0000"
-font_s=30
+# matplotlib.use("Qt5Agg")
+# import matplotlib.pyplot as plt
+#
+# plt.switch_backend("Qt5Agg")
+# # plt.rcParams['font.sans-serif'] = ['Helvetica Neue']
+# plt.rcParams['font.size'] = 30
+# plt.rcParams['axes.linewidth'] = 3
+# plt.rcParams['svg.fonttype'] = 'none'
+# plt.rcParams['lines.linewidth'] = 3
+# plt.rcParams["xtick.major.width"] = 3
+# plt.rcParams["ytick.major.width"] = 3
+#
+# sampling_rate = 30.9609  # Hz
+# wt_color = "#326993"
+# ko_color = "#CC0000"
+font_s=10
 
 def psycho_like_plot(rec, roi_info, ax):
     seq = roi_info["Stimulus detection"][roi_info["Number"] == rec.filename].values
