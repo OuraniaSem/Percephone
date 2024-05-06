@@ -620,6 +620,34 @@ class RecordingAmplDet(Recording):
             with open(self.input_path + name_model + ".json", "w") as jsn:
                 json.dump(to_save_list, jsn)
 
+    def stim_ampl_filter(self, stim_ampl="all"):
+        """
+        Returns a vector of booleans to select the stimulations of desired amplitude.
+
+        Parameters
+        ----------
+        stim_ampl : str or list[int]
+            The amplitudes of stimulation that we want to select. List of absolute values or relative to threshold
+            (threshold, supra, sub or all)
+
+        Returns
+        -------
+        numpy.ndarray[bool]
+        """
+        all_ampl = np.arange(0, 14, 2)
+        if stim_ampl == "threshold":
+            amplitudes = self.threshold
+        elif stim_ampl == "supra":
+            amplitudes = all_ampl[all_ampl >= self.threshold]
+        elif stim_ampl == "sub":
+            amplitudes = all_ampl[all_ampl < self.threshold]
+        elif stim_ampl == "all":
+            amplitudes = all_ampl
+        else:
+            amplitudes = np.array(stim_ampl)
+        selected_stim = np.isin(self.stim_ampl, amplitudes)
+        return selected_stim
+
 
 if __name__ == '__main__':
     import percephone.plts.heatmap as hm
