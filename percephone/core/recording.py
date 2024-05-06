@@ -656,12 +656,13 @@ if __name__ == '__main__':
     path = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
     roi_info = directory + "/FmKO_ROIs&inhibitory.xlsx"
     # folder = "20240404_6601_04_synchro_temp"
-    folder = "20240404_6602_01_synchro_temp"
+    # folder = "20240404_6602_01_synchro_temp"
+    folder = "20240405_6601_02_synchro_temp"
     # path_to_mesc = path + folder + "/20240404_6601_det.mesc"
-    path_to_mesc = path + "/20240404_6602_det.mesc"
+    path_to_mesc = path + "/20240405_6601_det.mesc"
 
-    extract_analog_from_mesc(path_to_mesc, (0, 1), 30.9609, 10000, path + folder + "/")
-    rec = RecordingAmplDet(path + folder + "/", 0, roi_info, analog_sf=1000, cache=False, correction=False)
+    extract_analog_from_mesc(path_to_mesc, (0, 2), 30.9609, 20000, path + folder + "/")
+    rec = RecordingAmplDet(path + folder + "/", 0, roi_info, analog_sf=10000, cache=False, correction=False)
     hm.intereactive_heatmap(rec, rec.df_f_exc)
 
 
