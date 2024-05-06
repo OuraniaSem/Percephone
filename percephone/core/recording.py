@@ -633,6 +633,7 @@ class RecordingAmplDet(Recording):
         Returns
         -------
         numpy.ndarray[bool]
+            A vector of booleans to select the stimulations of desired amplitude.
         """
         all_ampl = np.arange(0, 14, 2)
         if stim_ampl == "threshold":
