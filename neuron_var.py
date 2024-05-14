@@ -52,6 +52,8 @@ def build_row(zscore, start, end, estimator):
 
 
 def get_zscore(rec, exc_neurons=True, inh_neurons=False, time_span="stim", window=0.5, estimator=None, sort=False, amp_sort=False):
+    if amp_sort:
+        assert sort
     if sort or amp_sort:
         assert time_span == "stim" or time_span == "pre_stim"
     # Retrieving zscore
@@ -64,6 +66,9 @@ def get_zscore(rec, exc_neurons=True, inh_neurons=False, time_span="stim", windo
 
     # Getting the iter range
     iter_range = get_iter_range(rec, time_span)
+
+    # Initializing the list of stim duration and amplitude
+    t_stim = list(rec.stim_durations)
 
     # Initializing X
     if sort:
@@ -104,27 +109,34 @@ def get_zscore(rec, exc_neurons=True, inh_neurons=False, time_span="stim", windo
                     t_undet.append(rec.stim_durations[i])
         else:
             X = np.row_stack((X, new_row))
+
     if sort:
         if amp_sort:
             for a in all_amp:
                 X_det = np.row_stack((X_det, X_amp_det[a]))
                 X_undet = np.row_stack((X_undet, X_amp_undet[a]))
-                t_det.append(t_amp_det[a])
-                t_undet.append(t_amp_undet[a])
+                t_det.extend(t_amp_det[a])
+                t_undet.extend(t_amp_undet[a])
 
         X = np.row_stack((X_det, X_undet))
-        t_stim = t_det.append(t_undet)
+        t_stim = t_det + t_undet
+
+    if estimator is not None:
+        if time_span == "stim":
+            X = np.repeat(X, t_stim, axis=0)
+        else:
+            X = np.repeat(X, int(window * rec.sf), axis=0)
     return X.T, t_stim
 
 
-def plot_heatmap(rec, data, type="stim", stim_dur=None, window=0.5, sorted=False, amp_sorted=False):
+def plot_heatmap(rec, data, type="stim", stim_dur=None, window=0.5, sorted=False, amp_sorted=False, estimator=None):
     if stim_dur is None:
         stim_dur = rec.stim_durations
 
     # figure global parameters
     fig, ax = plt.subplots(1, 1, figsize=(18, 10))
     divider = make_axes_locatable(ax)
-    tax1 = divider.append_axes('top', size='10%', pad=0.1, sharex=ax)
+    tax1 = divider.append_axes('top', size='10%', pad=0.1, sharex=ax) if (type == "stim" or type == "pre_stim") else None
     cax = divider.append_axes('right', size='2%', pad=0.1)
     cmap = "inferno"
     extent = [0, data.shape[1], data.shape[0] - 0.5, -0.5]
@@ -136,6 +148,8 @@ def plot_heatmap(rec, data, type="stim", stim_dur=None, window=0.5, sorted=False
         for i in range(rec.stim_time.shape[0]):
             if type == "stim":
                 ampl_vec = [rec.stim_ampl[i]] * int(rec.stim_durations[i])
+            elif type == "pre_stim":
+                ampl_vec = [rec.stim_ampl[i]] * int(window * rec.sf)
             (stim_det if rec.detected_stim[i] else stim_undet).extend(ampl_vec)
         if amp_sorted:
             stim_det.sort()
@@ -144,11 +158,15 @@ def plot_heatmap(rec, data, type="stim", stim_dur=None, window=0.5, sorted=False
     else:
         stim_bar = []
         for i in range(rec.stim_time.shape[0]):
-            stim_bar.append([rec.stim_ampl[i]] * int(rec.stim_durations[i]))
+            if type == "stim":
+                stim_bar.extend([rec.stim_ampl[i]] * int(rec.stim_durations[i]))
+            elif type == "pre_stim":
+                stim_bar.extend([rec.stim_ampl[i]] * int(window * rec.sf))
         stim_array = np.array(stim_bar)
 
-    tax1.imshow(stim_array.reshape(1, -1), cmap=cmap, aspect='auto', interpolation='none', extent=extent)
-    tax1.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
+    if (type == "stim" or type == "pre_stim"):
+        tax1.imshow(stim_array.reshape(1, -1), cmap=cmap, aspect='auto', interpolation='none', extent=extent)
+        tax1.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
 
     # neurons clustering and data display
     Z = linkage(data, 'ward', optimal_ordering=True)
@@ -171,16 +189,21 @@ def plot_heatmap(rec, data, type="stim", stim_dur=None, window=0.5, sorted=False
             ax.vlines(i * int(window * rec.sf), ymin=-0.5, ymax=len(data)-0.5, color='w', linewidth=0.5)
         if sorted:
             ax.vlines(rec.detected_stim.sum() * int(window * rec.sf), ymin=-0.5, ymax=len(data)-0.5, color='b', linewidth=1)
+    else:
+        iterator = len(rec.reward_time) if type == "reward" else (len(rec.timeout_time) if type == "timeout" else 0)
+        for i in range(iterator):
+            ax.vlines(i * int(window * rec.sf), ymin=-0.5, ymax=len(data)-0.5, color='w', linewidth=0.5)
 
     # color scale parameters
     cbar = plt.colorbar(im, cax=cax)
     cbar.ax.tick_params(which='both', width=4)
-    cbar.set_label(r'Z-score')
+    cbar.set_label("Z-score") if estimator is None else cbar.set_label(f"Z-score ({estimator})")
 
     ax.set_ylabel('Neurons')
-    ax.set_xlabel('Frames')
-    tax1.set_title(f"{rec.filename} ({rec.genotype}) - {rec.threshold}")
+    ax.set_xlabel(f"Frames ({type})")
+    tax1.set_title(f"{rec.filename} ({rec.genotype}) - {rec.threshold}") if (type == "stim" or type == "pre_stim") else ax.set_title(f"{rec.filename} ({rec.genotype}) - {rec.threshold}")
 
+    plt.tight_layout()
     plt.show()
 
 
@@ -188,16 +211,23 @@ if __name__ == '__main__':
     # Record import
     plt.ion()
     roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
-    folder = "C:/Users/cvandromme/Desktop/Data/20231104_5881_00_synchro/"
+    folder = "C:/Users/cvandromme/Desktop/Data/20220930_4745_01_synchro/"
     rec = RecordingAmplDet(folder, 0, roi_path, cache=True)
     rec.peak_delay_amp()
     rec.auc()
 
     det_sorting = True
     amp_sorting = True
+    period = "pre_stim"
+    window = 0.5
+    estimator = "Mean"
 
-    data, stim_time = get_zscore(rec, exc_neurons=True, inh_neurons=False, time_span="stim", window=0.5, estimator=None, sort=det_sorting, amp_sort=amp_sorting)
-    plot_heatmap(rec, data, type="stim", stim_dur=stim_time, window=0.5, sorted=det_sorting, amp_sorted=amp_sorting)
+    data, stim_time = get_zscore(rec, exc_neurons=True, inh_neurons=False,
+                                 time_span=period, window=window, estimator=estimator,
+                                 sort=det_sorting, amp_sort=amp_sorting)
+
+    plot_heatmap(rec, data, type=period, stim_dur=stim_time, window=window,
+                 sorted=det_sorting, amp_sorted=amp_sorting, estimator=estimator)
 
 
 
