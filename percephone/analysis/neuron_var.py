@@ -11,6 +11,25 @@ import percephone.plts.heatmap as hm
 
 
 def neuron_mean_std_corr(array, estimator):
+    """
+    Parameters
+    ----------
+    array : np.ndarray
+        The input array or matrix of shape (nb frames * nb neurons)
+
+    estimator : str
+        The type of estimator to use. Available options are "Mean" or "Std". If None is provided, the original array will be returned.
+
+    Returns
+    -------
+    np.ndarray
+        The result of the estimation based on the given estimator. If estimator is "Mean", returns the mean along the
+        specified axis. If estimator is "Std", returns the standard deviation along the specified axis. If estimator is
+        None, returns the original array.
+
+    """
+    if estimator is None:
+        return array
     if estimator == "Mean":
         return np.mean(array, axis=0)
     if estimator == "Std":
@@ -27,7 +46,7 @@ def get_iter_range(rec, time_span):
     return iter_range
 
 
-def get_timepoints(rec, i, time_span, window):
+def get_timepoints(rec, i, time_span, window=0.5):
     if time_span == "stim":
         start = rec.stim_time[i]
         end = rec.stim_time[i] + int(rec.stim_durations[i])
@@ -218,7 +237,7 @@ if __name__ == '__main__':
 
     det_sorting = True
     amp_sorting = True
-    period = "pre_stim"
+    period = "stim"
     window = 0.5
     estimator = "Mean"
 
