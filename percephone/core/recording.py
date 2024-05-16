@@ -367,7 +367,7 @@ class RecordingAmplDet(Recording):
         (nb neurons * nb frames)
     """
     def __init__(self, input_path, starting_trial, rois_path, tuple_mesc=(0, 0), correction=True,
-                 cache=True, analog_sf=10000):
+                 cache=True):
         """
         Parameters
         ----------
@@ -421,10 +421,12 @@ class RecordingAmplDet(Recording):
                     print("No analog.txt either mesc file in the folder!")
                     return
             self.analog = pd.read_csv(input_path + 'analog.txt', sep="\t", header=None)
-            if analog_sf == 10000:
+            if (len(self.analog[0])/10000)>600:
                 self.analog[0] = (self.analog[0] * 10).astype(int)
-            if analog_sf == 1000:
+                analog_sf = 10000
+            else:
                 self.analog[0] = (self.analog[0]).astype(int)
+                analog_sf = 1000
             self.synchronization_with_iti(starting_trial, analog_sf, correction)
 
         self.zscore_exc = self.zscore(self.df_f_exc)
@@ -659,12 +661,12 @@ if __name__ == '__main__':
     # folder = "20240404_6601_04_synchro_temp"
     # folder = "20240404_6602_01_synchro_temp"
     # folder = "20240405_6601_02_synchro_temp"
-    folder = "20231009_5896_04_synchro"
+    folder = "20220715_4456_00_synchro"
     # path_to_mesc = path + folder + "/20240404_6601_det.mesc"
-    path_to_mesc = path + "/20231009_5896_det.mesc"
+    path_to_mesc = path + "/20240408_6609_det.mesc"
 
-    extract_analog_from_mesc(path_to_mesc, (0, 4), 30.9609, 20000, path + folder + "/")
-    rec = RecordingAmplDet(path + folder + "/", 0, roi_info, analog_sf=10000, cache=False, correction=False)
-    hm.intereactive_heatmap(rec, rec.df_f_exc)
+    # extract_analog_from_mesc(path_to_mesc, (0, 0), 30.9609, 20000, path + folder + "/")
+    rec = RecordingAmplDet(path + folder + "/", 0, roi_info, cache=False, correction=False)
+    hm.intereactive_heatmap(rec, rec.zscore_exc)
 
 

@@ -1,5 +1,5 @@
 """Théo Gauvrit 01/03/2024
-Main script to test changes in functions or classe
+IS the prestimulus activity impacting the detection ?
 """
 import numpy as np
 import pandas as pd
@@ -9,52 +9,65 @@ import percephone.plts.behavior as pbh
 import matplotlib
 import percephone.plts.stats as ppt
 import matplotlib.pyplot as plt
-import percephone.analysis.mlr_models as mlr_m
+from multiprocessing import Pool, cpu_count, pool
 plt.rcParams['font.size'] = 10
 plt.rcParams['axes.linewidth'] = 2
 plt.switch_backend("Qt5Agg")
 matplotlib.use("Qt5Agg")
 
+user = "Théo"
 
-directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
-roi_info = pd.read_excel(directory + "/FmKO_ROIs&inhibitory.xlsx")
+if user == "Célien":
+    directory = "C:/Users/cvandromme/Desktop/Data/"
+    roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
+elif user == "Théo":
+    directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
+    roi_path = directory + "/FmKO_ROIs&inhibitory.xlsx"
+
+roi_info = pd.read_excel(roi_path)
 files = os.listdir(directory)
-amp = 10
 files_ = [file for file in files if file.endswith("synchro")]
-y, i = 0, 0
-amps = [2, 6, 4, 4, 4, 8, 4, 4, 12, 8, 6, 12, 12]
-recs = []
-# fig, ax = plt.subplots(4, 7, figsize=(25, 14))
-for file, amp in zip(files_, amps):
-    if os.path.isdir(directory + file):
-        print(file)
-        rec = pc.RecordingAmplDet(directory + file + "/", 0, file, roi_info)
-        print("MLR")
-        # mlr_model, model_name = mlr_m.precise_stim_model(rec)
-        # rec.mlr(mlr_model, model_name)
-        print("baseline analysis")
-        recs.append(rec)
-        rec.responsivity()
 
-#         neurons_activated = rec.matrices["EXC"]["Responsivity"]
-#         trace = rec.df_f_exc[neurons_activated]
-#         #  get all the bsl before stim of the corresponding amp stim
-#         stims_det = rec.stim_time[rec.detected_stim & (rec.stim_ampl == amp)]
-#         bsl = trace[:, np.linspace(stims_det - int(1 * rec.sf), stims_det, int(1 * rec.sf), dtype=int)]
-#         bsl_ = bsl.reshape(len(trace), len(stims_det) * int(1 * rec.sf))
-#         det_bsl = np.mean(bsl_, axis=1)
-#         stims_undet = rec.stim_time[~rec.detected_stim & (rec.stim_ampl == amp)]
-#         bsl = trace[:, np.linspace(stims_undet - int(1 * rec.sf), stims_undet, int(1 * rec.sf), dtype=int)]
-#         bsl_ = bsl.reshape(len(trace), len(stims_undet) * int(1 * rec.sf))
-#         undet_bsl = np.mean(bsl_, axis=1)
-#         if rec.genotype == "WT":
-#             pbh.psycho_like_plot(rec, roi_info, ax[0, i])
-#             ppt.paired_boxplot(ax[1, i], det_bsl, undet_bsl, " std baseline", "AMP: " + str(amp) + " " + str(rec.filename))
-#             i = i + 1
-#         else:
-#             pbh.psycho_like_plot(rec, roi_info, ax[2, y])
-#             ppt.paired_boxplot(ax[3, y], det_bsl, undet_bsl, "std baseline", "AMP: " + str(amp) + " " + str(rec.filename))
-#             y = y + 1
-#
-# np.ravel(ax)[-1].set_axis_off()
-# ax[2, 6].set_axis_off()
+
+def opening_rec(fil, i):
+    rec = pc.RecordingAmplDet(directory + fil + "/", 0, roi_path)
+    return rec
+
+
+workers = cpu_count()
+if user == "Célien":
+    pool = pool.ThreadPool(processes=workers)
+elif user == "Théo":
+    pool = Pool(processes=workers)
+async_results = [pool.apply_async(opening_rec, args=(file, i)) for i, file in enumerate(files_)]
+recs = {ar.get().filename: ar.get() for ar in async_results}
+
+
+def prestim_activity(n_type, ko):
+    wt_det, wt_undet, ko_det, ko_undet = [], [], [], []
+    for rec in recs.values():
+        t_points = rec.stim_time[rec.detected_stim & (rec.stim_ampl == rec.threshold)]
+        t_points_u = rec.stim_time[~rec.detected_stim & (rec.stim_ampl == rec.threshold)]
+        bsl_n_det = np.mean(np.mean(np.var(rec.zscore_exc[:, np.linspace(t_points-15, t_points, 15, dtype=int)], axis=1), axis=1))
+        bsl_n_undet = np.mean(np.mean(np.var(rec.zscore_exc[:, np.linspace(t_points_u-15, t_points_u, 15, dtype=int)], axis=1), axis=1))
+        if rec.genotype == "WT":
+            wt_det.append(bsl_n_det)
+            wt_undet.append(bsl_n_undet)
+        elif rec.genotype =="KO-Hypo":
+            ko_det.append(bsl_n_det)
+            ko_undet.append(bsl_n_undet)
+        elif rec.genotype == "KO" and ko =="KO":
+            ko_det.append(bsl_n_det)
+            ko_undet.append(bsl_n_undet)
+    return wt_det, ko_det, wt_undet, ko_undet
+
+
+fig, axs = plt.subplots(2, 2, figsize=(10, 8))
+for i, type in enumerate(["EXC", "INH"]):
+    wt_det, ko_det, wt_undet, ko_undet = prestim_activity(n_type=type, ko="KO-Hypo")
+    ppt.paired_boxplot(axs[i, 0], wt_det, wt_undet, "Var z score", "", ylim=[0, 1],
+                       colors=[ppt.wt_color, ppt.light_wt_color])
+    ppt.paired_boxplot(axs[i, 1], ko_det, ko_undet, "Var z score", "", ylim=[0, 1])
+    fig.suptitle("Comparaison of neurons activated between detected and undetected for all stimulus")
+    fig.tight_layout()
+
