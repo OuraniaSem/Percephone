@@ -51,7 +51,7 @@ def classification_graph(hit_accuracy, miss_accuracy, title):
 
 def split_data(rec,frame, train_ratio=0.8, stratify=False, seed=None):
     record_dict= {}
-    record_dict["X"] = np.row_stack((rec.zscore_exc[:, rec.stim_time+frame], rec.zscore_inh[:, rec.stim_time+frame])).T
+    record_dict["X"] = np.row_stack((rec.df_f_exc[:, rec.stim_time+frame], rec.df_f_inh[:, rec.stim_time+frame])).T
     record_dict["y"] = rec.detected_stim
     if stratify:
         record_dict["X_train"], record_dict["X_test"], record_dict["y_train"], record_dict["y_test"] = train_test_split(record_dict["X"], record_dict["y"],

@@ -175,7 +175,7 @@ def boxplot(ax, wt, ko, ylabel, ylim=[]):
     sig_symbol = symbol_pval(pval)
 
     ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_s-8, weight='bold')
-    ax.tick_params(axis='y', labelsize=font_s)
+    # ax.tick_params(axis='y', labelsize=font_s)
     # plt.tick_params(axis="x", which="both", bottom=False)
     # plt.xticks([0.15, 0.40], ['', ""])
     # plt.tight_layout()

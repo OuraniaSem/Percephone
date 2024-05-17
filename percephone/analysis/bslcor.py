@@ -10,6 +10,7 @@ import matplotlib
 import percephone.plts.stats as ppt
 import matplotlib.pyplot as plt
 from multiprocessing import Pool, cpu_count, pool
+import percephone.plts.heatmap as hm
 plt.rcParams['font.size'] = 10
 plt.rcParams['axes.linewidth'] = 2
 plt.switch_backend("Qt5Agg")
@@ -30,7 +31,8 @@ files_ = [file for file in files if file.endswith("synchro")]
 
 
 def opening_rec(fil, i):
-    rec = pc.RecordingAmplDet(directory + fil + "/", 0, roi_path)
+    rec = pc.RecordingAmplDet(directory + fil + "/", 0, roi_path, mean_f=True, cache=False)
+
     return rec
 
 
@@ -48,8 +50,15 @@ def prestim_activity(n_type, ko):
     for rec in recs.values():
         t_points = rec.stim_time[rec.detected_stim & (rec.stim_ampl == rec.threshold)]
         t_points_u = rec.stim_time[~rec.detected_stim & (rec.stim_ampl == rec.threshold)]
-        bsl_n_det = np.mean(np.mean(np.var(rec.zscore_exc[:, np.linspace(t_points-15, t_points, 15, dtype=int)], axis=1), axis=1))
-        bsl_n_undet = np.mean(np.mean(np.var(rec.zscore_exc[:, np.linspace(t_points_u-15, t_points_u, 15, dtype=int)], axis=1), axis=1))
+        bsl_n_det = np.mean(np.mean(np.mean(rec.df_f_exc[:, np.linspace(t_points-15, t_points, 15, dtype=int)], axis=1), axis=1))
+        bsl_n_undet = np.mean(np.mean(np.mean(rec.df_f_exc[:, np.linspace(t_points_u-15, t_points_u, 15, dtype=int)], axis=1), axis=1))
+        if n_type== "INH":
+            bsl_n_det = np.mean(
+                np.mean(np.mean(rec.df_f_inh[:, np.linspace(t_points - 15, t_points, 15, dtype=int)], axis=1), axis=1))
+            bsl_n_undet = np.mean(
+                np.mean(np.mean(rec.df_f_inh[:, np.linspace(t_points_u - 15, t_points_u, 15, dtype=int)], axis=1),
+                        axis=1))
+
         if rec.genotype == "WT":
             wt_det.append(bsl_n_det)
             wt_undet.append(bsl_n_undet)
@@ -65,9 +74,9 @@ def prestim_activity(n_type, ko):
 fig, axs = plt.subplots(2, 2, figsize=(10, 8))
 for i, type in enumerate(["EXC", "INH"]):
     wt_det, ko_det, wt_undet, ko_undet = prestim_activity(n_type=type, ko="KO-Hypo")
-    ppt.paired_boxplot(axs[i, 0], wt_det, wt_undet, "Var z score", "", ylim=[0, 1],
+    ppt.paired_boxplot(axs[i, 0], wt_det, wt_undet, "Var DF/F", "", ylim=[-2, 2],
                        colors=[ppt.wt_color, ppt.light_wt_color])
-    ppt.paired_boxplot(axs[i, 1], ko_det, ko_undet, "Var z score", "", ylim=[0, 1])
+    ppt.paired_boxplot(axs[i, 1], ko_det, ko_undet, "Var DF/F", "", ylim=[-2, 2])
     fig.suptitle("Comparaison of neurons activated between detected and undetected for all stimulus")
     fig.tight_layout()
 

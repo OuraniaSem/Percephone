@@ -55,7 +55,7 @@ class Recording:
         Stores the spikes trains for inhibitory neurons at each timestep as a 2D numpy.ndarray (nb neurons * nb frames)
     """
 
-    def __init__(self, input_path, rois_path, cache=True):
+    def __init__(self, input_path, rois_path, mean_f_bsl, cache=True):
         """
         Initializes the Recording object with the given input path, the rois file path, and cache parameters.
 
@@ -88,8 +88,8 @@ class Recording:
             self.df_f_exc = np.load(input_path + 'df_f_exc.npy')
             self.df_f_inh = np.load(input_path + 'df_f_inh.npy')
         else:
-            self.df_f_exc = self.compute_df_f(excitatory_ids, input_path + 'df_f_exc.npy')
-            self.df_f_inh = self.compute_df_f(inhibitory_ids, input_path + 'df_f_inh.npy')
+            self.df_f_exc = self.compute_df_f(excitatory_ids, input_path + 'df_f_exc.npy', mean_f_bsl)
+            self.df_f_inh = self.compute_df_f(inhibitory_ids, input_path + 'df_f_inh.npy', mean_f_bsl)
 
         if os.path.exists(input_path + 'spks.npy'):
             spks = np.load(self.input_path + "spks.npy")
@@ -100,7 +100,7 @@ class Recording:
             self.matrices["EXC"]["Responsivity"] = np.load(self.input_path + "matrice_resp_exc.npy")
             self.matrices["INH"]["Responsivity"] = np.load(self.input_path + "matrice_resp_inh.npy")
 
-    def compute_df_f(self, cell_ids, save_path):
+    def compute_df_f(self, cell_ids, save_path, mean_f_bsl):
         """
         Compute ΔF/F and save it as a numpy.ndarray
 
@@ -114,6 +114,7 @@ class Recording:
 
         Parameters
         ----------
+        mean_f_bsl: boolean compute df/f with mean F for correction
         cell_ids: list
             ids of cells for which the df_f will be computed.
         save_path : str
@@ -154,8 +155,10 @@ class Recording:
         # Calculate the df/f
         # create a 2D array with the baseline value for each frame of f_nn_corrected
         f_baseline_2d_array = np.repeat(f_baseline, session_n_frames).reshape(all_rois, session_n_frames)
+        if mean_f_bsl:
+            f_baseline_2d_array = np.transpose([np.mean(f_nn_corrected, axis=1)]*len(f_nn_corrected[0]))
         # df/f for all cells for each frame
-        df_f = (f_nn_corrected - f_baseline_2d_array) / f_baseline_2d_array
+        df_f = np.divide(np.subtract(f_nn_corrected,  f_baseline_2d_array), f_baseline_2d_array)
         df_f_percen = df_f * 100
         np.save(save_path, df_f_percen)
         return df_f_percen
@@ -366,7 +369,7 @@ class RecordingAmplDet(Recording):
         A 2D numpy.ndarray of the zscore of each inhibitory neuron at each frame of the recording
         (nb neurons * nb frames)
     """
-    def __init__(self, input_path, starting_trial, rois_path, tuple_mesc=(0, 0), correction=True,
+    def __init__(self, input_path, starting_trial, rois_path, tuple_mesc=(0, 0), mean_f=False, correction=True,
                  cache=True):
         """
         Parameters
@@ -386,7 +389,7 @@ class RecordingAmplDet(Recording):
         analog_sf : int, optional
             Sampling frequency of the analog data, default is 10000.
         """
-        super().__init__(input_path, rois_path, cache=cache)
+        super().__init__(input_path, rois_path, mean_f, cache=cache)
         self.xls = pd.read_excel(input_path + 'bpod.xls', header=None)
         self.stim_time = []
         self.stim_ampl = []
