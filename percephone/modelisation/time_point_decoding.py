@@ -71,14 +71,14 @@ def resample(record_dict, resampler):
     return record_dict
 
 
-def frame_model(rec, frame):
+def frame_model(rec, frame, resampler):
 
     r_dict = split_data(rec, frame, train_ratio=0.8, stratify=False, seed=None)
     model = LogisticRegression(penalty='l2', max_iter=5000)
-    ros = imb.over_sampling.RandomOverSampler(sampling_strategy='auto', shrinkage=None)
-    smote = imb.over_sampling.SMOTE(sampling_strategy='auto')
-    adasyn = imb.over_sampling.ADASYN(sampling_strategy='auto')
-    r_dict = resample(r_dict,  ros)
+    # ros = imb.over_sampling.RandomOverSampler(sampling_strategy='auto', shrinkage=None)
+    # smote = imb.over_sampling.SMOTE(sampling_strategy='auto')
+    # adasyn = imb.over_sampling.ADASYN(sampling_strategy='auto')
+    r_dict = resample(r_dict,  resampler)
     model.fit(r_dict["X_bal"], r_dict["y_bal"])
     y_pred = model.predict(r_dict["X_test"])
     conf_matrix = confusion_matrix(r_dict["y_test"], y_pred, labels=[False, True])
@@ -94,7 +94,7 @@ def frame_model(rec, frame):
 
 
 if __name__ == '__main__':
-    user = "Théo"
+    user = "Célien"
 
     if user == "Célien":
         directory = "C:/Users/cvandromme/Desktop/Data/"
@@ -131,13 +131,20 @@ if __name__ == '__main__':
     #         acc_miss.append(acc[1])
     #     classification_graph(acc_hit, acc_miss, rec.filename)
 
+    ros = imb.over_sampling.RandomOverSampler(sampling_strategy='auto')
+    smote = imb.over_sampling.SMOTE(sampling_strategy='auto', k_neighbors=4)
+    adasyn = imb.over_sampling.ADASYN(sampling_strategy='auto')
+    rus = imb.under_sampling.RandomUnderSampler(sampling_strategy='auto')
+
+    resampler = rus
+
 # per group
     wt_hit, wt_miss, ko_hypo_hit, ko_hypo_miss = [], [], [], []
     for rec in recs.values():
         print(rec.filename)
         acc_hit, acc_miss = [], []
         for i in list(range(-15, 15)):
-            acc = frame_model(rec, i)
+            acc = frame_model(rec, i, resampler)
             acc_hit.append(acc[0])
             acc_miss.append(acc[1])
         if rec.genotype == "WT":
@@ -147,5 +154,5 @@ if __name__ == '__main__':
             ko_hypo_hit.append(acc_hit)
             ko_hypo_miss.append(acc_miss)
 
-    classification_graph(wt_hit, wt_miss, "WT")
-    classification_graph(ko_hypo_hit, ko_hypo_miss, "KO-Hypo")
+    classification_graph(wt_hit, wt_miss, f"WT {resampler}")
+    classification_graph(ko_hypo_hit, ko_hypo_miss, f"KO-Hypo {resampler}")
