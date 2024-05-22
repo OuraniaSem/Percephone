@@ -31,7 +31,7 @@ files_ = [file for file in files if file.endswith("synchro")]
 
 
 def opening_rec(fil, i):
-    rec = pc.RecordingAmplDet(directory + fil + "/", 0, roi_path, mean_f=True, cache=False)
+    rec = pc.RecordingAmplDet(directory + fil + "/", 0, roi_path, mean_f=False, cache=False)
 
     return rec
 

@@ -7,7 +7,8 @@ font_s = 10
 
 def psycho_like_plot(rec, roi_info, ax):
     seq = roi_info["Stimulus detection"][roi_info["Number"] == rec.filename].values
-    converted_list = [float(x) for x in seq[0].split(',')]
+    converted_list = eval("[" + seq[0] + "]")
+    # converted_list = [float(x) for x in seq[0].split(',')]
     ax.plot([0, 2, 4, 6, 8, 10, 12], converted_list)
     ax.set_xticks([0, 2, 4, 6, 8, 10, 12])
     ax.set_ylim([0, 1])
@@ -16,6 +17,7 @@ def psycho_like_plot(rec, roi_info, ax):
 
 def psycho_like_plot_and_synchro(rec, roi_info, ax):
     seq = roi_info["Stimulus detection"][roi_info["Number"] == rec.filename].values
+    # converted_list = eval("[" + seq[0] + "]")
     converted_list = [float(x) for x in seq[0].split(',')]
     to_plot = []
     for amp in [0, 2, 4, 6, 8, 10, 12]:

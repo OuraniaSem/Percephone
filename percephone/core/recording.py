@@ -664,12 +664,12 @@ if __name__ == '__main__':
     # folder = "20240404_6601_04_synchro_temp"
     # folder = "20240404_6602_01_synchro_temp"
     # folder = "20240405_6601_02_synchro_temp"
-    folder = "20220715_4456_00_synchro"
+    folder = "20240404_6606_02_synchro"
     # path_to_mesc = path + folder + "/20240404_6601_det.mesc"
-    path_to_mesc = path + "/20240408_6609_det.mesc"
+    path_to_mesc = path + "/20240405_6601_det.mesc"
 
-    # extract_analog_from_mesc(path_to_mesc, (0, 0), 30.9609, 20000, path + folder + "/")
+    # extract_analog_from_mesc(path_to_mesc, (0, 2), 30.9609, 20000, path + folder + "/")
     rec = RecordingAmplDet(path + folder + "/", 0, roi_info, cache=False, correction=False)
-    hm.intereactive_heatmap(rec, rec.zscore_exc)
+    hm.interactive_heatmap(rec, rec.zscore_exc)
 
 

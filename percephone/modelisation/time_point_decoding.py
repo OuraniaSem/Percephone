@@ -3,7 +3,6 @@ Théo Gauvrit 07/05/2024
 Using a logistic regression to classify hit or miss from zcore time points
 """
 
-from unittest import result
 import numpy as np
 import pandas as pd
 import percephone.core.recording as pc
@@ -13,17 +12,15 @@ import matplotlib
 import matplotlib.pyplot as plt
 from multiprocessing import Pool, cpu_count, pool
 import warnings
-import seaborn as sns
 import copy
 import imblearn as imb
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import confusion_matrix
 from sklearn.linear_model import LogisticRegression
-from sklearn.dummy import DummyClassifier
 from scipy.stats import mannwhitneyu, sem
 
-plt.rcParams['font.size'] = 10
-plt.rcParams['axes.linewidth'] = 2
+plt.rcParams['font.size'] = 30
+plt.rcParams['axes.linewidth'] = 3
 plt.switch_backend("Qt5Agg")
 matplotlib.use("Qt5Agg")
 warnings.filterwarnings('ignore')
@@ -36,17 +33,20 @@ def classification_graph(hit_accuracy, miss_accuracy, title):
     miss_acc = np.nanmean(miss_accuracy, axis=0)
     y_err_hit = sem(hit_accuracy, axis=0, nan_policy="omit")
     y_err_miss = sem(miss_accuracy, axis=0, nan_policy="omit")
-    fig, ax = plt.subplots(1, 1)
-    ax.plot(hit_acc, label="Hit trials")
-    ax.plot(miss_acc, label="Miss trials")
-    ax.fill_between(range(0, 30), hit_acc - y_err_hit,  hit_acc + y_err_hit, alpha=0.2)
-    ax.fill_between(range(0, 30), miss_acc - y_err_miss, miss_acc + y_err_miss, alpha=0.2,)
+    fig, ax = plt.subplots(1, 1, figsize=(10,8))
+    times = np.linspace(-0.5,0.5,int(30.9609))
+    ax.plot(times, hit_acc, label="Hit trials")
+    ax.plot(times, miss_acc, label="Miss trials")
+    ax.fill_between(times, hit_acc - y_err_hit,  hit_acc + y_err_hit, alpha=0.2)
+    ax.fill_between(times, miss_acc - y_err_miss, miss_acc + y_err_miss, alpha=0.2,)
     ax.set_ylabel("Hit versus Miss classification")
+    ax.set_xlabel("Time (s)")
+    ax.set_xticks([-0.5, -0.25, 0, 0.25, 0.5])
     ax.set_ylim([0, 1])
-    ax.vlines(15, ymin=0, ymax=1, linestyle="--", color="red")
-    ax.legend()
-    fig.suptitle(title, fontsize=fontsize)
-    plt.show()
+    ax.vlines(0, ymin=0, ymax=1, linestyle="--", color="red")
+    ax.legend( fontsize=15)
+    ax.set_title(title, fontsize=fontsize)
+    fig.tight_layout()
 
 
 def split_data(rec,frame, train_ratio=0.8, stratify=False, seed=None):
@@ -94,25 +94,21 @@ def frame_model(rec, frame, resampler):
 
 
 if __name__ == '__main__':
-    user = "Célien"
-
+    user = "Théo"
     if user == "Célien":
         directory = "C:/Users/cvandromme/Desktop/Data/"
         roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
     elif user == "Théo":
         directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
         roi_path = directory + "/FmKO_ROIs&inhibitory.xlsx"
-
     roi_info = roi_path
     files = os.listdir(directory)
     files_ = [file for file in files if file.endswith("synchro")]
 
-
     def opening_rec(fil, i):
+        print(fil)
         rec = pc.RecordingAmplDet(directory + fil + "/", 0, roi_path)
-        rec.peak_delay_amp()
         return rec
-
 
     workers = cpu_count()
     if user == "Célien":
@@ -154,5 +150,8 @@ if __name__ == '__main__':
             ko_hypo_hit.append(acc_hit)
             ko_hypo_miss.append(acc_miss)
 
-    classification_graph(wt_hit, wt_miss, f"WT {resampler}")
-    classification_graph(ko_hypo_hit, ko_hypo_miss, f"KO-Hypo {resampler}")
+    classification_graph(wt_hit, wt_miss, f"WT")
+    classification_graph(ko_hypo_hit, ko_hypo_miss, f"KO-Hypo")
+
+    # for f in [6601, 6606, 6609, 6611,]:
+    #     recs[f].responsivity()
