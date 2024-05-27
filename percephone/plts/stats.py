@@ -129,13 +129,13 @@ def boxplot(ax, wt, ko, ylabel, ylim=[]):
     print("Boxplot plotting.")
     lw = 5
     ax.set_ylabel(ylabel,fontsize=font_s)
-    ax.boxplot([wt], positions=[0.15], patch_artist=True, showfliers=False, widths=0.2,
+    ax.boxplot([wt[~np.isnan(wt)]], positions=[0.15], patch_artist=True, showfliers=False, widths=0.2,
                meanprops=dict(marker='o', markerfacecolor=wt_color, markeredgecolor='black'),
                boxprops=dict(linewidth=lw, facecolor='white', color=wt_color),
                capprops=dict(linewidth=lw, color=wt_color),
                whiskerprops=dict(linewidth=lw, color=wt_color),
                medianprops=dict(linewidth=lw, color=wt_color), )
-    ax.boxplot([ko], positions=[0.40], patch_artist=True, showfliers=False, widths=0.2,
+    ax.boxplot([ko[~np.isnan(ko)]], positions=[0.40], patch_artist=True, showfliers=False, widths=0.2,
                meanprops=dict(marker='o', markerfacecolor=ko_color, markeredgecolor='black'),
                boxprops=dict(linewidth=lw, facecolor='white', color=ko_color),
                capprops=dict(linewidth=lw, color=ko_color),
@@ -150,15 +150,16 @@ def boxplot(ax, wt, ko, ylabel, ylim=[]):
     ax.grid(False)
     ax.set_title(None)
     ax.set_xlabel(None)
+    ax.set_facecolor("white")
     # ax.yaxis.set_minor_locator(AutoMinorLocator(2))
     ax.tick_params(axis='both', which='major', length=6, width=3)
     ax.tick_params(axis='both', which='minor', length=4, width=3)
     if len(ylim)!=0:
         ax.set_ylim(ylim)
     else:
-        max_y = max(max(wt), max(ko))
+        max_y = max(np.nanmax(wt), np.nanmax(ko))
         lim_max = max(int(max_y*0.15 + max_y), int(math.ceil(max_y / 2)) * 2)
-        min_y = min(min(wt), min(ko))
+        min_y = min(np.nanmin(wt), np.nanmin(ko))
         lim_inf = min(0, min_y + 0.15*min_y)
         ax.set_ylim(ymin=lim_inf, ymax=lim_max)
     yticks = list(ax.get_yticks())
