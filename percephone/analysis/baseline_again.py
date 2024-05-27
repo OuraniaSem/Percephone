@@ -44,8 +44,8 @@ import percephone.plts.response as rr
 fig, ax = plt.subplots(1, 1, figsize=(35, 20))
 fig.subplots_adjust(left=0.25, bottom=0.25)
 axslide = fig.add_axes([0.25, 0.1, 0.65, 0.03])
-amp=10
-stims = rec.stim_time[rec.stim_ampl==amp]
+amp = 10
+stims = rec.stim_time[rec.stim_ampl == amp]
 # rec.responsivity()
 idx_responsive = np.where(np.sum(rec.matrices["EXC"]["Responsivity"], axis=1))
 
