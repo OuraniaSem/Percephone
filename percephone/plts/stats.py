@@ -127,23 +127,25 @@ def boxplot(ax, wt, ko, ylabel, ylim=[]):
 
     """
     print("Boxplot plotting.")
+    ko_nan = np.array(ko)[~np.isnan(ko)]
+    wt_nan = np.array(wt)[~np.isnan(wt)]
     lw = 5
     ax.set_ylabel(ylabel,fontsize=font_s)
-    ax.boxplot([wt[~np.isnan(wt)]], positions=[0.15], patch_artist=True, showfliers=False, widths=0.2,
+    ax.boxplot(wt_nan, positions=[0.15], patch_artist=True, showfliers=False, widths=0.2,
                meanprops=dict(marker='o', markerfacecolor=wt_color, markeredgecolor='black'),
                boxprops=dict(linewidth=lw, facecolor='white', color=wt_color),
                capprops=dict(linewidth=lw, color=wt_color),
                whiskerprops=dict(linewidth=lw, color=wt_color),
                medianprops=dict(linewidth=lw, color=wt_color), )
-    ax.boxplot([ko[~np.isnan(ko)]], positions=[0.40], patch_artist=True, showfliers=False, widths=0.2,
+    ax.boxplot(ko_nan, positions=[0.40], patch_artist=True, showfliers=False, widths=0.2,
                meanprops=dict(marker='o', markerfacecolor=ko_color, markeredgecolor='black'),
                boxprops=dict(linewidth=lw, facecolor='white', color=ko_color),
                capprops=dict(linewidth=lw, color=ko_color),
                whiskerprops=dict(linewidth=lw, color=ko_color),
                medianprops=dict(linewidth=lw, color=ko_color), )
-    y = wt
+    y = wt_nan
     x = np.random.normal(0.15, 0.02, size=len(y))
-    y1 = ko
+    y1 = ko_nan
     x1 = np.random.normal(0.40, 0.02, size=len(y1))
     ax.plot(x, y, ".", alpha=0.5, ms=28, markerfacecolor='none', markeredgecolor=wt_color, markeredgewidth=4)
     ax.plot(x1, y1, ".", alpha=0.5, ms=28, markerfacecolor='none', markeredgecolor=ko_color, markeredgewidth=4)
@@ -168,7 +170,7 @@ def boxplot(ax, wt, ko, ylabel, ylim=[]):
     ax.set_xticks([])
 
     x_1, x_2 = [0.15, 0.40]
-    max_data = max([max(wt), max(ko)])
+    max_data = max([np.nanmax(wt), np.nanmax(ko)])
     y, col = max_data + 0.10 * abs(max_data), 'k'
     ax.plot([x_1, x_2], [y, y], lw=3, c=col)
 
@@ -274,15 +276,17 @@ def paired_boxplot(ax, det, undet, ylabel, title, ylim=[],colors = [ko_color,lig
 
     """
     print("Boxplot plotting.")
+    det_nan = np.array(det)[~np.isnan(det)]
+    undet_nan = np.array(undet)[~np.isnan(undet)]
     lw = 5
     ax.set_ylabel(ylabel, fontsize=font_s)
-    ax.boxplot([det], positions=[0.15], patch_artist=True, showfliers=False, widths=0.2,
+    ax.boxplot(det_nan, positions=[0.15], patch_artist=True, showfliers=False, widths=0.2,
                meanprops=dict(marker='o', markerfacecolor=colors[0], markeredgecolor='black'),
                boxprops=dict(linewidth=lw, facecolor='white', color=colors[0]),
                capprops=dict(linewidth=lw, color=colors[0]),
                whiskerprops=dict(linewidth=lw, color=colors[0]),
                medianprops=dict(linewidth=lw, color=colors[0]))
-    ax.boxplot([undet], positions=[0.40], patch_artist=True, showfliers=False, widths=0.2,
+    ax.boxplot(undet_nan, positions=[0.40], patch_artist=True, showfliers=False, widths=0.2,
                meanprops=dict(marker='o', markerfacecolor=colors[1], markeredgecolor='black'),
                boxprops=dict(linewidth=lw, facecolor='white', color=colors[1]),
                capprops=dict(linewidth=lw, color=colors[1]),
@@ -295,16 +299,17 @@ def paired_boxplot(ax, det, undet, ylabel, title, ylim=[],colors = [ko_color,lig
     ax.grid(False)
     ax.set_title(None)
     ax.set_xlabel(None)
+    ax.set_facecolor("white")
     # ax.yaxis.set_minor_locator(AutoMinorLocator(2))
     ax.tick_params(axis='both', which='major', length=6, width=3)
     ax.tick_params(axis='both', which='minor', length=4, width=3)
-    max_y = max(max(det), max(undet))
+    max_y = max(np.nanmax(det), np.nanmax(undet))
     if len(ylim)!=0:
         ax.set_ylim(ylim)
     else:
-        max_y = max(max(det), max(undet))
+        max_y = max(np.nanmax(det), np.nanmax(undet))
         lim_max = max(int(max_y*0.15 + max_y), int(math.ceil(max_y / 2 )) * 2)
-        min_y = min(min(det), min(undet))
+        min_y = min(np.nanmin(det), np.nanmin(undet))
         lim_inf = min(0, min_y + 0.15*min_y)
         ax.set_ylim(ymin=lim_inf, ymax=lim_max)
     yticks = list(ax.get_yticks())
@@ -313,7 +318,7 @@ def paired_boxplot(ax, det, undet, ylabel, title, ylim=[],colors = [ko_color,lig
     ax.set_xticks([])
 
     x_1, x_2 = [0.15, 0.40]
-    max_data = max([max(det), max(undet)])
+    max_data = max([np.nanmax(det), np.nanmax(undet)])
     y, col = max_data + 0.10 * abs(max_data), 'k'
     ax.plot([x_1, x_2], [y, y], lw=3, c=col)
 
@@ -512,3 +517,4 @@ if __name__ == '__main__':
                          legend_labels=("WT", "KO-Hypo"),
                          title="Nice plot",
                          y_percent=True)
+
