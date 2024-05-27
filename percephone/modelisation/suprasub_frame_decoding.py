@@ -1,6 +1,6 @@
 """
-Théo Gauvrit 07/05/2024
-Using a logistic regression to classify hit or miss from zcore time points
+Théo Gauvrit 22/05/2024
+Using a logistic regression to classify supra hit, supra miss, sub hit, sub miss
 """
 
 import numpy as np
@@ -15,7 +15,7 @@ import warnings
 import copy
 import imblearn as imb
 from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, multilabel_confusion_matrix
 from sklearn.linear_model import LogisticRegression
 from scipy.stats import mannwhitneyu, sem
 
@@ -27,21 +27,25 @@ warnings.filterwarnings('ignore')
 fontsize = 30
 
 
-def classification_graph(hit_accuracy, miss_accuracy, title):
+def classification_graph(accus, title):
     """plot the Hit vs miss classification graph like in Fig3 of Rowland et al """
-    hit_acc = np.nanmean(hit_accuracy, axis=0)
-    miss_acc = np.nanmean(miss_accuracy, axis=0)
-    y_err_hit = sem(hit_accuracy, axis=0, nan_policy="omit")
-    y_err_miss = sem(miss_accuracy, axis=0, nan_policy="omit")
-    fig, ax = plt.subplots(1, 1, figsize=(10,8))
-    times = np.linspace(-0.5,0.5,int(30.9609))
-    ax.plot(times, hit_acc, label="Hit trials")
-    ax.plot(times, miss_acc, label="Miss trials")
-    ax.fill_between(times, hit_acc - y_err_hit,  hit_acc + y_err_hit, alpha=0.2)
-    ax.fill_between(times, miss_acc - y_err_miss, miss_acc + y_err_miss, alpha=0.2,)
+    y_err_hit_sup  = sem(accus[0], axis=1, nan_policy="omit")
+    y_err_miss_sup = sem(accus[1], axis=1, nan_policy="omit")
+    y_err_hit_sub  = sem(accus[2], axis=1, nan_policy="omit")
+    y_err_miss_sub = sem(accus[3], axis=1, nan_policy="omit")
+    fig, ax = plt.subplots(1, 1, figsize=(10, 8))
+    times = np.linspace(-1, 1, int(2*30))
+    # ax.plot(times, np.nanmean(accus[0], axis=1), label="Supra hit trials")
+    ax.plot(times, np.nanmean(accus[1], axis=1), label="Supra miss trials")
+    # ax.plot(times, np.nanmean(accus[2], axis=1), label="Sub hit trials")
+    ax.plot(times, np.nanmean(accus[3], axis=1), label="Sub miss trials")
+    # ax.fill_between(times, np.nanmean(accus[0], axis=1) - y_err_hit_sup,  np.nanmean(accus[0], axis=1) + y_err_hit_sup, alpha=0.2)
+    ax.fill_between(times, np.nanmean(accus[1], axis=1) - y_err_miss_sup, np.nanmean(accus[1], axis=1) + y_err_miss_sup, alpha=0.2,)
+    # ax.fill_between(times, np.nanmean(accus[2], axis=1) - y_err_hit_sub,  np.nanmean(accus[2], axis=1) + y_err_hit_sub, alpha=0.2)
+    ax.fill_between(times, np.nanmean(accus[3], axis=1) - y_err_miss_sub, np.nanmean(accus[3], axis=1) + y_err_miss_sub, alpha=0.2, )
     ax.set_ylabel("Hit versus Miss classification")
     ax.set_xlabel("Time (s)")
-    ax.set_xticks([-0.5, -0.25, 0, 0.25, 0.5])
+    ax.set_xticks([-1, -0.5, 0, 0.5, 1])
     ax.set_ylim([0, 1])
     ax.vlines(0, ymin=0, ymax=1, linestyle="--", color="red")
     ax.legend( fontsize=15)
@@ -49,10 +53,15 @@ def classification_graph(hit_accuracy, miss_accuracy, title):
     fig.tight_layout()
 
 
-def split_data(rec,frame, train_ratio=0.8, stratify=False, seed=None):
+def split_data(rec, frame, train_ratio=0.8, stratify=False, seed=None):
     record_dict= {}
     record_dict["X"] = np.row_stack((rec.df_f_exc[:, rec.stim_time+frame], rec.df_f_inh[:, rec.stim_time+frame])).T
-    record_dict["y"] = rec.detected_stim
+    record_dict["y"] = np.zeros(len(rec.detected_stim))
+    temp_y = rec.detected_stim
+    record_dict["y"][np.logical_and(temp_y, rec.stim_ampl > rec.threshold)] = 1
+    record_dict["y"][np.logical_and(~temp_y, rec.stim_ampl > rec.threshold)] = 2
+    record_dict["y"][np.logical_and(temp_y, rec.stim_ampl <= rec.threshold)] = 3
+    record_dict["y"][np.logical_and(~temp_y, rec.stim_ampl <= rec.threshold)] = 4
     if stratify:
         record_dict["X_train"], record_dict["X_test"], record_dict["y_train"], record_dict["y_test"] = train_test_split(record_dict["X"], record_dict["y"],
                                                                                                                         train_size=train_ratio,
@@ -67,6 +76,8 @@ def split_data(rec,frame, train_ratio=0.8, stratify=False, seed=None):
 
 
 def resample(record_dict, resampler):
+    if resampler == None:
+        return record_dict
     record_dict["X_bal"], record_dict["y_bal"] = resampler.fit_resample(record_dict["X_train"], record_dict["y_train"])
     return record_dict
 
@@ -79,18 +90,22 @@ def frame_model(rec, frame, resampler):
     # smote = imb.over_sampling.SMOTE(sampling_strategy='auto')
     # adasyn = imb.over_sampling.ADASYN(sampling_strategy='auto')
     r_dict = resample(r_dict,  resampler)
-    model.fit(r_dict["X_bal"], r_dict["y_bal"])
+    model.fit(r_dict["X_train"], r_dict["y_train"])
     y_pred = model.predict(r_dict["X_test"])
-    conf_matrix = confusion_matrix(r_dict["y_test"], y_pred, labels=[False, True])
-    TP = conf_matrix[1, 1]
-    TN = conf_matrix[0, 0]
-    FP = conf_matrix[0, 1]
-    FN = conf_matrix[1, 0]
-    hit_acc = TP / (TP + FN)
-    miss_acc2 = FP/(FP + TN)
-    miss_acc = TN / (TN + FP)
-    accuracy = (TP + TN) / (TP + TN + FP + FN)
-    return (hit_acc, miss_acc2, accuracy)
+    print(y_pred)
+    print(r_dict["y_test"])
+    conf_matrices = multilabel_confusion_matrix(r_dict["y_test"], y_pred, labels=[1,2,3,4])
+    accuracies = []
+    for conf in conf_matrices:
+        TP = conf[1, 1]
+        TN = conf[0, 0]
+        FP = conf[0, 1]
+        FN = conf[1, 0]
+        hit_acc = TP / (TP + FN)
+        miss_acc2 = FP/(FP + TN)
+        miss_acc = TN / (TN + FP)
+        accuracies.append(hit_acc) #(TP + TN) / (TP + TN + FP + FN))
+    return accuracies
 
 
 if __name__ == '__main__':
@@ -118,7 +133,7 @@ if __name__ == '__main__':
     async_results = [pool.apply_async(opening_rec, args=(file, i)) for i, file in enumerate(files_)]
     recs = {ar.get().filename: ar.get() for ar in async_results}
 
-
+    ## for single recording only
     # for rec in recs.values():
     #     acc_hit, acc_miss = [], []
     #     for i in list(range(-15, 15)):
@@ -131,27 +146,21 @@ if __name__ == '__main__':
     smote = imb.over_sampling.SMOTE(sampling_strategy='auto', k_neighbors=4)
     adasyn = imb.over_sampling.ADASYN(sampling_strategy='auto')
     rus = imb.under_sampling.RandomUnderSampler(sampling_strategy='auto')
-
     resampler = rus
 
 # per group
-    wt_hit, wt_miss, ko_hypo_hit, ko_hypo_miss = [], [], [], []
+    wt_acc, ko_hypo_acc = [], []
     for rec in recs.values():
         print(rec.filename)
-        acc_hit, acc_miss = [], []
-        for i in list(range(-15, 15)):
-            acc = frame_model(rec, i, resampler)
-            acc_hit.append(acc[0])
-            acc_miss.append(acc[1])
+        acc = []
+        for i in list(range(-30, 30)):
+            acc_s = frame_model(rec, i, resampler)
+            acc.append(acc_s)
+
         if rec.genotype == "WT":
-            wt_hit.append(acc_hit)
-            wt_miss.append(acc_miss)
-        elif rec.genotype =="KO-Hypo":
-            ko_hypo_hit.append(acc_hit)
-            ko_hypo_miss.append(acc_miss)
+            wt_acc.append(acc)
+        elif rec.genotype == "KO-Hypo":
+            ko_hypo_acc.append(acc)
 
-    classification_graph(wt_hit, wt_miss, f"WT")
-    classification_graph(ko_hypo_hit, ko_hypo_miss, f"KO-Hypo")
-
-    # for f in [6601, 6606, 6609, 6611,]:
-    #     recs[f].responsivity()
+    classification_graph(np.array(wt_acc), f"WT")
+    classification_graph(np.array(ko_hypo_acc), f"KO-Hypo")

@@ -71,12 +71,43 @@ def prestim_activity(n_type, ko):
     return wt_det, ko_det, wt_undet, ko_undet
 
 
-fig, axs = plt.subplots(2, 2, figsize=(10, 8))
-for i, type in enumerate(["EXC", "INH"]):
-    wt_det, ko_det, wt_undet, ko_undet = prestim_activity(n_type=type, ko="KO-Hypo")
-    ppt.paired_boxplot(axs[i, 0], wt_det, wt_undet, "Var DF/F", "", ylim=[-2, 2],
-                       colors=[ppt.wt_color, ppt.light_wt_color])
-    ppt.paired_boxplot(axs[i, 1], ko_det, ko_undet, "Var DF/F", "", ylim=[-2, 2])
-    fig.suptitle("Comparaison of neurons activated between detected and undetected for all stimulus")
-    fig.tight_layout()
+# fig, axs = plt.subplots(2, 2, figsize=(10, 8))
+# for i, type in enumerate(["EXC", "INH"]):
+#     wt_det, ko_det, wt_undet, ko_undet = prestim_activity(n_type=type, ko="KO-Hypo")
+#     ppt.paired_boxplot(axs[i, 0], wt_det, wt_undet, "Var DF/F", "", ylim=[-2, 2],
+#                        colors=[ppt.wt_color, ppt.light_wt_color])
+#     ppt.paired_boxplot(axs[i, 1], ko_det, ko_undet, "Var DF/F", "", ylim=[-2, 2])
+#     fig.suptitle("Comparaison of neurons activated between detected and undetected for all stimulus")
+#     fig.tight_layout()
+#
 
+def prestim_sub_supra(n_type, ko):
+    #  test if the baseline of KoHypo can have an impact on the Supra miss trials
+    ko_hit_super, ko_miss_super, ko_hit_sub, ko_miss_sub = [], [], [], []
+    for rec in recs.values():
+        t_points_suph = rec.stim_time[rec.detected_stim & (rec.stim_ampl> rec.threshold)]
+        t_points_supm= rec.stim_time[~rec.detected_stim & (rec.stim_ampl >rec.threshold)]
+        t_points_subh = rec.stim_time[rec.detected_stim & (rec.stim_ampl <= rec.threshold)]
+        t_points_sub_m = rec.stim_time[~rec.detected_stim & (rec.stim_ampl <= rec.threshold)]
+        bsl_n_supra_hit = np.mean(np.mean(np.mean(rec.df_f_exc[:, np.linspace(t_points_suph-15, t_points_suph, 15, dtype=int)], axis=1), axis=1))
+        bsl_n_supra_miss = np.mean(np.mean(np.mean(rec.df_f_exc[:, np.linspace(t_points_supm-15, t_points_supm, 15, dtype=int)], axis=1), axis=1))
+        bsl_n_sub_hit = np.mean(np.mean(np.mean(rec.df_f_exc[:, np.linspace(t_points_subh-15, t_points_subh, 15, dtype=int)], axis=1), axis=1))
+        bsl_n_sub_miss = np.mean(np.mean(np.mean(rec.df_f_exc[:, np.linspace(t_points_sub_m-15, t_points_sub_m, 15, dtype=int)], axis=1), axis=1))
+
+
+        if rec.genotype =="KO-Hypo":
+            ko_hit_super.append( bsl_n_supra_hit)
+            ko_miss_super.append(bsl_n_supra_miss)
+            ko_hit_sub.append(bsl_n_sub_hit)
+            ko_miss_sub.append(bsl_n_sub_miss)
+
+    return ko_hit_super, ko_miss_super, ko_hit_sub, ko_miss_sub
+
+fig, axs = plt.subplots(1, 2, figsize=(10, 8))
+
+wt_det, ko_det, wt_undet, ko_undet = prestim_sub_supra(n_type="EXC", ko="KO-Hypo")
+ppt.paired_boxplot(axs[0], wt_det, wt_undet, "Var DF/F", "", ylim=[-2, 2],
+                   colors=[ppt.wt_color, ppt.light_wt_color])
+ppt.paired_boxplot(axs[1], ko_det, ko_undet, "Var DF/F", "", ylim=[-2, 2])
+fig.suptitle("Comparaison of neurons activated between detected and undetected for all stimulus")
+fig.tight_layout()
