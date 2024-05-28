@@ -5,9 +5,15 @@ Adrien Corniere
 Stats related plot functions like boxplot, barplot...
 """
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import scipy.stats as ss
+from itertools import combinations
+from percephone.plts.stats import symbol_pval
+import statsmodels.api as sm
+import statsmodels.formula.api as smf
+from statsmodels.stats.multicomp import pairwise_tukeyhsd
 import math
 from matplotlib.ticker import AutoMinorLocator
 
@@ -334,92 +340,125 @@ def paired_boxplot(ax, det, undet, ylabel, title, ylim=[],colors = [ko_color,lig
     ax.set_title(title)
     ax.tick_params(axis='y', labelsize=font_s)
 
+def stats_anova(*groups_data):
+    # Perform one-way ANOVA
+    f_stat, p_value = ss.f_oneway(*groups_data)
+    print(f"Statistical F: {f_stat}")
+    print(f"p-value: {p_value}")
+
+    # Determine significance symbols
+    stars = []
+
+    # Check p-value and perform Tukey's HSD test if significant
+    if p_value > 0.05:
+        stars = ["n.s"] * len(groups_data)
+    else:
+        # Prepare data for Tukey's HSD test
+        all_data = np.concatenate(groups_data)
+        group_labels = [f"group{i}_data" for i in range(len(groups_data)) for _ in groups_data[i]]
+        data = {'value': all_data, 'group': group_labels}
+        df = pd.DataFrame(data)
+
+        # Perform Tukey's HSD test
+        tukey = pairwise_tukeyhsd(endog=df['value'], groups=df['group'], alpha=0.05)
+        print(tukey)
+        tukey_p_values = tukey.pvalues
+
+        # Determine significance symbols for each pairwise comparison
+        stars = [symbol_pval(p_val) for p_val in tukey_p_values]
+        print(stars)
+
+    return stars
+
+def calculate_distance(pos1, pos2):
+    return abs(pos1 - pos2)
 
 
-def boxplot_anova(group1_data, group2_data, group3_data, lim_y, label_y, filename, color1, color2, color3, annot_text=[]
-                  , title="", thickformater=True):
+def boxplot_anova(groups_data, lim_y, label_y, filename, colors, annot_text=[],
+                  title="", thickformater=True, show_only_significant=False):
 
-    fig = plt.figure(figsize=(6, 8))
+    fig = plt.figure(figsize=(3*len(groups_data), 8))
     fig.subplots_adjust(hspace=0.5, wspace=0.4)
     plt.Axes(fig, [0., 0.5, 1., 1.])
     ax1 = fig.add_subplot(1, 1, 1, title=title)
-    band = [0, 0.8]
+    band = [0, 0.33*len(groups_data)]
     plt.xlim(band)
     linewidth = 5
-    a = ax1.boxplot([group1_data, group2_data, group3_data],
-                    positions=[0.15, 0.40, 0.65],
+    positions = np.linspace(0.20, band[1]-0.20, len(groups_data))
+    box_props = dict(linewidth=linewidth, color=colors[1])
+    whisker_props = dict(color=colors[1], linewidth=linewidth)
+    cap_props = dict(color=colors[1], linewidth=linewidth)
+    median_props = dict(color=colors[1], linewidth=linewidth)
+    a = ax1.boxplot(groups_data,
+                    positions=positions,
                     showfliers=False,
                     widths=0.2,
-                    boxprops=dict(linewidth=linewidth, color=color2),
-                    whiskerprops=dict(color=color2, linewidth=linewidth),
-                    capprops=dict(color=color2, linewidth=linewidth),
-                    medianprops=dict(color=color2, linewidth=linewidth),
+                    boxprops=box_props,
+                    whiskerprops=whisker_props,
+                    capprops=cap_props,
+                    medianprops=median_props,
                     meanline=True,
                     showmeans=True)
-    a["boxes"][0].set(color=color1, linewidth=linewidth)
-    a["boxes"][2].set(color=color3, linewidth=linewidth)
-    a["whiskers"][0].set(color=color1, linewidth=linewidth)
-    a["whiskers"][1].set(color=color1, linewidth=linewidth)
-    a["whiskers"][4].set(color=color3, linewidth=linewidth)
-    a["whiskers"][5].set(color=color3, linewidth=linewidth)
-    a["caps"][0].set(color=color1, linewidth=linewidth)
-    a["caps"][1].set(color=color1, linewidth=linewidth)
-    a["caps"][4].set(color=color3, linewidth=linewidth)
-    a["caps"][5].set(color=color3, linewidth=linewidth)
-    a["medians"][0].set(color=color1, linewidth=linewidth)
-    a["medians"][1].set(color=color2, linewidth=linewidth)
-    a["medians"][2].set(color=color3, linewidth=linewidth)
-    a["means"][0].set(linewidth=linewidth)
-    a["means"][1].set(linewidth=linewidth)
-    a["means"][2].set(linewidth=linewidth)
-    plt.xticks([0.15, 0.40], ['', ""])
+
+    for i, group_data in enumerate(groups_data):
+        a["boxes"][i].set(color=colors[i], linewidth=linewidth)
+        a["whiskers"][i*2].set(color=colors[i], linewidth=linewidth)
+        a["whiskers"][i*2+1].set(color=colors[i], linewidth=linewidth)
+        a["caps"][i*2].set(color=colors[i], linewidth=linewidth)
+        a["caps"][i*2+1].set(color=colors[i], linewidth=linewidth)
+        a["medians"][i].set(color=colors[i], linewidth=linewidth)
+        a["means"][i].set(linewidth=linewidth)
+
+    plt.xticks(positions, [''] * len(groups_data))
     plt.ylim(lim_y)
     plt.ylabel(label_y)
-    ax.set_facecolor("white")
-    ax.spines["left"].set_color("black")
     ax1.get_yaxis().set_major_formatter(mpl.ticker.ScalarFormatter())
-    y = group1_data
-    x = np.random.normal(0.15, 0.02, size=len(y))
-    y1 = group2_data
-    x1 = np.random.normal(0.40, 0.02, size=len(y1))
-    y2 = group3_data
-    x2 = np.random.normal(0.65, 0.02, size=len(y2))
-    ax1.plot(x, y, ".", alpha=0.5, ms=28, markerfacecolor='none', markeredgecolor=color1, markeredgewidth=4)
-    ax1.plot(x1, y1, ".", alpha=0.5, ms=28, markerfacecolor='none', markeredgecolor=color2, markeredgewidth=4)
-    ax1.plot(x2, y2, ".", alpha=0.5, ms=28, markerfacecolor='none', markeredgecolor=color3, markeredgewidth=4)
+
+    for i, group_data in enumerate(groups_data):
+        x = np.random.normal(positions[i], 0.02, size=len(group_data))
+        ax1.plot(x, group_data, ".", alpha=0.5, ms=28, markerfacecolor='none', markeredgecolor=colors[i], markeredgewidth=4)
+
     ax1.tick_params(axis='both', labelsize=35)
     ax1.spines['right'].set_visible(False)
     ax1.spines['top'].set_visible(False)
     ax1.spines['bottom'].set_visible(False)
-    ax1.tick_params(which='both', width=4, left=True)
-    ax1.tick_params(which='major', length=10, left=True)
-    ax1.tick_params(which='minor', length=8, left=True)
+    ax1.tick_params(which='both', width=4)
+    ax1.tick_params(which='major', length=10)
+    ax1.tick_params(which='minor', length=8)
     if thickformater:
         ax1.yaxis.set_major_formatter(mpl.ticker.StrMethodFormatter('{x:,.1f}'))
     plt.tick_params(axis="x", which="both", bottom=False, top=False)
     ax1.yaxis.labelpad = 10
     plt.subplots_adjust(left=None, bottom=0.2, right=0.99, top=0.9, wspace=None, hspace=None)
-    # stats and annotations
-    print(" ")
-    print("##############################")
-    print(label_y)
-    print(np.mean(group1_data))
-    print(np.mean(group2_data))
-    print(np.mean(group3_data))
-    # if sc.shapiro(group1_data)
 
-    x1, x2, x3 = 0.15, 0.40, 0.65
-    max_d = np.concatenate([group1_data, group2_data, group3_data]).max()
-    y, h, col = max_d + abs(0.10 * max_d), 0.025 * abs(max_d), 'k'
-    plt.plot([x1, x1, x2, x2], [y, y + h, y + h, y], lw=3, c=col)
-    plt.plot([x2, x2, x3, x3], [y + + 3 * h, y + 4 * h, y + 4 * h, y + 3 * h], lw=3, c=col)
-    plt.plot([x1, x1, x3, x3], [y + 7 * h, y + 8 * h, y + 8 * h, y + 7 * h], lw=3, c=col)
+    # Calculate significance stars using stats_anova
+    stars = stats_anova(*groups_data)
+    max_d = max([max(data) for data in groups_data])
+    y, h, col = max_d + abs(0.10 * max_d), 0.026 * abs(max_d), 'k'
+    fixed_star_distance = 0.005 * h
 
-    plt.text((x1 + x2) * .5, y + h, annot_text[0], ha='center', va='bottom', color=col, weight='bold')
-    plt.text((x2 + x3) * .5, y + 4 * h, annot_text[2], ha='center', va='bottom', color=col, weight='bold')
-    plt.text((x1 + x3) * .5, y + 8 * h, annot_text[1], ha='center', va='bottom', color=col, weight='bold')
+    # Calculate positions of group pairs and sort them by the mean position
+    positions_pairs = sorted(combinations(positions, 2), key=lambda x: np.mean(x))
+    offset = 15 * h  # Adjust this offset factor for more space between comparisons
+
+    num_stars = len(stars)
+    significant_pairs = []
+
+    # Filter pairs based on significance if needed
+    for i, (pos1, pos2) in enumerate(positions_pairs):
+        if not show_only_significant or stars[i] != "n.s":
+            significant_pairs.append((pos1, pos2, stars[i]))
+        print(f"Position pair: ({pos1}, {pos2}), Star: {stars[i]}")  # Debugging print
+
+    # Plot only the filtered significant pairs
+    for i, (pos1, pos2, star) in enumerate(significant_pairs):
+        y_offset = i * h * offset  # Apply offset
+        plt.plot([pos1, pos1, pos2, pos2], [y + y_offset, y + h + y_offset, y + h + y_offset, y + y_offset], lw=3,
+                 c=col)
+        plt.text((pos1 + pos2) * .5, y + y_offset + fixed_star_distance, star, ha='center', va='bottom', color=col,
+                 weight='bold')
+
     fig.tight_layout()
-    # fig.savefig(filename)
 
 
 def boxplot_3_conditions(group1_data, group2_data, cond_labels=["A", "B", "C"],
