@@ -153,9 +153,10 @@ def boxplot(ax, wt, ko, ylabel, ylim=[]):
     ax.set_title(None)
     ax.set_xlabel(None)
     ax.set_facecolor("white")
+    ax.spines["left"].set_color("black")
     # ax.yaxis.set_minor_locator(AutoMinorLocator(2))
-    ax.tick_params(axis='both', which='major', length=6, width=3)
-    ax.tick_params(axis='both', which='minor', length=4, width=3)
+    ax.tick_params(axis='both', which='major', length=6, width=3, color="black", left=True)
+    ax.tick_params(axis='both', which='minor', length=4, width=3, color="black", left=True)
     if len(ylim)!=0:
         ax.set_ylim(ylim)
     else:
@@ -213,6 +214,7 @@ def barplot(wt, ko, ylabel):
     ax.set_xlim([1.65, 1.9])
     plt.show()
     ax.grid(False)
+    ax.set_facecolor("white")
     ax.set_ylabel(ylabel + " Var ")
     ax.set_title(None)
     ax.set_xlabel(None)
@@ -300,9 +302,10 @@ def paired_boxplot(ax, det, undet, ylabel, title, ylim=[],colors = [ko_color,lig
     ax.set_title(None)
     ax.set_xlabel(None)
     ax.set_facecolor("white")
+    ax.spines["left"].set_color("black")
     # ax.yaxis.set_minor_locator(AutoMinorLocator(2))
-    ax.tick_params(axis='both', which='major', length=6, width=3)
-    ax.tick_params(axis='both', which='minor', length=4, width=3)
+    ax.tick_params(axis='both', which='major', length=6, width=3, left=True)
+    ax.tick_params(axis='both', which='minor', length=4, width=3, left=True)
     max_y = max(np.nanmax(det), np.nanmax(undet))
     if len(ylim)!=0:
         ax.set_ylim(ylim)
@@ -372,6 +375,8 @@ def boxplot_anova(group1_data, group2_data, group3_data, lim_y, label_y, filenam
     plt.xticks([0.15, 0.40], ['', ""])
     plt.ylim(lim_y)
     plt.ylabel(label_y)
+    ax.set_facecolor("white")
+    ax.spines["left"].set_color("black")
     ax1.get_yaxis().set_major_formatter(mpl.ticker.ScalarFormatter())
     y = group1_data
     x = np.random.normal(0.15, 0.02, size=len(y))
@@ -386,9 +391,9 @@ def boxplot_anova(group1_data, group2_data, group3_data, lim_y, label_y, filenam
     ax1.spines['right'].set_visible(False)
     ax1.spines['top'].set_visible(False)
     ax1.spines['bottom'].set_visible(False)
-    ax1.tick_params(which='both', width=4)
-    ax1.tick_params(which='major', length=10)
-    ax1.tick_params(which='minor', length=8)
+    ax1.tick_params(which='both', width=4, left=True)
+    ax1.tick_params(which='major', length=10, left=True)
+    ax1.tick_params(which='minor', length=8, left=True)
     if thickformater:
         ax1.yaxis.set_major_formatter(mpl.ticker.StrMethodFormatter('{x:,.1f}'))
     plt.tick_params(axis="x", which="both", bottom=False, top=False)
@@ -458,6 +463,7 @@ def boxplot_3_conditions(group1_data, group2_data, cond_labels=["A", "B", "C"],
         ax.spines['right'].set_visible(False)
         ax.spines['top'].set_visible(False)
         ax.spines['bottom'].set_visible(False)
+        ax.spines["left"].set_color("black")
         ax.set_xticks([0.15, 0.40], ['', ""])
         ax.set_xlabel(cond_labels[i], fontsize=font_s)
         ax.grid(False)
@@ -471,7 +477,7 @@ def boxplot_3_conditions(group1_data, group2_data, cond_labels=["A", "B", "C"],
         if i > 0:
             ax.spines['left'].set_visible(False)
             ax.tick_params(axis="y", which="both", left=False)
-        ax.tick_params(axis="x", which="both", bottom=False, top=False)
+        ax.tick_params(axis="x", which="both", bottom=False, top=False, left=True)
         pval = stat_boxplot(group1_data[i], group2_data[i], f"{cond_labels[i]} group comp")
         sig_symbol = symbol_pval(pval)
 
@@ -513,8 +519,13 @@ def boxplot_3_conditions(group1_data, group2_data, cond_labels=["A", "B", "C"],
 if __name__ == '__main__':
     group1 = [[12, 3, 4, 4, 8, 8, 8], [8, 8, 9, 12], [14, 10, 5, 8, 10]]
     group2 = [[8, 8, 9, 12], [12, 3, 4, 4, 8, 8, 8], [14, 10, 5, 8, 10]]
-    boxplot_3_conditions(group1, group2, ["Spe", "Sen", "Acc"],
-                         legend_labels=("WT", "KO-Hypo"),
-                         title="Nice plot",
-                         y_percent=True)
+    # boxplot_3_conditions(group1, group2, ["Spe", "Sen", "Acc"],
+    #                      legend_labels=("WT", "KO-Hypo"),
+    #                      title="Nice plot",
+    #                      y_percent=True)
+    fig, ax = plt.subplots()
+    wt = [1, 2, 5, 6, 9, 4, 3]
+    ko = [7, 8, 4, 9, 6, 5, 6, 8]
+    boxplot(ax, wt, ko, "test", ylim=[0, 10])
+    plt.show()
 
