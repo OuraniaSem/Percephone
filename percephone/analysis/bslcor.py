@@ -85,10 +85,10 @@ def prestim_sub_supra(n_type, ko):
     #  test if the baseline of KoHypo can have an impact on the Supra miss trials
     ko_hit_super, ko_miss_super, ko_hit_sub, ko_miss_sub = [], [], [], []
     for rec in recs.values():
-        t_points_suph = rec.stim_time[rec.detected_stim & (rec.stim_ampl> rec.threshold)]
-        t_points_supm= rec.stim_time[~rec.detected_stim & (rec.stim_ampl >rec.threshold)]
-        t_points_subh = rec.stim_time[rec.detected_stim & (rec.stim_ampl <= rec.threshold)]
-        t_points_sub_m = rec.stim_time[~rec.detected_stim & (rec.stim_ampl <= rec.threshold)]
+        t_points_suph = rec.stim_time[rec.detected_stim & (rec.stim_ampl>= rec.threshold)]
+        t_points_supm= rec.stim_time[~rec.detected_stim & (rec.stim_ampl >= rec.threshold)]
+        t_points_subh = rec.stim_time[rec.detected_stim & (rec.stim_ampl < rec.threshold)]
+        t_points_sub_m = rec.stim_time[~rec.detected_stim & (rec.stim_ampl < rec.threshold)]
         bsl_n_supra_hit = np.mean(np.mean(np.mean(rec.df_f_exc[:, np.linspace(t_points_suph-15, t_points_suph, 15, dtype=int)], axis=1), axis=1))
         bsl_n_supra_miss = np.mean(np.mean(np.mean(rec.df_f_exc[:, np.linspace(t_points_supm-15, t_points_supm, 15, dtype=int)], axis=1), axis=1))
         bsl_n_sub_hit = np.mean(np.mean(np.mean(rec.df_f_exc[:, np.linspace(t_points_subh-15, t_points_subh, 15, dtype=int)], axis=1), axis=1))
