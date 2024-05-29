@@ -625,7 +625,7 @@ class RecordingAmplDet(Recording):
             with open(self.input_path + name_model + ".json", "w") as jsn:
                 json.dump(to_save_list, jsn)
 
-    def stim_ampl_filter(self, stim_ampl="all"):
+    def stim_ampl_filter(self, stim_ampl="all", include_no_go=False):
         """
         Returns a vector of booleans to select the stimulations of desired amplitude.
 
@@ -635,12 +635,19 @@ class RecordingAmplDet(Recording):
             The amplitudes of stimulation that we want to select. List of absolute values or relative to threshold
             (threshold, supra, sub or all)
 
+        include_no_go : bool (optional, default = False)
+            Whether to include no-go trials (amplitude 0) or not.
+
         Returns
         -------
         numpy.ndarray[bool]
             A vector of booleans to select the stimulations of desired amplitude.
         """
-        all_ampl = np.arange(0, 14, 2)
+        if include_no_go:
+            all_ampl = np.arange(0, 14, 2)
+        else:
+            all_ampl = np.arange(2, 14, 2)
+
         if stim_ampl == "threshold":
             amplitudes = self.threshold
         elif stim_ampl == "supra":
