@@ -174,30 +174,82 @@ def plot_heatmap(rec, data, type="stim", stim_dur=None, window=0.5, sorted=False
     plt.tight_layout()
     plt.show()
 
+def plot_resp_heatmap(rec, n_type="EXC"):
+
+    data = rec.matrices[n_type]["Responsivity"]
+
+    det_ampl = rec.stim_ampl[rec.detected_stim]
+    undet_ampl = rec.stim_ampl[np.invert(rec.detected_stim)]
+    det_resp = data[:, rec.detected_stim]
+    undet_resp = data[:, np.invert(rec.detected_stim)]
+
+    stim_array = np.array(sorted(det_ampl) + sorted(undet_ampl))
+
+    ordered_data = np.empty((data.shape[0], 0))
+    for amp in sorted(set(det_ampl)):
+        for index, stim_ampl in enumerate(det_ampl):
+            if stim_ampl == amp:
+                ordered_data = np.column_stack((ordered_data, det_resp[:, index]))
+    for amp in sorted(set(undet_ampl)):
+        for index, stim_ampl in enumerate(undet_ampl):
+            if stim_ampl == amp:
+                ordered_data = np.column_stack((ordered_data, undet_resp[:, index]))
+
+    # figure global parameters
+    fig, ax = plt.subplots(1, 1, figsize=(18, 10))
+    divider = make_axes_locatable(ax)
+    tax1 = divider.append_axes('top', size='10%', pad=0.1, sharex=ax)
+    cax = divider.append_axes('right', size='2%', pad=0.1)
+    cmap = "inferno"
+    extent = [0, data.shape[1], data.shape[0] - 0.5, -0.5]
+
+
+    tax1.imshow(stim_array.reshape(1, -1), cmap=cmap, aspect='auto', interpolation='none', extent=extent)
+    tax1.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
+
+
+    Z = linkage(data, 'ward', optimal_ordering=True)
+    dn_exc = dendrogram(Z, no_plot=True, count_sort="ascending")
+    im = ax.imshow(data[dn_exc['leaves']], cmap=cmap, interpolation='none', aspect='auto',
+                   vmin=np.nanpercentile(np.ravel(data), 1),
+                   vmax=np.nanpercentile(np.ravel(data), 99), extent=extent)
+
+    # color scale parameters
+    cbar = plt.colorbar(im, cax=cax)
+    cbar.ax.tick_params(which='both', width=4)
+    cbar.set_label("Responsivity")
+
+    ax.set_ylabel("Neurons")
+    ax.set_xlabel("Trials")
+    tax1.set_title(f"{rec.filename} ({rec.genotype}) - {rec.threshold}")
+
+    plt.tight_layout()
+    plt.show()
+
 
 if __name__ == '__main__':
     # Record import
     plt.ion()
     roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
-    folder = "C:/Users/cvandromme/Desktop/Data/20220930_4745_01_synchro/"
+    folder = "C:/Users/cvandromme/Desktop/Data/20220715_4456_00_synchro/"
     rec = RecordingAmplDet(folder, 0, roi_path, cache=True)
-    rec.peak_delay_amp()
-    rec.auc()
+    # rec.peak_delay_amp()
+    # rec.auc()
+    #
+    # det_sorting = True
+    # amp_sorting = True
+    # period = "stim"
+    # window = 0.5
+    # estimator = "Mean"
+    #
+    # data, stim_time = get_zscore(rec, exc_neurons=True, inh_neurons=False,
+    #                              time_span=period, window=window, estimator=estimator,
+    #                              sort=det_sorting, amp_sort=amp_sorting)
+    #
+    # plot_heatmap(rec, data, type=period, stim_dur=stim_time, window=window,
+    #              sorted=det_sorting, amp_sorted=amp_sorting, estimator=estimator)
 
-    det_sorting = True
-    amp_sorting = True
-    period = "stim"
-    window = 0.5
-    estimator = "Mean"
-
-    data, stim_time = get_zscore(rec, exc_neurons=True, inh_neurons=False,
-                                 time_span=period, window=window, estimator=estimator,
-                                 sort=det_sorting, amp_sort=amp_sorting)
-
-    plot_heatmap(rec, data, type=period, stim_dur=stim_time, window=window,
-                 sorted=det_sorting, amp_sorted=amp_sorting, estimator=estimator)
-
-
+    plot_resp_heatmap(rec, n_type="EXC")
 
     # hm.plot_dff_stim_detected(rec, rec.df_f_exc)
     # hm.plot_dff_stim_detected(rec, rec.df_f_inh)
