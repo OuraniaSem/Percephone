@@ -76,6 +76,17 @@ def extract_analog_from_mesc(path_mesc, tuple_mesc, frame_rate,analog_fs =20000,
     print("Analog saved.")
 
 
+def correction_drift_fluo(df_f, path):
+    corrected_df_f = np.zeros(df_f.shape)
+    for i,neuron_trace in enumerate(df_f):
+        start_fluo = np.mean(neuron_trace[:30])
+        end_fluo = np.mean(neuron_trace[-30:])
+        drift = np.linspace(0, 1.5*(start_fluo - end_fluo), len(neuron_trace))
+        corrected_df_f[i] = neuron_trace + drift
+        np.save(path, corrected_df_f)
+    return corrected_df_f
+
+
 if __name__ == '__main__':
     import percephone.core.recording as pc
     import percephone.plts.heatmap as hm

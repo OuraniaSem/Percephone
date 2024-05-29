@@ -12,12 +12,11 @@ import numpy as np
 import pandas as pd
 import scipy.signal as ss
 import matplotlib.pyplot as plt
-from percephone.utils.io import read_info
+from percephone.utils.io import read_info, correction_drift_fluo
 from percephone.analysis.response import resp_matrice, auc_matrice, delay_matrice, peak_matrices
 from percephone.analysis.mlr import mlr
 from percephone.analysis.mlr_models import classic_model
 from percephone.utils.io import extract_analog_from_mesc
-
 matplotlib.use("Qt5Agg")
 plt.switch_backend("Qt5Agg")
 
@@ -90,6 +89,9 @@ class Recording:
         else:
             self.df_f_exc = self.compute_df_f(excitatory_ids, input_path + 'df_f_exc.npy', mean_f_bsl)
             self.df_f_inh = self.compute_df_f(inhibitory_ids, input_path + 'df_f_inh.npy', mean_f_bsl)
+            if self.filename == 4445:
+                self.df_f_exc = correction_drift_fluo(self.df_f_exc, input_path + 'df_f_exc.npy')
+                self.df_f_inh = correction_drift_fluo(self.df_f_inh, input_path + 'df_f_inh.npy')
 
         if os.path.exists(input_path + 'spks.npy'):
             spks = np.load(self.input_path + "spks.npy")
@@ -671,7 +673,7 @@ if __name__ == '__main__':
     # folder = "20240404_6601_04_synchro_temp"
     # folder = "20240404_6602_01_synchro_temp"
     # folder = "20240405_6601_02_synchro_temp"
-    folder = "20240404_6606_02_synchro"
+    folder = "20220710_4445_00_synchro"
     # path_to_mesc = path + folder + "/20240404_6601_det.mesc"
     path_to_mesc = path + "/20240405_6601_det.mesc"
 
