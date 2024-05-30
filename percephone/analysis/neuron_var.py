@@ -172,9 +172,9 @@ def plot_heatmap(rec, data, type="stim", stim_dur=None, window=0.5, sorted=False
     ax.set_ylabel('Neurons')
     ax.set_xlabel(f"Frames ({type})")
     tax1.set_title(f"{rec.filename} ({rec.genotype}) - {rec.threshold}") if (type == "stim" or type == "pre_stim") else ax.set_title(f"{rec.filename} ({rec.genotype}) - {rec.threshold}")
-
     plt.tight_layout()
     plt.show()
+
 
 def plot_resp_heatmap(rec, n_type="EXC"):
 
@@ -210,7 +210,7 @@ def plot_resp_heatmap(rec, n_type="EXC"):
     tax1.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
 
 
-    Z = linkage(data, 'ward', optimal_ordering=True)
+    Z = linkage(ordered_data, 'ward', optimal_ordering=True)
     dn_exc = dendrogram(Z, no_plot=True, count_sort="ascending")
     im = ax.imshow(data[dn_exc['leaves']], cmap=cmap, interpolation='none', aspect='auto',
                    vmin=-1,
@@ -220,11 +220,9 @@ def plot_resp_heatmap(rec, n_type="EXC"):
     cbar = plt.colorbar(im, cax=cax)
     cbar.ax.tick_params(which='both', width=4)
     cbar.set_label("Responsivity")
-
     ax.set_ylabel("Neurons")
     ax.set_xlabel("Trials")
     tax1.set_title(f"{rec.filename} ({rec.genotype}) - {rec.threshold}")
-
     plt.tight_layout()
     plt.show()
 
