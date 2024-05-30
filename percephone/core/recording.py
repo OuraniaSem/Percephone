@@ -673,7 +673,7 @@ if __name__ == '__main__':
     # folder = "20240404_6601_04_synchro_temp"
     # folder = "20240404_6602_01_synchro_temp"
     # folder = "20240405_6601_02_synchro_temp"
-    folder = "20220710_4445_00_synchro"
+    folder = "20220715_4456_00_synchro"
     # path_to_mesc = path + folder + "/20240404_6601_det.mesc"
     path_to_mesc = path + "/20240405_6601_det.mesc"
 

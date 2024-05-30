@@ -44,14 +44,16 @@ def resp_single_neuron(neuron_df_data_, random_timing, rec):
     bootstrap_responses = []
     bootstrap_neg = []
     for rnd_idx in random_timing:
-        signal = neuron_df_data_[rnd_idx - pre_boundary:rnd_idx]
+        signal = neuron_df_data_[rnd_idx: rnd_idx + pre_boundary:]
         signal_pos = signal  # + abs(min(signal))
         signal_inverted = signal * -1
         signal_neg = signal_inverted  # + abs(min(signal_inverted ))
         bootstrap_responses.append(ss.iqr(signal_pos, nan_policy='omit'))
         bootstrap_neg.append(ss.iqr(signal_neg, nan_policy='omit'))
-    threshold_high = 1.5*np.nanpercentile(bootstrap_responses, 99)  # 2 * np.nanper... before 11-09-2023
-    threshold_low = -1.5*np.nanpercentile(bootstrap_neg, 99) #- abs(min(signal_inverted)))
+    threshold_high = np.nanpercentile(bootstrap_responses, 95)
+    threshold_low = -np.nanpercentile(bootstrap_neg, 95)
+    # threshold_high = 1.5 * np.nanpercentile(bootstrap_responses, 99)  # 2 * np.nanper... before 11-09-2023
+    # threshold_low = -1.5 * np.nanpercentile(bootstrap_neg, 99) #- abs(min(signal_inverted)))
     # calculation of the durations
 
     durations = np.zeros(len(rec.stim_time), dtype=int)
@@ -64,11 +66,16 @@ def resp_single_neuron(neuron_df_data_, random_timing, rec):
 
     for y, stim_i in enumerate(rec.stim_time):
         # bsl_activity = np.subtract(*np.nanpercentile((neuron_df[(int(stim_timing * sf) - pre_boundary):int(stim_timing * sf)]), [75, 25]))
-        bsl_activity = np.mean(neuron_df_data_[(stim_i - pre_boundary):stim_i])
-        peak_high = np.max(neuron_df_data_[stim_i:(stim_i + durations[y])])
-        peak_low = np.min(neuron_df_data_[stim_i:(stim_i + durations[y])])
-        true_response_high = peak_high - bsl_activity
-        true_response_low = peak_low - bsl_activity
+        # bsl_activity = ss.iqr(neuron_df_data_[(stim_i - pre_boundary):stim_i])
+        peak_high = np.nanpercentile(neuron_df_data_[stim_i:(stim_i + durations[y])], 85)
+        peak_low = np.nanpercentile(neuron_df_data_[stim_i:(stim_i + durations[y])], 10)
+        true_response_high = peak_high
+        true_response_low = peak_low
+        # bsl_activity = np.mean(neuron_df_data_[(stim_i - pre_boundary):stim_i])
+        # peak_high = np.max(neuron_df_data_[stim_i:(stim_i + durations[y])])
+        # peak_low = np.min(neuron_df_data_[stim_i:(stim_i + durations[y])])
+        # true_response_high = peak_high - bsl_activity
+        # true_response_low = peak_low - bsl_activity
         if true_response_high > threshold_high:
             resp.append(1)
         elif true_response_low < threshold_low:
@@ -96,9 +103,11 @@ def resp_matrice(rec, df_data):
     # range_iti = set(range(len(df_data[0]))).difference(set(np.concatenate(exclude_windows)))
 
     #04-04-2024
-    pre_boundary = int(5 * rec.sf)  # index
+    pre_boundary = int(3 * rec.sf)  # index
     baseline_timings = [list(range(t - pre_boundary, t)) for t in rec.stim_time]
+    # random_timing = rnd.sample(list(np.concatenate(baseline_timings)), k=1999)
     random_timing = rnd.sample(list(np.concatenate(baseline_timings)), k=1999)
+
 
     from multiprocessing import Pool, cpu_count
     workers = cpu_count()

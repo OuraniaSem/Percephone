@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import matplotlib
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -170,9 +172,9 @@ def plot_heatmap(rec, data, type="stim", stim_dur=None, window=0.5, sorted=False
     ax.set_ylabel('Neurons')
     ax.set_xlabel(f"Frames ({type})")
     tax1.set_title(f"{rec.filename} ({rec.genotype}) - {rec.threshold}") if (type == "stim" or type == "pre_stim") else ax.set_title(f"{rec.filename} ({rec.genotype}) - {rec.threshold}")
-
     plt.tight_layout()
     plt.show()
+
 
 def plot_resp_heatmap(rec, n_type="EXC"):
 
@@ -208,21 +210,19 @@ def plot_resp_heatmap(rec, n_type="EXC"):
     tax1.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
 
 
-    Z = linkage(data, 'ward', optimal_ordering=True)
+    Z = linkage(ordered_data, 'ward', optimal_ordering=True)
     dn_exc = dendrogram(Z, no_plot=True, count_sort="ascending")
-    im = ax.imshow(data[dn_exc['leaves']], cmap=cmap, interpolation='none', aspect='auto',
-                   vmin=np.nanpercentile(np.ravel(data), 1),
-                   vmax=np.nanpercentile(np.ravel(data), 99), extent=extent)
+    im = ax.imshow(ordered_data[dn_exc['leaves']], cmap=cmap, interpolation='none', aspect='auto',
+                   vmin=-1,
+                   vmax=1)
 
     # color scale parameters
     cbar = plt.colorbar(im, cax=cax)
     cbar.ax.tick_params(which='both', width=4)
     cbar.set_label("Responsivity")
-
     ax.set_ylabel("Neurons")
     ax.set_xlabel("Trials")
     tax1.set_title(f"{rec.filename} ({rec.genotype}) - {rec.threshold}")
-
     plt.tight_layout()
     plt.show()
 
@@ -230,9 +230,16 @@ def plot_resp_heatmap(rec, n_type="EXC"):
 if __name__ == '__main__':
     # Record import
     plt.ion()
-    roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
-    folder = "C:/Users/cvandromme/Desktop/Data/20220715_4456_00_synchro/"
-    rec = RecordingAmplDet(folder, 0, roi_path, cache=True)
+    # roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
+    # folder = "C:/Users/cvandromme/Desktop/Data/20220715_4456_00_synchro/"
+    dir = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
+    folder = dir + "/20220715_4456_00_synchro/"
+    roi_path = dir + "/FmKO_ROIs&inhibitory.xlsx"
+    for f in os.listdir(dir):
+        if f.endswith("synchro"):
+            rec = RecordingAmplDet(dir + f + "/", 0, roi_path, cache=True)
+            # rec.responsivity()
+            plot_resp_heatmap(rec, n_type="EXC")
     # rec.peak_delay_amp()
     # rec.auc()
     #
@@ -248,8 +255,6 @@ if __name__ == '__main__':
     #
     # plot_heatmap(rec, data, type=period, stim_dur=stim_time, window=window,
     #              sorted=det_sorting, amp_sorted=amp_sorting, estimator=estimator)
-
-    plot_resp_heatmap(rec, n_type="EXC")
 
     # hm.plot_dff_stim_detected(rec, rec.df_f_exc)
     # hm.plot_dff_stim_detected(rec, rec.df_f_inh)
