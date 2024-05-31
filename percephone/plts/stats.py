@@ -268,7 +268,7 @@ def barplot(wt, ko, ylabel):
     ax.text((x1 + x2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, weight='bold')
 
 
-def paired_boxplot(ax, det, undet, ylabel, title, ylim=[],colors = [ko_color,light_ko_color]):
+def paired_boxplot(ax, det, undet, ylabel, title, ylim=[], colors=[ko_color,light_ko_color], allow_stats_skip=False):
     """
     create boxplot for two data groups.
 
@@ -280,6 +280,8 @@ def paired_boxplot(ax, det, undet, ylabel, title, ylim=[],colors = [ko_color,lig
         data of the undetected group
     ylabel : string
         columns names
+    allow_stats_skip : bool
+
 
     """
     print("Boxplot plotting.")
@@ -330,10 +332,19 @@ def paired_boxplot(ax, det, undet, ylabel, title, ylim=[],colors = [ko_color,lig
     y, col = max_data + 0.10 * abs(max_data), 'k'
     ax.plot([x_1, x_2], [y, y], lw=3, c=col)
 
-    pval = stat_boxplot(det, undet, ylabel, paired=True)
-    sig_symbol = symbol_pval(pval)
+    if allow_stats_skip:
+        try:
+            pval = stat_boxplot(det, undet, ylabel, paired=True)
+            sig_symbol = symbol_pval(pval)
+            ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_s - 8,
+                    weight='bold')
+        except ValueError:
+            pass
+    else:
+        pval = stat_boxplot(det, undet, ylabel, paired=True)
+        sig_symbol = symbol_pval(pval)
+        ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_s-8, weight='bold')
 
-    ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_s-8, weight='bold')
     ax.set_xticks([0.15, 0.40], ['', ""])
     ax.tick_params(axis="x", which="both", bottom=False)
     ax.set_title(title)

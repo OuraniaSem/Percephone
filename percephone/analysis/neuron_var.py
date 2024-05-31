@@ -212,7 +212,7 @@ def plot_resp_heatmap(rec, n_type="EXC"):
 
     Z = linkage(ordered_data, 'ward', optimal_ordering=True)
     dn_exc = dendrogram(Z, no_plot=True, count_sort="ascending")
-    im = ax.imshow(data[dn_exc['leaves']], cmap=cmap, interpolation='none', aspect='auto',
+    im = ax.imshow(ordered_data[dn_exc['leaves']], cmap=cmap, interpolation='none', aspect='auto',
                    vmin=-1,
                    vmax=1, extent=extent)
 
@@ -235,26 +235,30 @@ if __name__ == '__main__':
     files = os.listdir(directory)
     files_ = [file for file in files if file.endswith("synchro")]
 
-    for file in files_:
-        folder = f"C:/Users/cvandromme/Desktop/Data/{file}/"
-        rec = RecordingAmplDet(folder, 0, roi_path, cache=True)
-        # rec.peak_delay_amp()
-        # rec.auc()
-        #
-        det_sorting = True
-        amp_sorting = True
-        period = "stim"
-        window = 0.5
-        estimator = None
+    directory = "C:/Users/cvandromme/Desktop/Data/20221205_4939_04_synchro/"
+    rec = RecordingAmplDet(directory, 0, roi_path, cache=True)
+    plot_resp_heatmap(rec, n_type="EXC")
 
-        # data, stim_time = get_zscore(rec, exc_neurons=True, inh_neurons=False,
-        #                              time_span=period, window=window, estimator=estimator,
-        #                              sort=det_sorting, amp_sort=amp_sorting)
-        #
-        # plot_heatmap(rec, data, type=period, stim_dur=stim_time, window=window,
-        #              sorted=det_sorting, amp_sorted=amp_sorting, estimator=estimator)
-
-        plot_resp_heatmap(rec, n_type="EXC")
+    # for file in files_:
+    #     folder = f"C:/Users/cvandromme/Desktop/Data/{file}/"
+    #     rec = RecordingAmplDet(folder, 0, roi_path, cache=True)
+    #     # rec.peak_delay_amp()
+    #     # rec.auc()
+    #     #
+    #     det_sorting = True
+    #     amp_sorting = True
+    #     period = "stim"
+    #     window = 0.5
+    #     estimator = None
+    #
+    #     # data, stim_time = get_zscore(rec, exc_neurons=True, inh_neurons=False,
+    #     #                              time_span=period, window=window, estimator=estimator,
+    #     #                              sort=det_sorting, amp_sort=amp_sorting)
+    #     #
+    #     # plot_heatmap(rec, data, type=period, stim_dur=stim_time, window=window,
+    #     #              sorted=det_sorting, amp_sorted=amp_sorting, estimator=estimator)
+    #
+    #     plot_resp_heatmap(rec, n_type="INH")
 
     # hm.plot_dff_stim_detected(rec, rec.df_f_exc)
     # hm.plot_dff_stim_detected(rec, rec.df_f_inh)
