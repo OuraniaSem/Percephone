@@ -426,7 +426,7 @@ class RecordingAmplDet(Recording):
                     print("No analog.txt either mesc file in the folder!")
                     return
             self.analog = pd.read_csv(input_path + 'analog.txt', sep="\t", header=None)
-            if (len(self.analog[0])/10000)>600:
+            if (len(self.analog[0])/10000) > 600:
                 self.analog[0] = (self.analog[0] * 10).astype(int)
                 analog_sf = 10000
             else:
@@ -585,7 +585,7 @@ class RecordingAmplDet(Recording):
         for i, stim_t in enumerate(self.stim_time):
             diff_ar = np.absolute(self.reward_time - stim_t)
             if diff_ar[diff_ar.argmin()] >= int(0.5 * self.sf) - 1:
-                durations[i] = 15
+                durations[i] = int(0.5*self.sf)
             else:
                 durations[i] = diff_ar[diff_ar.argmin()]
         self.stim_durations = durations
@@ -667,18 +667,15 @@ class RecordingAmplDet(Recording):
 if __name__ == '__main__':
     import percephone.plts.heatmap as hm
 
-    directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
-    path = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
-    roi_info = directory + "/FmKO_ROIs&inhibitory.xlsx"
-    # folder = "20240404_6601_04_synchro_temp"
-    # folder = "20240404_6602_01_synchro_temp"
-    # folder = "20240405_6601_02_synchro_temp"
-    folder = "20220710_4445_00_synchro"
-    # path_to_mesc = path + folder + "/20240404_6601_det.mesc"
-    path_to_mesc = path + "/20240405_6601_det.mesc"
+    directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/DMSO and BMS/"
+    roi_info = directory + "FmKO_ROIs&inhibitory.xlsx"
+    folder = "20231103_5893_04_synchro"
+    path_to_mesc = directory + "20231103_5893_det_DMSO.mesc"
 
-    # extract_analog_from_mesc(path_to_mesc, (0, 2), 30.9609, 20000, path + folder + "/")
-    rec = RecordingAmplDet(path + folder + "/", 0, roi_info, cache=False, correction=False)
+    extract_analog_from_mesc(path_to_mesc, (0, 4),  30.9609, 20000, directory + folder + "/")
+    rec = RecordingAmplDet(directory + folder + "/", 0, roi_info, cache=False, correction=False)
     hm.interactive_heatmap(rec, rec.zscore_exc)
 
-
+    from percephone.analysis.neuron_var import plot_heatmap, get_zscore
+    zsc,t_stim = get_zscore(rec, exc_neurons=True, sort=True, amp_sort=True)
+    plot_heatmap(rec,  zsc, sorted=True, amp_sorted=True)
