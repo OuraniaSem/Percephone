@@ -2,11 +2,16 @@
 Théo Gauvrit 18/01/2024
 New inferno traces colored heatmaps
 """
+import os
 
 import matplotlib
 import numpy as np
 from scipy.cluster.hierarchy import dendrogram, linkage
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+from percephone.core.recording import RecordingAmplDet
+from percephone.plts.utils import get_zscore
+
 matplotlib.use("Qt5Agg")
 import matplotlib.pyplot as plt
 from matplotlib.backend_bases import MouseButton
@@ -340,6 +345,179 @@ def amp_tuning_heatmap(ax, rec, activity, title=""):
     ax.set_ylabel("Neurons")
     ax.set_title(title)
 
-def responsivity(heatmap):
 
-    ax
+def ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
+                    time_span="stim", window=0.5, estimator=None,
+                    det_sorted=False, amp_sorted=False):
+
+    data, stim_dur = get_zscore(rec, exc_neurons=exc_neurons, inh_neurons=inh_neurons,
+                                time_span=time_span, window=window, estimator=estimator,
+                                sort=det_sorted, amp_sort=amp_sorted)
+
+    # figure global parameters
+    fig, ax = plt.subplots(1, 1, figsize=(18, 10))
+    divider = make_axes_locatable(ax)
+    tax1 = divider.append_axes('top', size='10%', pad=0.1, sharex=ax) if (
+                time_span == "stim" or time_span == "pre_stim") else None
+    cax = divider.append_axes('right', size='2%', pad=0.1)
+    cmap = "inferno"
+    extent = [0, data.shape[1], data.shape[0] - 0.5, -0.5]
+
+    # plotting the stimulation amplitudes
+    if det_sorted:
+        stim_det = []
+        stim_undet = []
+        for i in range(rec.stim_time.shape[0]):
+            if time_span == "stim":
+                ampl_vec = [rec.stim_ampl[i]] * int(rec.stim_durations[i])
+            elif time_span == "pre_stim":
+                ampl_vec = [rec.stim_ampl[i]] * int(window * rec.sf)
+            (stim_det if rec.detected_stim[i] else stim_undet).extend(ampl_vec)
+        if amp_sorted:
+            stim_det.sort()
+            stim_undet.sort()
+        stim_array = np.array(stim_det + stim_undet)
+    else:
+        stim_bar = []
+        for i in range(rec.stim_time.shape[0]):
+            if time_span == "stim":
+                stim_bar.extend([rec.stim_ampl[i]] * int(rec.stim_durations[i]))
+            elif time_span == "pre_stim":
+                stim_bar.extend([rec.stim_ampl[i]] * int(window * rec.sf))
+        stim_array = np.array(stim_bar)
+
+    if (time_span == "stim" or time_span == "pre_stim"):
+        tax1.imshow(stim_array.reshape(1, -1), cmap=cmap, aspect='auto', interpolation='none', extent=extent)
+        tax1.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
+
+    # neurons clustering and data display
+    Z = linkage(data, 'ward', optimal_ordering=True)
+    dn_exc = dendrogram(Z, no_plot=True, count_sort="ascending")
+    im = ax.imshow(data[dn_exc['leaves']], cmap=cmap, interpolation='none', aspect='auto',
+                   vmin=np.nanpercentile(np.ravel(data), 1),
+                   vmax=np.nanpercentile(np.ravel(data), 99), extent=extent)
+
+    # plotting lines to separate stimulation
+    if time_span == "stim":
+        cumulative_stim_duration = 0
+        for stim in stim_dur:
+            cumulative_stim_duration += stim
+            ax.vlines(cumulative_stim_duration, ymin=-0.5, ymax=len(data) - 0.5, color='w', linewidth=0.5)
+        if det_sorted:
+            det_stim_duration = rec.stim_durations[rec.detected_stim]
+            ax.vlines(det_stim_duration.sum(), ymin=-0.5, ymax=len(data) - 0.5, color='b', linewidth=1)
+    elif time_span == "pre_stim":
+        for i in range(len(rec.detected_stim)):
+            ax.vlines(i * int(window * rec.sf), ymin=-0.5, ymax=len(data) - 0.5, color='w', linewidth=0.5)
+        if det_sorted:
+            ax.vlines(rec.detected_stim.sum() * int(window * rec.sf), ymin=-0.5, ymax=len(data) - 0.5, color='b',
+                      linewidth=1)
+    else:
+        iterator = len(rec.reward_time) if time_span == "reward" else (
+            len(rec.timeout_time) if time_span == "timeout" else 0)
+        for i in range(iterator):
+            ax.vlines(i * int(window * rec.sf), ymin=-0.5, ymax=len(data) - 0.5, color='w', linewidth=0.5)
+
+    # color scale parameters
+    cbar = plt.colorbar(im, cax=cax)
+    cbar.ax.tick_params(which='both', width=4)
+    cbar.set_label("Z-score") if estimator is None else cbar.set_label(f"Z-score ({estimator})")
+
+    ax.set_ylabel('Neurons')
+    ax.set_xlabel(f"Frames ({time_span})")
+    tax1.set_title(f"{rec.filename} ({rec.genotype}) - {rec.threshold}") if (
+                time_span == "stim" or time_span == "pre_stim") else ax.set_title(
+        f"{rec.filename} ({rec.genotype}) - {rec.threshold}")
+    plt.tight_layout()
+    plt.show()
+
+
+def resp_heatmap(rec, n_type="EXC"):
+
+    data = rec.matrices[n_type]["Responsivity"]
+
+    det_ampl = rec.stim_ampl[rec.detected_stim]
+    undet_ampl = rec.stim_ampl[np.invert(rec.detected_stim)]
+    det_resp = data[:, rec.detected_stim]
+    undet_resp = data[:, np.invert(rec.detected_stim)]
+
+    stim_array = np.array(sorted(det_ampl) + sorted(undet_ampl))
+
+    ordered_data = np.empty((data.shape[0], 0))
+    for amp in sorted(set(det_ampl)):
+        for index, stim_ampl in enumerate(det_ampl):
+            if stim_ampl == amp:
+                ordered_data = np.column_stack((ordered_data, det_resp[:, index]))
+    for amp in sorted(set(undet_ampl)):
+        for index, stim_ampl in enumerate(undet_ampl):
+            if stim_ampl == amp:
+                ordered_data = np.column_stack((ordered_data, undet_resp[:, index]))
+
+    # figure global parameters
+    fig, ax = plt.subplots(1, 1, figsize=(18, 10))
+    divider = make_axes_locatable(ax)
+    tax1 = divider.append_axes('top', size='10%', pad=0.1, sharex=ax)
+    cax = divider.append_axes('right', size='2%', pad=0.1)
+    cmap = "inferno"
+    extent = [0, data.shape[1], data.shape[0] - 0.5, -0.5]
+
+
+    tax1.imshow(stim_array.reshape(1, -1), cmap=cmap, aspect='auto', interpolation='none', extent=extent)
+    tax1.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
+
+
+    Z = linkage(ordered_data, 'ward', optimal_ordering=True)
+    dn_exc = dendrogram(Z, no_plot=True, count_sort="ascending")
+    im = ax.imshow(ordered_data[dn_exc['leaves']], cmap=cmap, interpolation='none', aspect='auto',
+                   vmin=-1,
+                   vmax=1, extent=extent)
+
+    # color scale parameters
+    cbar = plt.colorbar(im, cax=cax)
+    cbar.ax.tick_params(which='both', width=4)
+    cbar.set_label("Responsivity")
+    ax.set_ylabel("Neurons")
+    ax.set_xlabel("Trials")
+    tax1.set_title(f"{rec.filename} ({rec.genotype}) - {rec.threshold}")
+    plt.tight_layout()
+    plt.show()
+
+
+if __name__ == '__main__':
+    # Record import
+    plt.ion()
+    roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
+
+    plot_all_records = False
+    plot_ordered_heatmap = False
+    plot_responsivity_heatmap = True
+
+    if plot_all_records:
+        directory = "C:/Users/cvandromme/Desktop/Data/"
+        files = os.listdir(directory)
+        files_ = [file for file in files if file.endswith("synchro")]
+        for file in files_:
+            folder = f"C:/Users/cvandromme/Desktop/Data/{file}/"
+            rec = RecordingAmplDet(folder, 0, roi_path, cache=True)
+            if plot_ordered_heatmap:
+                ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
+                                time_span="stim", window=0.5, estimator=None,
+                                det_sorted=True, amp_sorted=True)
+            if plot_responsivity_heatmap:
+                resp_heatmap(rec, n_type="EXC")
+
+    else:
+        directory = "C:/Users/cvandromme/Desktop/Data/20220715_4456_00_synchro/"
+        rec = RecordingAmplDet(directory, 0, roi_path, cache=True)
+        if plot_ordered_heatmap:
+            ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
+                            time_span="stim", window=0.5, estimator=None,
+                            det_sorted=True, amp_sorted=True)
+        if plot_responsivity_heatmap:
+            resp_heatmap(rec, n_type="EXC")
+
+
+    # hm.plot_dff_stim_detected(rec, rec.df_f_exc)
+    # hm.plot_dff_stim_detected(rec, rec.df_f_inh)
+    # hm.intereactive_heatmap(rec, rec.zscore_exc)
+    # hm.intereactive_heatmap(rec, rec.zscore_inh)
