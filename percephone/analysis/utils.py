@@ -126,3 +126,4 @@ def neuron_mean_std_corr(array, estimator):
         return np.mean(array, axis=0)
     if estimator == "Std":
         return np.std(array, axis=0)
+
