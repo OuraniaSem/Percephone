@@ -25,6 +25,5 @@ xlrd
 sphinx==7.2.6
 sphinx-rtd-theme
 mock
-sklearn
 seaborn
 imblearn
