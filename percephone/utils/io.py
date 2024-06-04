@@ -46,9 +46,9 @@ def extract_analog_from_mesc(path_mesc, tuple_mesc, frame_rate,analog_fs =20000,
     file = h5py.File(path_mesc)
     dset = file['MSession_' + str(tuple_mesc[0])]
     unit = dset['MUnit_' + str(tuple_mesc[1])]
-    iti = unit['Curve_3']  # 3
+    iti = unit['Curve_2']  # 3
     iti_curve = np.array(iti['CurveDataYRawData'])
-    timings = unit['Curve_1']  # 1
+    timings = unit['Curve_0']  # 1
     timing_curve = np.array(timings['CurveDataYRawData'])
 
     fig, ax = plt.subplots(1, 1, figsize=(18, 10))
@@ -61,8 +61,8 @@ def extract_analog_from_mesc(path_mesc, tuple_mesc, frame_rate,analog_fs =20000,
     print(end_timings_frames)
     end_timings_iti = len(iti_curve[::factor])/10
     print(end_timings_iti)
-    nb_points = int(len(iti_curve[::factor])) # int(end_timings_frames*10)  #int(end_timings*10)
-    timings = np.linspace(0,  end_timings_frames, nb_points)
+    nb_points = int(len(iti_curve[::factor]))  # int(end_timings_frames*10)  #int(end_timings*10)
+    timings = np.linspace(0,   end_timings, nb_points)
     analog_np = np.zeros((4, nb_points))
     analog_np[0] = timings
     analog_np[1] = analog_np[1]  # no stim analog in the new format
