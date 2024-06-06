@@ -563,18 +563,3 @@ def boxplot_3_conditions(group1_data, group2_data, cond_labels=["A", "B", "C"],
         fig.savefig(filename)
     plt.show()
     # fig.tight_layout(pad=0.1)
-
-
-if __name__ == '__main__':
-    group1 = [[12, 3, 4, 4, 8, 8, 8], [8, 8, 9, 12], [14, 10, 5, 8, 10]]
-    group2 = [[8, 8, 9, 12], [12, 3, 4, 4, 8, 8, 8], [14, 10, 5, 8, 10]]
-    # boxplot_3_conditions(group1, group2, ["Spe", "Sen", "Acc"],
-    #                      legend_labels=("WT", "KO-Hypo"),
-    #                      title="Nice plot",
-    #                      y_percent=True)
-    fig, ax = plt.subplots()
-    wt = [1, 2, 5, 6, 9, 4, 3]
-    ko = [7, 8, 4, 9, 6, 5, 6, 8]
-    boxplot(ax, wt, ko, "test", ylim=[0, 10])
-    plt.show()
-

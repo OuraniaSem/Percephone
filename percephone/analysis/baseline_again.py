@@ -36,7 +36,7 @@ async_results = [pool.apply_async(opening_rec, args=(file, i)) for i, file in en
 recs = {ar.get().filename: ar.get() for ar in async_results}
 
 from matplotlib.widgets import Button, Slider
-rec = recs[4939]
+rec = recs[4756]
 import percephone.plts.response as rr
 
 # rr.superimposed_response(rec, rec.zscore_exc, rec.stim_time[2])
