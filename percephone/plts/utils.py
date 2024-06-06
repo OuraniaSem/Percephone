@@ -2,93 +2,154 @@
 Théo Gauvrit 18/01/2024
 Utility function for plots
 """
+import scipy.stats as ss
 import numpy as np
+import pandas as pd
+from statsmodels.stats.multicomp import pairwise_tukeyhsd
 
-from percephone.analysis.utils import get_iter_range, neuron_mean_std_corr, get_timepoints
 
+def symbol_pval(pval):
+    """
+    Returns the significance symbol associated with the given pvalue.
 
-def get_zscore(rec, exc_neurons=True, inh_neurons=False, time_span="stim", window=0.5, estimator=None, sort=False,
-               amp_sort=False):
-    if amp_sort:
-        assert sort
-    if sort or amp_sort:
-        assert time_span == "stim" or time_span == "pre_stim"
-    # Retrieving zscore
-    if exc_neurons and inh_neurons:
-        zscore = np.row_stack((rec.zscore_exc, rec.zscore_inh)).T
-    elif exc_neurons:
-        zscore = rec.zscore_exc.T
-    elif inh_neurons:
-        zscore = rec.zscore_inh.T
+    Parameters
+    ----------
+    pval : float
+        The p-value used to determine the significance level.
 
-    # Getting the iter range
-    iter_range = get_iter_range(rec, time_span)
-
-    # Initializing the list of stim duration and amplitude
-    t_stim = list(rec.stim_durations)
-
-    # Initializing X
-    if sort:
-        if amp_sort:
-            all_amp = sorted([int(i) for i in set(rec.stim_ampl)])
-            X_amp_det = {i: np.empty((0, zscore.shape[1])) for i in all_amp}
-            X_amp_undet = {i: np.empty((0, zscore.shape[1])) for i in all_amp}
-            t_amp_det = {i: [] for i in all_amp}
-            t_amp_undet = {i: [] for i in all_amp}
-
-        X_det = np.empty((0, zscore.shape[1]))
-        X_undet = np.empty((0, zscore.shape[1]))
-        t_det = []
-        t_undet = []
+    Returns
+    -------
+    sig_symbol : str
+        The symbol representing the significance level. '***' denotes extremely significant,
+        '**' denotes very significant, '*' denotes significant, and 'n.s' denotes not significant.
+    """
+    if pval < 0.001:
+        sig_symbol = '***'
+    elif pval < 0.01:
+        sig_symbol = '**'
+    elif pval < 0.05:
+        sig_symbol = '*'
     else:
-        X = np.empty((0, zscore.shape[1]))
+        sig_symbol = 'n.s'
+    return sig_symbol
 
-    # Defining a function to compute the new row to append
-    def build_row(zscore, start, end, estimator):
-        if estimator is None:
-            row = zscore[start:end]
+
+def stat_boxplot(group_1, group_2, ylabel, paired=False):
+    """
+    Returns the p-value for the comparison between 2 independant or paired sample's distribution.
+
+    Parameters
+    ----------
+    group_1 : array_like
+        The data for the first group.
+    group_2 : array_like
+        The data for the second group.
+    ylabel : str
+        The label for the y-axis of the boxplot.
+    paired : bool, optional
+        Boolean indicating if the 2 samples are paired or not
+
+    Returns
+    -------
+    pvalue : float
+        The p-value resulting from the statistical test.
+
+    Notes
+    -----
+    * The threshold pvalue used for tests is 0.05.
+    * The Shapiro-Wilk test is used to test the normality of the distribution of each sample.
+    * For independant samples:
+        * If the normality can be assumed, the Levene test is used to test the equality of the samples' variance. If the
+    variances are equal a standard t-test is used, otherwise, a Welch's t-test is performed.
+        * If the normality can't be assumed, a Mann-Whitney U test is performed.
+    * For paired samples: If the normality can be assumed a standard t-test is used, otherwise, a Wilcoxon signed-rank
+    test is performed.
+    """
+    print(f"--- {ylabel} ---")
+    print(ss.shapiro(group_1))
+    print(ss.shapiro(group_2))
+    # Normality of the distribution testing
+    pvalue_n1 = ss.shapiro(group_1).pvalue
+    pvalue_n2 = ss.shapiro(group_2).pvalue
+    if pvalue_n1 > 0.05 and pvalue_n2 > 0.05:  # Normality of the samples
+        if paired:
+            pvalue = ss.ttest_rel(group_1, group_2).pvalue
+            print(ss.ttest_rel(group_1, group_2))
         else:
-            row = neuron_mean_std_corr(zscore[start: end], estimator)
-        return row
-
-    # Building zscore matrix
-    for i in range(iter_range):
-        start, end = get_timepoints(rec, i, time_span, window)
-        new_row = build_row(zscore, start, end, estimator)
-        # Stacking new row
-        if sort:
-            if amp_sort:
-                amp = rec.stim_ampl[i]
-                if rec.detected_stim[i]:
-                    X_amp_det[amp] = np.row_stack((X_amp_det[amp], new_row))
-                    t_amp_det[amp].append(rec.stim_durations[i])
-                else:
-                    X_amp_undet[amp] = np.row_stack((X_amp_undet[amp], new_row))
-                    t_amp_undet[amp].append(rec.stim_durations[i])
+            # Equality of the variances testing
+            pvalue_v = ss.levene(group_1, group_2).pvalue
+            print(ss.levene(group_1, group_2))
+            if pvalue_v > 0.05:
+                pvalue = ss.ttest_ind(group_1, group_2).pvalue
+                print(f"Equal variances :{ss.ttest_ind(group_1, group_2)}")
             else:
-                if rec.detected_stim[i]:
-                    X_det = np.row_stack((X_det, new_row))
-                    t_det.append(rec.stim_durations[i])
-                else:
-                    X_undet = np.row_stack((X_undet, new_row))
-                    t_undet.append(rec.stim_durations[i])
+                pvalue = ss.ttest_ind(group_1, group_2, equal_var=False).pvalue
+                print(f"Unequal variances: {ss.ttest_ind(group_1, group_2)}")
+    else:  # Non-Normality of the samples
+        if paired:
+            pvalue = ss.wilcoxon(group_1, group_2).pvalue
+            print(ss.wilcoxon(group_1, group_2))
         else:
-            X = np.row_stack((X, new_row))
+            pvalue = ss.mannwhitneyu(group_1, group_2).pvalue
+            print(ss.mannwhitneyu(group_1, group_2))
+    return pvalue
 
-    if sort:
-        if amp_sort:
-            for a in all_amp:
-                X_det = np.row_stack((X_det, X_amp_det[a]))
-                X_undet = np.row_stack((X_undet, X_amp_undet[a]))
-                t_det.extend(t_amp_det[a])
-                t_undet.extend(t_amp_undet[a])
 
-        X = np.row_stack((X_det, X_undet))
-        t_stim = t_det + t_undet
+def stat_varplot(s_wt, s_ko, s_y_label):
+    """
+    add stat on the barplot
+    Parameters
+    ----------
+    s_wt : numpy.ndarray, series, list
+        data of the wt group
+    s_ko : numpy.ndarray, series, list
+        data of the ko group
+    s_y_label : string
+        columns names
 
-    if estimator is not None:
-        if time_span == "stim":
-            X = np.repeat(X, t_stim, axis=0)
-        else:
-            X = np.repeat(X, int(window * rec.sf), axis=0)
-    return X.T, t_stim
+    """
+    print(s_y_label)
+    data_wt = s_wt
+    data_ko = s_ko
+    print(ss.shapiro(data_wt))
+    print(ss.shapiro(data_ko))
+    stat, pvalue_wt = ss.shapiro(data_wt)
+    stat, pvalue_ko = ss.shapiro(data_ko)
+    if pvalue_wt > 0.05 and pvalue_ko > 0.05:
+        stat, pvalue = ss.bartlett(data_wt, data_ko)
+        print(ss.bartlett(data_wt, data_ko))
+    else:
+        stat, pvalue = ss.levene(data_wt, data_ko)
+        print(ss.levene(data_wt, data_ko))
+    return pvalue
+
+
+def stats_anova(*groups_data):
+    # Perform one-way ANOVA
+    f_stat, p_value = ss.f_oneway(*groups_data)
+    print(f"Statistical F: {f_stat}")
+    print(f"p-value: {p_value}")
+
+    # Determine significance symbols
+    stars = []
+
+    # Check p-value and perform Tukey's HSD test if significant
+    if p_value > 0.05:
+        stars = ["n.s"] * len(groups_data)
+    else:
+        # Prepare data for Tukey's HSD test
+        all_data = np.concatenate(groups_data)
+        group_labels = [f"group{i}_data" for i in range(len(groups_data)) for _ in groups_data[i]]
+        data = {'value': all_data, 'group': group_labels}
+        df = pd.DataFrame(data)
+
+        # Perform Tukey's HSD test
+        tukey = pairwise_tukeyhsd(endog=df['value'], groups=df['group'], alpha=0.05)
+        print(tukey)
+        tukey_p_values = tukey.pvalues
+
+        # Determine significance symbols for each pairwise comparison
+        stars = [symbol_pval(p_val) for p_val in tukey_p_values]
+        print(stars)
+
+    return stars

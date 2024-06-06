@@ -10,7 +10,7 @@ from scipy.cluster.hierarchy import dendrogram, linkage
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from percephone.core.recording import RecordingAmplDet
-from percephone.plts.utils import get_zscore
+from percephone.analysis.utils import get_zscore
 
 matplotlib.use("Qt5Agg")
 import matplotlib.pyplot as plt
@@ -349,7 +349,32 @@ def amp_tuning_heatmap(ax, rec, activity, title=""):
 def ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
                     time_span="stim", window=0.5, estimator=None,
                     det_sorted=False, amp_sorted=False):
+    """
+    Plot the heatmap of a recording, keeping only the selected time span. It is possible to sort trials according to
+    their detection and amplitude.
 
+    Parameters
+    ----------
+    rec : RecordingAmplDet object
+        Object that contains the recording data of a mouse.
+    exc_neurons : bool, optional
+        Whether to include excitatory neurons in the heatmap. Default is True.
+    inh_neurons : bool, optional
+        Whether to include inhibitory neurons in the heatmap. Default is False.
+    time_span : str, optional
+        The time span to consider for the heatmap. Can be "stim", "pre_stim", "reward", or "timeout".
+        Default is "stim".
+    window : float, optional
+        The window size for the time span period in seconds. Only applicable if time_span is not "stim".
+        Default is 0.5.
+    estimator : str, optional
+        The estimator to use for calculating the Z-score. Can be "Mean" or "Std".
+        Default is None.
+    det_sorted : bool, optional
+        Whether to sort the stimulation amplitudes by detected status. Default is False.
+    amp_sorted : bool, optional
+        Whether to sort the stimulation amplitudes in ascending order. Default is False.
+    """
     data, stim_dur = get_zscore(rec, exc_neurons=exc_neurons, inh_neurons=inh_neurons,
                                 time_span=time_span, window=window, estimator=estimator,
                                 sort=det_sorted, amp_sort=amp_sorted)

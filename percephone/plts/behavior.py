@@ -12,6 +12,9 @@ def psycho_like_plot(rec, roi_info, ax):
     ax.plot([0, 2, 4, 6, 8, 10, 12], converted_list)
     ax.set_xticks([0, 2, 4, 6, 8, 10, 12])
     ax.set_ylim([0, 1])
+    ax.set_facecolor("white")
+    ax.grid(False)
+    ax.spines[['right', 'top', 'bottom', 'left']].set_color("black")
     ax.tick_params(axis='both', labelsize=font_s)
 
 
@@ -30,5 +33,7 @@ def psycho_like_plot_and_synchro(rec, roi_info, ax):
     ax.plot([0, 2, 4, 6, 8, 10, 12], to_plot, linestyle='--')
     ax.set_xticks([0, 2, 4, 6, 8, 10, 12])
     ax.set_ylim([0, 1])
+    ax.set_facecolor("white")
+    ax.grid(False)
     ax.tick_params(axis='both', labelsize=font_s)
 
