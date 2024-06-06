@@ -511,11 +511,11 @@ def resp_heatmap(rec, n_type="EXC"):
 if __name__ == '__main__':
     # Record import
     plt.ion()
-    roi_path = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/FmKO_ROIs&inhibitory.xlsx"
+    roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
 
-    plot_all_records = True
+    plot_all_records = False
     plot_ordered_heatmap = True
-    plot_responsivity_heatmap = True
+    plot_responsivity_heatmap = False
 
     if plot_all_records:
         directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
@@ -536,7 +536,7 @@ if __name__ == '__main__':
         rec = RecordingAmplDet(directory, 0, roi_path, cache=True)
         if plot_ordered_heatmap:
             ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
-                            time_span="stim", window=0.5, estimator=None,
+                            time_span="stim", window=0.5, estimator="Mean",
                             det_sorted=True, amp_sorted=True)
         if plot_responsivity_heatmap:
             resp_heatmap(rec, n_type="EXC")

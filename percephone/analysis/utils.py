@@ -213,3 +213,15 @@ def get_zscore(rec, exc_neurons=True, inh_neurons=False, time_span="stim", windo
         else:
             X = np.repeat(X, int(window * rec.sf), axis=0)
     return X.T, t_stim
+
+
+def idx_resp_neur(rec, n_type="EXC"):
+    if n_type=="EXC":
+        signals= rec.zscore_exc
+        resp = rec.matrices['EXC']["Responsivity"][:,rec.detected_stim]
+    elif n_type=="INH":
+        signals= rec.zscore_inh
+        resp = rec.matrices['INH']["Responsivity"][:,rec.detected_stim]
+    indices_resp = np.argwhere(np.count_nonzero(resp == 1, axis=1) >5)
+    indices_inhibited = np.argwhere(np.count_nonzero(resp ==-1, axis=1)>5)
+    return np.ravel(indices_resp), np.ravel(indices_inhibited)
