@@ -52,6 +52,7 @@ idx_responsive = np.where(np.sum(rec.matrices["EXC"]["Responsivity"], axis=1))
 # from percephone.plts.heatmap import intereactive_heatmap
 # intereactive_heatmap(rec, rec.zscore_exc)
 
+
 def cor_map(val):
 
     val = int(val)

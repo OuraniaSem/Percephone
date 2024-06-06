@@ -23,9 +23,9 @@ def read_info(folder_name, rois):
     date = str(folder_name[:4]) + "-" + str(folder_name[4:6]) + "-" + str(folder_name[6:8])
     row = rois[(rois["Number"] == name) &
                (rois["Recording number"] == int(n_record)) & (rois["Date"] == pd.to_datetime(date))]
-    inhibitory_ids = np.array(list(list(row["Inhibitory neurons: ROIs"])[0].split(", ")))
+    inhibitory_ids = eval("[" + str(row["Inhibitory neurons: ROIs"].values[0]) + "]")
     return (row["Number"].values[0],
-            inhibitory_ids.astype(int),
+            inhibitory_ids,
             row["Frame Rate (Hz)"].values[0], row["Genotype"].values[0], row["Threshold"].values[0])
 
 
@@ -56,13 +56,14 @@ def extract_analog_from_mesc(path_mesc, tuple_mesc, frame_rate,analog_fs =20000,
     ax.set_title("Check if it look like ITI curve!")
     plt.show()
     end_timings = timing_curve[-1] * np.array(timings.attrs.get("CurveDataYConversionConversionLinearScale"))
-    print(end_timings)
+    print(f"end_timings {end_timings}")
     end_timings_frames = len(timing_curve)*frame_rate
-    print(end_timings_frames)
+    print(f"nb frames in mesc: {len(timing_curve)}")
+    print(f"end timing frames: {end_timings_frames}")
     end_timings_iti = len(iti_curve[::factor])/10
-    print(end_timings_iti)
-    nb_points = int(len(iti_curve[::factor]))  # int(end_timings_frames*10)  #int(end_timings*10)
-    timings = np.linspace(0,   end_timings, nb_points)
+    print(f"end timing iti {end_timings_iti}")
+    nb_points = int(end_timings_frames*10)  # int(len(iti_curve[::factor]))  #  #int(end_timings*10)
+    timings = np.linspace(0,   end_timings_frames, nb_points)
     analog_np = np.zeros((4, nb_points))
     analog_np[0] = timings
     analog_np[1] = analog_np[1]  # no stim analog in the new format

@@ -326,10 +326,11 @@ def amp_tuning_heatmap(ax, rec, activity, title=""):
     cmap = 'inferno'
     amps_reponses = []
     for amp in [2, 4, 6, 8, 10, 12]:
-        stims = rec.stim_time[rec.stim_ampl == amp]
+        stims = rec.stim_time[(rec.stim_ampl == amp) & rec.detected_stim]
+        if stims.shape[0] ==0:
+            return
         response = activity[:, np.linspace(stims, stims + int(1 * rec.sf), int(1 * rec.sf), dtype=int)]
-        responses = response.reshape(len(activity), len(stims) * int(1 * rec.sf))
-        response_ = np.mean(responses, axis=1)
+        response_ = np.mean(np.mean(response, axis=1), axis=1)
         amps_reponses.append(response_)
 
     tune_act = np.transpose(amps_reponses)

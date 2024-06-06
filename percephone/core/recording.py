@@ -129,6 +129,7 @@ class Recording:
         """
         print("Calculation Delta F / F.")
         f_ = np.load(self.input_path + 'F.npy', allow_pickle=True)
+        print(f"Nb of frames in F: {len(f_[0])}")
         f_neu = np.load(self.input_path + 'Fneu.npy', allow_pickle=True)
         f_ = f_[cell_ids, :]
         f_neu = f_neu[cell_ids, :]
@@ -667,15 +668,15 @@ class RecordingAmplDet(Recording):
 if __name__ == '__main__':
     import percephone.plts.heatmap as hm
 
-    directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/DMSO and BMS/"
-    roi_info = directory + "FmKO_ROIs&inhibitory.xlsx"
-    folder = "20231103_5893_04_synchro"
-    path_to_mesc = directory + "20231103_5893_det_DMSO.mesc"
+    directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/Amplitude_Detection_DMSO_BMS/"
+    roi_info = directory + "Fmko_bms&dmso_info.xlsx"
+    folder = "20231108_5886_00_BMS_det_synchro"
+    path_to_mesc = directory + "20231108_5886_BMS_det.mesc"
 
-    extract_analog_from_mesc(path_to_mesc, (0, 4),  30.9609, 20000, directory + folder + "/")
+    extract_analog_from_mesc(path_to_mesc, (0, 0),  30.9609, 20000, directory + folder + "/")
     rec = RecordingAmplDet(directory + folder + "/", 0, roi_info, cache=False, correction=False)
     hm.interactive_heatmap(rec, rec.zscore_exc)
-
-    from percephone.analysis.neuron_var import plot_heatmap, get_zscore
-    zsc,t_stim = get_zscore(rec, exc_neurons=True, sort=True, amp_sort=True)
-    plot_heatmap(rec,  zsc, sorted=True, amp_sorted=True)
+    #
+    # from percephone.analysis.neuron_var import plot_heatmap, get_zscore
+    # zsc,t_stim = get_zscore(rec, exc_neurons=True, sort=True, amp_sort=True)
+    # plot_heatmap(rec,  zsc, sorted=True, amp_sorted=True)
