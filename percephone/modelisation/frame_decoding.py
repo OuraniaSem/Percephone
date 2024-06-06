@@ -6,6 +6,7 @@ Using a logistic regression to classify hit or miss from zcore time points
 import numpy as np
 import pandas as pd
 import percephone.core.recording as pc
+from percephone.analysis.utils import idx_resp_neur
 import percephone.plts.stats as ppt
 import os
 import matplotlib
@@ -49,9 +50,21 @@ def classification_graph(hit_accuracy, miss_accuracy, title):
     fig.tight_layout()
 
 
-def split_data(rec,frame, train_ratio=0.8, stratify=False, seed=None):
+def split_data(rec, frame, train_ratio=0.8, stratify=False, seed=None, neurons="all"):
+    id_exc_act, id_exc_inh = idx_resp_neur(rec, n_type="EXC")
+    id_inh_act, id_inh_inh = idx_resp_neur(rec, n_type="INH")
+    full_exc_id = np.arange(rec.df_f_exc.shape[0])
+    full_inh_id = np.arange(rec.df_f_inh.shape[0])
+    id_exc_dict = {"all": full_exc_id, "activated": id_exc_act, "inhibited": id_exc_inh, "both": np.concatenate([id_exc_act, id_exc_inh])}
+    id_inh_dict = {"all": full_inh_id, "activated": id_inh_act, "inhibited": id_inh_inh, "both": np.concatenate([id_inh_act, id_inh_inh])}
+    exc_filter = np.isin(full_exc_id, id_exc_dict[neurons])
+    inh_filter = np.isin(full_inh_id, id_inh_dict[neurons])
+    print(f"EXC : {id_exc_dict[neurons].shape[0]/ full_exc_id.shape[0]:^5.1%} ({id_exc_dict[neurons].shape[0]:^3}/{full_exc_id.shape[0]:^3}) - INH : {id_inh_dict[neurons].shape[0]/ full_inh_id.shape[0]:^5.1%} ({id_inh_dict[neurons].shape[0]:^3}/{full_inh_id.shape[0]:^3})")
+
+    filtered_exc_dff = rec.df_f_exc[exc_filter]
+    filtered_inh_dff = rec.df_f_inh[inh_filter]
     record_dict= {}
-    record_dict["X"] = np.row_stack((rec.df_f_exc[:, rec.stim_time+frame], rec.df_f_inh[:, rec.stim_time+frame])).T
+    record_dict["X"] = np.row_stack((filtered_exc_dff[:, rec.stim_time+frame], filtered_inh_dff[:, rec.stim_time+frame])).T
     record_dict["y"] = rec.detected_stim
     if stratify:
         record_dict["X_train"], record_dict["X_test"], record_dict["y_train"], record_dict["y_test"] = train_test_split(record_dict["X"], record_dict["y"],
@@ -71,13 +84,10 @@ def resample(record_dict, resampler):
     return record_dict
 
 
-def frame_model(rec, frame, resampler):
+def frame_model(rec, frame, resampler, neurons="all"):
 
-    r_dict = split_data(rec, frame, train_ratio=0.8, stratify=False, seed=None)
+    r_dict = split_data(rec, frame, train_ratio=0.8, stratify=False, seed=None, neurons=neurons)
     model = LogisticRegression(penalty='l2', max_iter=5000)
-    # ros = imb.over_sampling.RandomOverSampler(sampling_strategy='auto', shrinkage=None)
-    # smote = imb.over_sampling.SMOTE(sampling_strategy='auto')
-    # adasyn = imb.over_sampling.ADASYN(sampling_strategy='auto')
     r_dict = resample(r_dict,  resampler)
     model.fit(r_dict["X_bal"], r_dict["y_bal"])
     y_pred = model.predict(r_dict["X_test"])
@@ -94,7 +104,7 @@ def frame_model(rec, frame, resampler):
 
 
 if __name__ == '__main__':
-    user = "Théo"
+    user = "Célien"
     if user == "Célien":
         directory = "C:/Users/cvandromme/Desktop/Data/"
         roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
@@ -136,21 +146,27 @@ if __name__ == '__main__':
 # per group
     wt_hit, wt_miss, ko_hypo_hit, ko_hypo_miss = [], [], [], []
     for rec in recs.values():
-        print(rec.filename)
-        acc_hit, acc_miss = [], []
-        for i in list(range(-30, 30)):
-            acc = frame_model(rec, i, resampler)
-            acc_hit.append(acc[0])
-            acc_miss.append(acc[1])
-        if rec.genotype == "WT":
-            wt_hit.append(acc_hit)
-            wt_miss.append(acc_miss)
-        elif rec.genotype == "KO-Hypo":
-            ko_hypo_hit.append(acc_hit)
-            ko_hypo_miss.append(acc_miss)
+        try:
+            print(f"{rec.filename} ({rec.genotype})")
+            acc_hit, acc_miss = [], []
+            for i in list(range(-30, 30)):
+                acc = frame_model(rec, i, resampler, neurons="both")
+                acc_hit.append(acc[0])
+                acc_miss.append(acc[1])
+            if rec.genotype == "WT":
+                wt_hit.append(acc_hit)
+                wt_miss.append(acc_miss)
+            elif rec.genotype == "KO-Hypo":
+                ko_hypo_hit.append(acc_hit)
+                ko_hypo_miss.append(acc_miss)
+        except ValueError:
+            print(f"{rec.filename} -> Failed")
+            continue
 
     classification_graph(wt_hit, wt_miss, f"WT")
     classification_graph(ko_hypo_hit, ko_hypo_miss, f"KO-Hypo")
 
     # for f in [6601, 6606, 6609, 6611,]:
     #     recs[f].responsivity()
+    plt.show()
+    print("Done")
