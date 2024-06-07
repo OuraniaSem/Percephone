@@ -153,3 +153,29 @@ def stats_anova(*groups_data):
         print(stars)
 
     return stars
+
+
+def build_aov_df(data, conditions, cond_labels):
+    flat_data = []
+    for group in data:
+        flat_data.extend(group)
+    df = {"Variable": flat_data}
+    for cond_idx, label in enumerate(cond_labels):
+        df[label] = []
+        for gp_idx, group in enumerate(data):
+            df[label].extend(len(group) * [conditions[gp_idx][cond_idx]])
+    return pd.DataFrame(df)
+
+def anova():
+    pass
+
+if __name__ == "__main__":
+    group1 = [11, 15, 13, 14, 16, 18, 19]       # WT DMSO
+    group2 = [20, 26, 23, 24, 29, 28, 29, 25]   # WT BMS
+    group3 = [33, 39, 34, 31, 39, 36]           # KO BMS
+    group4 = [48, 49, 49, 41, 49]               # KO DMSO
+    cond = [["WT", "DMSO"], ["WT", "BMS"], ["KO", "BMS"], ["KO", "DMSO"]]
+    labs = ["Genotype", "Treatment"]
+    df = build_aov_df([group1, group2, group3, group4], cond, labs)
+    print(df)
+
