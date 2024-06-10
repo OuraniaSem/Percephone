@@ -59,7 +59,7 @@ def split_data(rec, frame, train_ratio=0.8, stratify=False, seed=None, neurons="
     id_inh_dict = {"all": full_inh_id, "activated": id_inh_act, "inhibited": id_inh_inh, "both": np.concatenate([id_inh_act, id_inh_inh])}
     exc_filter = np.isin(full_exc_id, id_exc_dict[neurons])
     inh_filter = np.isin(full_inh_id, id_inh_dict[neurons])
-    print(f"EXC : {id_exc_dict[neurons].shape[0]/ full_exc_id.shape[0]:^5.1%} ({id_exc_dict[neurons].shape[0]:^3}/{full_exc_id.shape[0]:^3}) - INH : {id_inh_dict[neurons].shape[0]/ full_inh_id.shape[0]:^5.1%} ({id_inh_dict[neurons].shape[0]:^3}/{full_inh_id.shape[0]:^3})")
+    # print(f"EXC : {id_exc_dict[neurons].shape[0]/ full_exc_id.shape[0]:^5.1%} ({id_exc_dict[neurons].shape[0]:^3}/{full_exc_id.shape[0]:^3}) - INH : {id_inh_dict[neurons].shape[0]/ full_inh_id.shape[0]:^5.1%} ({id_inh_dict[neurons].shape[0]:^3}/{full_inh_id.shape[0]:^3})")
 
     filtered_exc_dff = rec.df_f_exc[exc_filter]
     filtered_inh_dff = rec.df_f_inh[inh_filter]
@@ -141,7 +141,9 @@ if __name__ == '__main__':
     smote = imb.over_sampling.SMOTE(sampling_strategy='auto', k_neighbors=4)
     adasyn = imb.over_sampling.ADASYN(sampling_strategy='auto')
     rus = imb.under_sampling.RandomUnderSampler(sampling_strategy='auto')
-    resampler = rus
+    resampler = ros
+
+    neurons = "activated"
 
 # per group
     wt_hit, wt_miss, ko_hypo_hit, ko_hypo_miss = [], [], [], []
@@ -150,7 +152,7 @@ if __name__ == '__main__':
             print(f"{rec.filename} ({rec.genotype})")
             acc_hit, acc_miss = [], []
             for i in list(range(-30, 30)):
-                acc = frame_model(rec, i, resampler, neurons="both")
+                acc = frame_model(rec, i, resampler, neurons=neurons)
                 acc_hit.append(acc[0])
                 acc_miss.append(acc[1])
             if rec.genotype == "WT":
@@ -163,8 +165,8 @@ if __name__ == '__main__':
             print(f"{rec.filename} -> Failed")
             continue
 
-    classification_graph(wt_hit, wt_miss, f"WT")
-    classification_graph(ko_hypo_hit, ko_hypo_miss, f"KO-Hypo")
+    classification_graph(wt_hit, wt_miss, f"WT ({resampler}/{neurons})")
+    classification_graph(ko_hypo_hit, ko_hypo_miss, f"KO-Hypo ({resampler}/{neurons})")
 
     # for f in [6601, 6606, 6609, 6611,]:
     #     recs[f].responsivity()
