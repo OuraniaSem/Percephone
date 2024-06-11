@@ -8,7 +8,6 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 from itertools import combinations
 import math
-from matplotlib.ticker import AutoMinorLocator
 from percephone.plts.style import *
 from percephone.plts.utils import *
 
@@ -342,7 +341,6 @@ def boxplot_anova(groups_data, lim_y, label_y, filename, colors, annot_text=[],
     ax1.spines['bottom'].set_visible(False)
     ax1.tick_params(which='both', width=3)
     ax1.tick_params(which='major', length=8)
-    ax1.tick_params(which='minor', length=6)
     if thickformater:
         ax1.yaxis.set_major_formatter(mpl.ticker.StrMethodFormatter('{x:,.1f}'))
     plt.tick_params(axis="x", which="both", bottom=False, top=False)
@@ -447,12 +445,9 @@ def boxplot_3_conditions(group1_data, group2_data, cond_labels=["A", "B", "C"],
     axs[0].set_ylabel(label_y)
     axs[0].tick_params(axis='y')
     axs[0].yaxis.set_visible(True)
-    axs[0].yaxis.set_minor_locator(AutoMinorLocator(2))
     if y_percent:
         axs[0].yaxis.set_major_formatter(mpl.ticker.PercentFormatter(1.0))
-    axs[0].tick_params(which='both', width=4)
-    axs[0].tick_params(which='major', length=10)
-    axs[0].tick_params(which='minor', length=8)
+    axs[0].tick_params(which='major', length=10, width=4)
 
     if legend_labels is not None:
         hB, = ax.plot([1, 1], wt_color)

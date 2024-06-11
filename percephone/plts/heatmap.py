@@ -253,7 +253,7 @@ def interactive_heatmap(rec, activity):
     for to_range in lick_index:
         stim_vector_lick[to_range] = 2
     conv_licks = stim_vector_lick
-    extent = [time_range[0] - dt / 2, time_range[-1] + dt / 2, len(activity) - 0.5, -0.5]
+    extent = [time_range[0] , time_range[-1], len(activity), 0]
     tax2.imshow(conv_licks.reshape(1, -1), cmap=cmap, aspect='auto', interpolation='none', extent=extent)
     tax2.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
     tax1.imshow(conv_stim.reshape(1, -1), cmap=cmap, aspect='auto', interpolation='none', extent=extent)
