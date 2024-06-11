@@ -46,24 +46,32 @@ def extract_analog_from_mesc(path_mesc, tuple_mesc, frame_rate,analog_fs =20000,
     file = h5py.File(path_mesc)
     dset = file['MSession_' + str(tuple_mesc[0])]
     unit = dset['MUnit_' + str(tuple_mesc[1])]
-    iti = unit['Curve_2']  # 3
+    iti = unit['Curve_2']  # 3 in general   # 4 for after 01-2024
     iti_curve = np.array(iti['CurveDataYRawData'])
-    timings = unit['Curve_0']  # 1
+    timings = unit['Curve_1']  # 1
     timing_curve = np.array(timings['CurveDataYRawData'])
 
     fig, ax = plt.subplots(1, 1, figsize=(18, 10))
     ax.plot(iti_curve)
-    ax.set_title("Check if it look like ITI curve!")
+    ax.set_title("Check if its look like ITI curve!")
     plt.show()
     end_timings = timing_curve[-1] * np.array(timings.attrs.get("CurveDataYConversionConversionLinearScale"))
+    start_timings = timing_curve[0] * np.array(timings.attrs.get("CurveDataYConversionConversionLinearScale"))
+    fig, ax = plt.subplots(1, 1, figsize=(18, 10))
+    diff_frames = np.diff(timing_curve * np.array(timings.attrs.get("CurveDataYConversionConversionLinearScale")))
+    ax.plot(diff_frames)
+    latency = np.sum(np.subtract(diff_frames,(1/frame_rate)*1000))
+    ax.set_title(f"Check lost frames!  Total latency: {latency:.2f}")
+    plt.show()
+    print(f"Start timings: {start_timings }")
     print(f"end_timings {end_timings}")
-    end_timings_frames = len(timing_curve)*frame_rate
+    end_timings_frames = len(timing_curve)*((1/frame_rate)*1000)
     print(f"nb frames in mesc: {len(timing_curve)}")
     print(f"end timing frames: {end_timings_frames}")
     end_timings_iti = len(iti_curve[::factor])/10
     print(f"end timing iti {end_timings_iti}")
-    nb_points = int(end_timings_frames*10)  # int(len(iti_curve[::factor]))  #  #int(end_timings*10)
-    timings = np.linspace(0,   end_timings_frames, nb_points)
+    nb_points = int(len(iti_curve[::factor]))  # int(end_timings_frames*10)  #  #int(end_timings*10)
+    timings = np.linspace(0,   end_timings_iti, nb_points)
     analog_np = np.zeros((4, nb_points))
     analog_np[0] = timings
     analog_np[1] = analog_np[1]  # no stim analog in the new format
@@ -72,6 +80,7 @@ def extract_analog_from_mesc(path_mesc, tuple_mesc, frame_rate,analog_fs =20000,
     analog_np[3] = iti_curve_[:nb_points]
     analog_t = np.transpose(analog_np)
     np.savetxt(savepath + 'analog.txt', analog_t, fmt='%.8g', delimiter="\t")
+    np.save(savepath + 'timetamps_frames.npy',timing_curve)
     print(f"len analog : {analog_np.shape}")
     print(f"last analog : {analog_np[:,-1]}")
     print("Analog saved.")
@@ -101,6 +110,6 @@ if __name__ == '__main__':
     path_to_mesc = path + "20231009_5896_det.mesc"
 
     extract_analog_from_mesc(path_to_mesc, (0, 4), 30.9609, 20000, path + folder + "/")
-    rec = pc.RecordingAmplDet(path + folder + "/", 0, roi_info, analog_sf=10000, cache=False, correction=False)
+    rec = pc.RecordingAmplDet(path + folder + "/", 0, roi_info,  cache=False, correction=False)
     hm.intereactive_heatmap(rec, rec.zscore_exc)
 

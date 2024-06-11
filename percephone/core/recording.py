@@ -518,6 +518,9 @@ class RecordingAmplDet(Recording):
                 index_iti_final.append(elem)
 
         # index_iti_final.append(index_iti_analog[-1])
+        # correction of temporal shift due to instability of frame rate
+        if correction:
+            pass
 
         # get the info for the recorded trials and align it with the excel
         reward_to_analog = []
@@ -550,7 +553,7 @@ class RecordingAmplDet(Recording):
                 if len(index_licks) != 0:
                     lick_time = int((index_licks[0] / analog_s) * self.sf)
                     if correction:
-                        lick_time = lick_time - int(((1 / self.sf) * (index_licks[0] / analog_s)) * (1 / 3))
+                        lick_time = lick_time - int(((index_licks[0] / analog_s)) * (1 / self.sf)**2)
                     self.lick_time.append(lick_time)
             if len(index_reward) != 0:
                 self.reward_time.append(int((index_reward[0] / analog_s) * self.sf))
@@ -562,7 +565,7 @@ class RecordingAmplDet(Recording):
                 amp = next(ampl_recording_iter)
                 index_stim = int((index_stimulus[0] / analog_s) * self.sf)
                 if correction:
-                    self.stim_time.append(index_stim - int(((1 / self.sf) * (index_stimulus[0] / analog_s)) * (1 / 3)))
+                    self.stim_time.append(index_stim - int(((index_stimulus[0] / analog_s)) * (1 / self.sf)**2))
                 else:
                     self.stim_time.append(index_stim)
                 self.stim_ampl.append(amp)
@@ -636,7 +639,7 @@ class RecordingAmplDet(Recording):
         ----------
         stim_ampl : str or list[int]
             The amplitudes of stimulation that we want to select. List of absolute values or relative to threshold
-            (threshold, supra, sub or all)
+            (threshold, supra, sub, supra_wt_threshold, sub_wt_threshold or all)
 
         include_no_go : bool (optional, default = False)
             Whether to include no-go trials (amplitude 0) or not.
@@ -659,6 +662,10 @@ class RecordingAmplDet(Recording):
             amplitudes = all_ampl[all_ampl < self.threshold]
         elif stim_ampl == "all":
             amplitudes = all_ampl
+        elif stim_ampl == "supra_wt_threshold":
+            amplitudes = all_ampl[all_ampl < 6]
+        elif stim_ampl == "sub_wt_threshold":
+            amplitudes = all_ampl[all_ampl > 6]
         else:
             amplitudes = np.array(stim_ampl)
         selected_stim = np.isin(self.stim_ampl, amplitudes)
@@ -670,13 +677,28 @@ if __name__ == '__main__':
 
     directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/Amplitude_Detection_DMSO_BMS/"
     roi_info = directory + "Fmko_bms&dmso_info.xlsx"
-    folder = "20231108_5886_00_BMS_det_synchro"
-    path_to_mesc = directory + "20231108_5886_BMS_det.mesc"
+    # folder = "20240406_6606_06_DMSO_synchro"
+    # path_to_mesc = directory + "20240406_6606_detDMSO.mesc"
+    folder = "20231106_5879_00_BMS_synchro"
+    path_to_mesc = directory + "20231106_5879_det_BMS.mesc"
 
     extract_analog_from_mesc(path_to_mesc, (0, 0),  30.9609, 20000, directory + folder + "/")
     rec = RecordingAmplDet(directory + folder + "/", 0, roi_info, cache=False, correction=False)
     hm.interactive_heatmap(rec, rec.zscore_exc)
-    #
-    # from percephone.analysis.neuron_var import plot_heatmap, get_zscore
-    # zsc,t_stim = get_zscore(rec, exc_neurons=True, sort=True, amp_sort=True)
-    # plot_heatmap(rec,  zsc, sorted=True, amp_sorted=True)
+
+    from percephone.plts.heatmap import ordered_heatmap, get_zscore
+    zsc, t_stim = get_zscore(rec, exc_neurons=True, sort=True, amp_sort=True)
+    ordered_heatmap(rec,  exc_neurons=True, inh_neurons=False, det_sorted=True, amp_sorted=True)
+
+
+    # directory ="/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
+    # roi_info = directory + "/FmKO_ROIs&inhibitory.xlsx"
+    # folder = "20220715_4456_00_synchro"
+    # rec = RecordingAmplDet(directory + folder + "/", 0, roi_info, cache=False, correction=False)
+    # hm.interactive_heatmap(rec, rec.zscore_exc)
+    # print(rec.analog.iloc[-1])
+    # print(len(rec.zscore_exc[0])*(1/rec.sf))
+    # from percephone.plts.heatmap import ordered_heatmap, get_zscore
+    # zsc, t_stim = get_zscore(rec, exc_neurons=True, sort=True, amp_sort=True)
+    # ordered_heatmap(rec,  exc_neurons=True, inh_neurons=False, det_sorted=True, amp_sorted=True)
+    # ordered_heatmap(rec, exc_neurons=True, inh_neurons=False, time_span="pre_stim", det_sorted=True, amp_sorted=True)
