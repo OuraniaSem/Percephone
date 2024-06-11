@@ -11,7 +11,7 @@ import math
 from percephone.plts.style import *
 from percephone.plts.utils import *
 
-mpl.rcParams['font.size'] = 40
+mpl.rcParams['font.size'] = 35
 font_signif = mpl.rcParams['font.size'] / 2
 mpl.rcParams['axes.linewidth'] = 3
 mpl.rcParams['lines.linewidth'] = 5
@@ -23,6 +23,10 @@ mpl.rcParams["boxplot.medianprops.linewidth"] = 5
 mpl.rcParams["boxplot.meanprops.linewidth"] = 5
 mpl.rcParams["boxplot.flierprops.linewidth"] = 5
 
+
+mpl.rcParams["xtick.labelsize"] = mpl.rcParams['font.size']
+mpl.rcParams["ytick.labelsize"] = mpl.rcParams['font.size']
+mpl.rcParams["axes.labelsize"] = mpl.rcParams['font.size']
 mpl.rcParams["axes.titlesize"] = 25
 mpl.rcParams["lines.markersize"] = 28
 
@@ -92,7 +96,7 @@ def boxplot(ax, wt, ko, ylabel, ylim=[]):
     x_1, x_2 = [0.15, 0.40]
     max_data = max([np.nanmax(wt), np.nanmax(ko)])
     y, col = max_data + 0.10 * abs(max_data), 'k'
-    ax.plot([x_1, x_2], [y, y], lw=3, c=col)
+    ax.plot([x_1, x_2], [y, y], lw=3, c=col, clip_on=False)
 
     pval = stat_boxplot(wt, ko, ylabel, paired=False)
     sig_symbol = symbol_pval(pval)
@@ -440,7 +444,7 @@ def boxplot_3_conditions(group1_data, group2_data, cond_labels=["A", "B", "C"],
         max_d = np.concatenate([np.concatenate(group1_data), np.concatenate(group2_data)]).max()
         y, h, col = max_d + abs(0.10 * max_d), 0.025 * abs(max_d), 'k'
         axs[i].plot([x1, x1, x2, x2], [y, y + h, y + h, y], lw=3, c=col)
-        axs[i].text((x1 + x2) * .5, y + h, sig_symbol, ha='center', va='bottom', color=col, weight='bold', fontsize=20)
+        axs[i].text((x1 + x2) * .5, y + h, sig_symbol, ha='center', va='bottom', color=col, weight='bold', fontsize=font_signif)
 
     axs[0].set_ylabel(label_y)
     axs[0].tick_params(axis='y')
@@ -459,7 +463,6 @@ def boxplot_3_conditions(group1_data, group2_data, cond_labels=["A", "B", "C"],
     if lim_y != "auto":
         plt.ylim(lim_y)
     plt.subplots_adjust(left=None, bottom=None, right=None, top=None, wspace=-0.2, hspace=None)
-    plt.yticks(fontsize=30)
     plt.suptitle(title)
 
     if filename is not None:
