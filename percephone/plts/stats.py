@@ -28,7 +28,7 @@ mpl.rcParams["boxplot.flierprops.linewidth"] = 5
 mpl.rcParams["xtick.labelsize"] = mpl.rcParams['font.size']
 mpl.rcParams["ytick.labelsize"] = mpl.rcParams['font.size']
 mpl.rcParams["axes.labelsize"] = mpl.rcParams['font.size']
-mpl.rcParams["axes.titlesize"] = 25
+mpl.rcParams["axes.titlesize"] = 20
 mpl.rcParams["lines.markersize"] = 28
 
 mpl.rcParams['svg.fonttype'] = 'none'
