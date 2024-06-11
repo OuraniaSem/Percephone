@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import scipy.signal as ss
 import matplotlib.pyplot as plt
-from percephone.utils.io import read_info, correction_drift_fluo
+from percephone.utils.io import read_info, correction_drift_fluo, get_idx_frame_mesc
 from percephone.analysis.response import resp_matrice, auc_matrice, delay_matrice, peak_matrices
 from percephone.analysis.mlr import mlr
 from percephone.analysis.mlr_models import classic_model
@@ -520,7 +520,8 @@ class RecordingAmplDet(Recording):
         # index_iti_final.append(index_iti_analog[-1])
         # correction of temporal shift due to instability of frame rate
         if correction:
-            pass
+            timestamps = np.load(self.input_path + "timestamps_frames.npy")
+
 
         # get the info for the recorded trials and align it with the excel
         reward_to_analog = []
@@ -553,7 +554,8 @@ class RecordingAmplDet(Recording):
                 if len(index_licks) != 0:
                     lick_time = int((index_licks[0] / analog_s) * self.sf)
                     if correction:
-                        lick_time = lick_time - int(((index_licks[0] / analog_s)) * (1 / self.sf)**2)
+                        # lick_time = lick_time - int(((index_licks[0] / analog_s)) * (1 / self.sf)**2)
+                        lick_time = get_idx_frame_mesc(index_licks[0], timestamps)
                     self.lick_time.append(lick_time)
             if len(index_reward) != 0:
                 self.reward_time.append(int((index_reward[0] / analog_s) * self.sf))
@@ -565,7 +567,8 @@ class RecordingAmplDet(Recording):
                 amp = next(ampl_recording_iter)
                 index_stim = int((index_stimulus[0] / analog_s) * self.sf)
                 if correction:
-                    self.stim_time.append(index_stim - int(((index_stimulus[0] / analog_s)) * (1 / self.sf)**2))
+                    # self.stim_time.append(index_stim - int(((index_stimulus[0] / analog_s)) * (1 / self.sf)**2))
+                    self.stim_time.append(get_idx_frame_mesc(index_stimulus[0], timestamps))
                 else:
                     self.stim_time.append(index_stim)
                 self.stim_ampl.append(amp)
@@ -679,11 +682,11 @@ if __name__ == '__main__':
     roi_info = directory + "Fmko_bms&dmso_info.xlsx"
     # folder = "20240406_6606_06_DMSO_synchro"
     # path_to_mesc = directory + "20240406_6606_detDMSO.mesc"
-    folder = "20231106_5879_00_BMS_synchro"
-    path_to_mesc = directory + "20231106_5879_det_BMS.mesc"
+    folder = "20231108_5886_00_BMS_det_synchro"
+    path_to_mesc = directory + "20231108_5886_BMS_det.mesc"
 
     extract_analog_from_mesc(path_to_mesc, (0, 0),  30.9609, 20000, directory + folder + "/")
-    rec = RecordingAmplDet(directory + folder + "/", 0, roi_info, cache=False, correction=False)
+    rec = RecordingAmplDet(directory + folder + "/", 0, roi_info, cache=False, correction=True)
     hm.interactive_heatmap(rec, rec.zscore_exc)
 
     from percephone.plts.heatmap import ordered_heatmap, get_zscore

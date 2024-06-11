@@ -71,16 +71,16 @@ def extract_analog_from_mesc(path_mesc, tuple_mesc, frame_rate,analog_fs =20000,
     end_timings_iti = len(iti_curve[::factor])/10
     print(f"end timing iti {end_timings_iti}")
     nb_points = int(len(iti_curve[::factor]))  # int(end_timings_frames*10)  #  #int(end_timings*10)
-    timings = np.linspace(0,   end_timings_iti, nb_points)
+    timings_c = np.linspace(0,   end_timings_iti, nb_points)
     analog_np = np.zeros((4, nb_points))
-    analog_np[0] = timings
+    analog_np[0] = timings_c
     analog_np[1] = analog_np[1]  # no stim analog in the new format
-    analog_np[2] = timings
+    analog_np[2] = timings_c
     iti_curve_ = iti_curve[::factor]
     analog_np[3] = iti_curve_[:nb_points]
     analog_t = np.transpose(analog_np)
     np.savetxt(savepath + 'analog.txt', analog_t, fmt='%.8g', delimiter="\t")
-    np.save(savepath + 'timetamps_frames.npy',timing_curve)
+    np.save(savepath + 'timestamps_frames.npy',timing_curve * np.array(timings.attrs.get("CurveDataYConversionConversionLinearScale")))
     print(f"len analog : {analog_np.shape}")
     print(f"last analog : {analog_np[:,-1]}")
     print("Analog saved.")
@@ -95,6 +95,11 @@ def correction_drift_fluo(df_f, path):
         corrected_df_f[i] = neuron_trace + drift
         np.save(path, corrected_df_f)
     return corrected_df_f
+
+
+def get_idx_frame_mesc(time_ms, timestamps):
+    idx_frame = (np.abs(timestamps - (time_ms/10))).argmin()
+    return idx_frame
 
 
 if __name__ == '__main__':
