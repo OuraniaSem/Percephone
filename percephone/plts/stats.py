@@ -11,6 +11,7 @@ import math
 from percephone.plts.style import *
 from percephone.plts.utils import *
 
+mpl.rcParams["axes.grid"] = False
 mpl.rcParams['font.size'] = 35
 font_signif = mpl.rcParams['font.size'] / 2
 mpl.rcParams['axes.linewidth'] = 3
@@ -31,8 +32,15 @@ mpl.rcParams["axes.titlesize"] = 25
 mpl.rcParams["lines.markersize"] = 28
 
 mpl.rcParams['svg.fonttype'] = 'none'
+
 mpl.rcParams["xtick.major.width"] = 3
+mpl.rcParams["xtick.minor.width"] = 2
+mpl.rcParams["xtick.major.size"] = 8
 mpl.rcParams["ytick.major.width"] = 3
+mpl.rcParams["ytick.minor.width"] = 2
+mpl.rcParams["ytick.major.size"] = 6
+mpl.rcParams["ytick.left"] = True
+
 mpl.use("Qt5Agg")
 
 wt_color = "#326993"
