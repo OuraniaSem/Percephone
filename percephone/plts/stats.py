@@ -106,8 +106,12 @@ def boxplot(ax, wt, ko, ylabel, ylim=[]):
     y, col = max_data + 0.10 * abs(max_data), 'k'
     ax.plot([x_1, x_2], [y, y], lw=3, c=col, clip_on=False)
 
-    pval = stat_boxplot(wt, ko, ylabel, paired=False)
-    sig_symbol = symbol_pval(pval)
+    try:
+        pval = stat_boxplot(wt, ko, ylabel, paired=False)
+        sig_symbol = symbol_pval(pval)
+    except ValueError:
+        sig_symbol = "N.A."
+
 
     ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_signif, weight='bold')
 
@@ -297,8 +301,9 @@ def dmso_bms(ax, wt_dmso, wt_bms, ko_dmso, ko_bms, ylabel, title, ylim=[], color
     sig_symbol_2 = symbol_pval(pval_2)
     ax.text((x_3 + x_4) * 0.5, y, sig_symbol_2, ha='center', va='bottom', c=col, fontsize=font_signif, weight='bold')
 
+
     ax.set_xticks([x_1, x_2, x_3, x_4], ["WT-DMSO", "WT-BMS", "KO-DMSO", "KO-BMS"])
-    ax.tick_params(axis="x", which="both", bottom=False)
+    ax.tick_params(axis="x", which="both", bottom=False, labelrotation=45)
     ax.set_title(title)
     ax.tick_params(axis='y')
 
@@ -488,8 +493,8 @@ if __name__ == "__main__":
     labs = ["Genotype", "Treatment"]
     fig, ax = plt.subplots(figsize=(8, 8))
 
-    # dmso_bms(ax, wt_dmso, wt_bms, ko_dmso, ko_bms, "Variable", "Titre", ylim=[],
-    #          colors=[wt_color, light_wt_color, ko_color, light_ko_color])
-
-    boxplot(ax, wt_dmso, wt_bms, ylabel="Test")
+    dmso_bms(ax, wt_dmso, wt_bms, ko_dmso, ko_bms, "Variable", "Titre", ylim=[],
+             colors=[wt_color, light_wt_color, ko_color, light_ko_color])
+    # boxplot(ax, wt_dmso, wt_bms, ylabel="Test")
+    plt.tight_layout()
     plt.show()

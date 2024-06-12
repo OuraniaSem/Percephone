@@ -403,6 +403,8 @@ def ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
             stim_det.sort()
             stim_undet.sort()
         stim_array = np.array(stim_det + stim_undet)
+        det_stim_duration = rec.stim_durations[rec.detected_stim]
+        linkage_data = data[:, 0:int(det_stim_duration.sum())]
     else:
         stim_bar = []
         for i in range(rec.stim_time.shape[0]):
@@ -411,14 +413,22 @@ def ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
             elif time_span == "pre_stim":
                 stim_bar.extend([rec.stim_ampl[i]] * int(window * rec.sf))
         stim_array = np.array(stim_bar)
+        linkage_data = data
 
     if (time_span == "stim" or time_span == "pre_stim"):
         tax1.imshow(stim_array.reshape(1, -1), cmap=cmap, aspect='auto', interpolation='none', extent=extent)
         tax1.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
 
+    # Manual sorting of the neurons
+    means = linkage_data.mean(axis=1)
+    median = np.median(linkage_data, axis=1)
+    sorted_idx = np.argsort(means)[::-1]
+    data_reordered = data[sorted_idx]
+
     # neurons clustering and data display
-    Z = linkage(data, 'ward', optimal_ordering=True)
-    dn_exc = dendrogram(Z, no_plot=True, count_sort="ascending")
+    Z = linkage(linkage_data, 'single', metric='euclidean', optimal_ordering=True)
+    dn_exc = dendrogram(Z, no_plot=True, count_sort="ascending", distance_sort="ascending")
+    # im = ax.imshow(data_reordered, cmap=cmap, interpolation='none', aspect='auto',
     im = ax.imshow(data[dn_exc['leaves']], cmap=cmap, interpolation='none', aspect='auto',
                    vmin=np.nanpercentile(np.ravel(data), 1),
                    vmax=np.nanpercentile(np.ravel(data), 99), extent=extent)
@@ -430,7 +440,6 @@ def ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
             cumulative_stim_duration += stim
             ax.vlines(cumulative_stim_duration, ymin=-0.5, ymax=len(data) - 0.5, color='w', linewidth=0.5)
         if det_sorted:
-            det_stim_duration = rec.stim_durations[rec.detected_stim]
             ax.vlines(det_stim_duration.sum(), ymin=-0.5, ymax=len(data) - 0.5, color='b', linewidth=1)
     elif time_span == "pre_stim":
         for i in range(len(rec.detected_stim)):
@@ -512,32 +521,39 @@ def resp_heatmap(rec, n_type="EXC"):
 if __name__ == '__main__':
     # Record import
     plt.ion()
-    roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
-
+    user = "Célien"
     plot_all_records = False
     plot_ordered_heatmap = True
     plot_responsivity_heatmap = False
 
-    if plot_all_records:
+    if user == "Célien":
+        directory = "C:/Users/cvandromme/Desktop/Data/"
+        roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
+        server_address = "Z:/Current_members/Ourania_Semelidou/2p/Figures_paper/"
+    elif user == "Théo":
         directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
+        roi_path = directory + "/FmKO_ROIs&inhibitory.xlsx"
+        server_address = "/run/user/1004/gvfs/smb-share:server=engram.local,share=data/Current_members/Ourania_Semelidou/2p/Figures_paper/"
+
+    if plot_all_records:
         files = os.listdir(directory)
         files_ = [file for file in files if file.endswith("synchro")]
         for file in files_:
-            folder = f"/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/{file}/"
+            folder = f"{directory}{file}/"
             rec = RecordingAmplDet(folder, 0, roi_path, cache=True)
             if plot_ordered_heatmap:
                 ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
-                                time_span="pre_stim", window=0.5, estimator=None,
+                                time_span="stim", window=0.5, estimator=None,
                                 det_sorted=True, amp_sorted=True)
             if plot_responsivity_heatmap:
                 resp_heatmap(rec, n_type="EXC")
 
     else:
-        directory = "C:/Users/cvandromme/Desktop/Data/20220715_4456_00_synchro/"
+        directory = "C:/Users/cvandromme/Desktop/Data/20231009_5886_00_synchro/"
         rec = RecordingAmplDet(directory, 0, roi_path, cache=True)
         if plot_ordered_heatmap:
             ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
-                            time_span="stim", window=0.5, estimator="Mean",
+                            time_span="stim", window=0.5, estimator=None,
                             det_sorted=True, amp_sorted=True)
         if plot_responsivity_heatmap:
             resp_heatmap(rec, n_type="EXC")

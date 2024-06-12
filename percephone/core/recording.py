@@ -666,9 +666,9 @@ class RecordingAmplDet(Recording):
         elif stim_ampl == "all":
             amplitudes = all_ampl
         elif stim_ampl == "supra_wt_threshold":
-            amplitudes = all_ampl[all_ampl < 6]
-        elif stim_ampl == "sub_wt_threshold":
             amplitudes = all_ampl[all_ampl > 6]
+        elif stim_ampl == "sub_wt_threshold":
+            amplitudes = all_ampl[all_ampl < 6]
         else:
             amplitudes = np.array(stim_ampl)
         selected_stim = np.isin(self.stim_ampl, amplitudes)
