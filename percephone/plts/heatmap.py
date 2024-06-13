@@ -424,11 +424,11 @@ def ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
 
 
     # neurons clustering and data display
-    Z = linkage(linkage_data, 'ward', metric='euclidean', optimal_ordering=True)
+    Z = linkage(data, 'ward', metric='euclidean', optimal_ordering=True)
     dn_exc = dendrogram(Z, no_plot=True, count_sort=False, distance_sort=False)
-    # manually_arranged_idx = dn_exc['leaves'][0:40] + dn_exc['leaves'][41:][::-1]    #KO
+    manually_arranged_idx = dn_exc['leaves'][25:]
     # manually_arranged_idx = dn_exc['leaves'][::-1]    #WT
-    im = ax.imshow(data[dn_exc['leaves']], cmap=cmap, interpolation='none', aspect='auto',
+    im = ax.imshow(data[manually_arranged_idx], cmap=cmap, interpolation='none', aspect='auto',
                    vmin=np.nanpercentile(np.ravel(data), 1),
                    vmax=np.nanpercentile(np.ravel(data), 99), extent=extent)
 
@@ -439,6 +439,7 @@ def ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
             cumulative_stim_duration += stim
             ax.vlines(cumulative_stim_duration, ymin=-0.5, ymax=len(data) - 0.5, color='w', linewidth=0.5)
         if det_sorted:
+            det_stim_duration = rec.stim_durations[rec.detected_stim]
             ax.vlines(det_stim_duration.sum(), ymin=-0.5, ymax=len(data) - 0.5, color='b', linewidth=1)
     elif time_span == "pre_stim":
         for i in range(len(rec.detected_stim)):
@@ -519,9 +520,12 @@ def resp_heatmap(rec, n_type="EXC"):
 
 if __name__ == '__main__':
     # Record import
+    from percephone.analysis.utils import corrected_prestim_windows
     plt.ion()
-    user = "Célien"
-    plot_all_records = True
+    roi_path = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/FmKO_ROIs&inhibitory.xlsx"
+    user = "Théo"
+
+    plot_all_records = False
     plot_ordered_heatmap = True
     plot_responsivity_heatmap = False
 
@@ -535,11 +539,13 @@ if __name__ == '__main__':
         server_address = "/run/user/1004/gvfs/smb-share:server=engram.local,share=data/Current_members/Ourania_Semelidou/2p/Figures_paper/"
 
     if plot_all_records:
+        directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
         files = os.listdir(directory)
         files_ = [file for file in files if file.endswith("synchro")]
         for file in files_:
-            folder = f"{directory}{file}/"
+            folder = f"/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/{file}/"
             rec = RecordingAmplDet(folder, 0, roi_path, cache=True)
+            rec.stim_time = corrected_prestim_windows(rec)
             if plot_ordered_heatmap:
                 ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
                                 time_span="pre_stim", window=0.5, estimator="Min",
@@ -548,13 +554,11 @@ if __name__ == '__main__':
                 resp_heatmap(rec, n_type="EXC")
 
     else:
-        # directory = "C:/Users/cvandromme/Desktop/Data/20231031_5879_00_synchro/"  #WT
-        # directory = "C:/Users/cvandromme/Desktop/Data/20231025_5893_00_synchro/"    #KO
-        directory = "C:/Users/cvandromme/Desktop/Data/20231008_5890_03_synchro/"  #KO-Hypo
+        directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02//20220710_4445_00_synchro/"
         rec = RecordingAmplDet(directory, 0, roi_path, cache=True)
         if plot_ordered_heatmap:
             ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
-                            time_span="stim", window=0.5, estimator=None,
+                            time_span="pre_stim", window=0.5, estimator="Max",
                             det_sorted=True, amp_sorted=True, det_ordering=False)
         if plot_responsivity_heatmap:
             resp_heatmap(rec, n_type="EXC")

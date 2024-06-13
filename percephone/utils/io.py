@@ -48,11 +48,16 @@ def extract_analog_from_mesc(path_mesc, tuple_mesc, frame_rate,analog_fs =20000,
     unit = dset['MUnit_' + str(tuple_mesc[1])]
     iti = unit['Curve_2']  # 3 in general   # 4 for after 01-2024
     iti_curve = np.array(iti['CurveDataYRawData'])
-    timings = unit['Curve_1']  # 1
+    timings = unit['Curve_0']  # 1
     timing_curve = np.array(timings['CurveDataYRawData'])
-
+    # if timings.attrs.get("CurveDataYConversionType") == 2:
+    #     refvalues = np.array(timings.attrs.get("CurveDataYConversionReferenceValues"))
+    #     xp = refvalues[::2]
+    #     yp = refvalues[1::2]
+    #     timing_curve = np.interp(timing_curve, xp, yp)
+    #     print(timing_curve)
     fig, ax = plt.subplots(1, 1, figsize=(18, 10))
-    ax.plot(iti_curve)
+    ax.plot(iti_curve )
     ax.set_title("Check if its look like ITI curve!")
     plt.show()
     end_timings = timing_curve[-1] * np.array(timings.attrs.get("CurveDataYConversionConversionLinearScale"))

@@ -220,12 +220,31 @@ def get_zscore(rec, exc_neurons=True, inh_neurons=False, time_span="stim", windo
 
 
 def idx_resp_neur(rec, n_type="EXC"):
-    if n_type=="EXC":
-        signals= rec.zscore_exc
-        resp = rec.matrices['EXC']["Responsivity"][:,rec.detected_stim]
-    elif n_type=="INH":
-        signals= rec.zscore_inh
-        resp = rec.matrices['INH']["Responsivity"][:,rec.detected_stim]
-    indices_resp = np.argwhere(np.count_nonzero(resp == 1, axis=1) >5)
-    indices_inhibited = np.argwhere(np.count_nonzero(resp ==-1, axis=1)>5)
+    if n_type == "EXC":
+        resp = rec.matrices['EXC']["Responsivity"][:, rec.detected_stim]
+    elif n_type == "INH":
+        resp = rec.matrices['INH']["Responsivity"][:, rec.detected_stim]
+    indices_resp = np.argwhere(np.count_nonzero(resp == 1, axis=1) > 5)
+    indices_inhibited = np.argwhere(np.count_nonzero(resp == -1, axis=1) > 5)
     return np.ravel(indices_resp), np.ravel(indices_inhibited)
+
+
+def corrected_prestim_windows(rec):
+    """
+    Correct the gradual shift of the syncrhonization of frames and stimulation by applying a cubic function
+    Parameters
+    ----------
+    rec
+
+    Returns np.array corrected stim time
+    -------
+
+    """
+    n_point = rec.df_f_exc.shape[1]
+    time_fct = np.linspace(0,  n_point, n_point)
+    coeff = 1 / (500*(n_point**2))
+    correction_function = np.array([coeff * (x-time_fct[int(len(time_fct)/2)])**3 for x in time_fct],dtype=int)
+    # print( correction_function[rec.stim_time])
+    corrected_stim = np.array(rec.stim_time - correction_function[rec.stim_time], dtype=int)
+    # prestim_ws = np.linspace(corrected_stim - 15, corrected_stim, 15, dtype=int)
+    return corrected_stim
