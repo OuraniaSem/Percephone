@@ -1,5 +1,5 @@
 """
-01/11/2024
+01/11/2023
 Ourania Semelidou
 Théo Gauvrit
 
@@ -372,7 +372,7 @@ class RecordingAmplDet(Recording):
         A 2D numpy.ndarray of the zscore of each inhibitory neuron at each frame of the recording
         (nb neurons * nb frames)
     """
-    def __init__(self, input_path, starting_trial, rois_path, tuple_mesc=(0, 0), mean_f=False, correction=True,
+    def __init__(self, input_path, starting_trial, rois_path, tuple_mesc=(0, 0), mean_f=False, correction=False,
                  cache=True):
         """
         Parameters
@@ -540,7 +540,7 @@ class RecordingAmplDet(Recording):
                 licks_to_analog.append(licks[icount])
                 ampl_recording.append(self.json[icount]["amp"])
         ampl_recording_iter = iter(ampl_recording)
-        for icount_time in range(len(index_iti_final)):
+        for icount_time in range(len(index_iti_final)-1):
             ITI_time_analog = self.analog.at[index_iti_final[icount_time], 't']
             reward_time_analog = ITI_time_analog + reward_to_analog[icount_time]
             timeout_time_analog = ITI_time_analog + timeout_to_analog[icount_time]
@@ -677,31 +677,32 @@ class RecordingAmplDet(Recording):
 
 if __name__ == '__main__':
     import percephone.plts.heatmap as hm
+    from percephone.analysis.utils import corrected_prestim_windows
 
     directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/Amplitude_Detection_DMSO_BMS/"
     roi_info = directory + "Fmko_bms&dmso_info.xlsx"
-    # folder = "20240406_6606_06_DMSO_synchro"
-    # path_to_mesc = directory + "20240406_6606_detDMSO.mesc"
-    folder = "20231108_5886_00_BMS_det_synchro"
-    path_to_mesc = directory + "20231108_5886_BMS_det.mesc"
-
-    extract_analog_from_mesc(path_to_mesc, (0, 0),  30.9609, 20000, directory + folder + "/")
-    rec = RecordingAmplDet(directory + folder + "/", 0, roi_info, cache=False, correction=True)
-    hm.interactive_heatmap(rec, rec.zscore_exc)
-
-    from percephone.plts.heatmap import ordered_heatmap, get_zscore
-    zsc, t_stim = get_zscore(rec, exc_neurons=True, sort=True, amp_sort=True)
-    ordered_heatmap(rec,  exc_neurons=True, inh_neurons=False, det_sorted=True, amp_sorted=True)
-
-
-    # directory ="/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
-    # roi_info = directory + "/FmKO_ROIs&inhibitory.xlsx"
     # folder = "20220715_4456_00_synchro"
-    # rec = RecordingAmplDet(directory + folder + "/", 0, roi_info, cache=False, correction=False)
+    # path_to_mesc = directory + "20231102_5879_det_DMSO.mesc"
+    # # folder = "20231107_5886_00_DMSO_synchro"
+    # # path_to_mesc = directory + "20231107_5886_DMSO_det.mesc"
+    #
+    # # extract_analog_from_mesc(path_to_mesc, (0, 3),  30.9609, 20000, directory + folder + "/")
+    # rec = RecordingAmplDet(directory + folder + "/", 0, roi_info, cache=False, correction=True)
+    # rec.stim_time = corrected_prestim_windows(rec)
     # hm.interactive_heatmap(rec, rec.zscore_exc)
-    # print(rec.analog.iloc[-1])
-    # print(len(rec.zscore_exc[0])*(1/rec.sf))
     # from percephone.plts.heatmap import ordered_heatmap, get_zscore
     # zsc, t_stim = get_zscore(rec, exc_neurons=True, sort=True, amp_sort=True)
-    # ordered_heatmap(rec,  exc_neurons=True, inh_neurons=False, det_sorted=True, amp_sorted=True)
-    # ordered_heatmap(rec, exc_neurons=True, inh_neurons=False, time_span="pre_stim", det_sorted=True, amp_sorted=True)
+    # ordered_heatmap(rec,  exc_neurons=True, inh_neurons=False,time_span="pre_stim", det_sorted=True, amp_sorted=True)
+
+
+    directory ="/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
+    roi_info = directory + "/FmKO_ROIs&inhibitory.xlsx"
+    folder = "20231008_5890_03_synchro"
+    rec = RecordingAmplDet(directory + folder + "/", 0, roi_info, cache=True, correction=False)
+    rec.stim_time = corrected_prestim_windows(rec)
+
+    hm.interactive_heatmap(rec, rec.zscore_inh)
+    from percephone.plts.heatmap import ordered_heatmap, get_zscore
+    zsc, t_stim = get_zscore(rec, exc_neurons=True, sort=True, amp_sort=True)
+    ordered_heatmap(rec,  exc_neurons=False, inh_neurons=True, det_sorted=True, amp_sorted=True)
+    ordered_heatmap(rec, exc_neurons=False, inh_neurons=True, time_span="pre_stim", det_sorted=True, amp_sorted=True)
