@@ -349,7 +349,7 @@ def amp_tuning_heatmap(ax, rec, activity, title=""):
 
 def ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
                     time_span="stim", window=0.5, estimator=None,
-                    det_sorted=False, amp_sorted=False):
+                    det_sorted=False, amp_sorted=False, det_ordering=False):
     """
     Plot the heatmap of a recording, keeping only the selected time span. It is possible to sort trials according to
     their detection and amplitude.
@@ -404,7 +404,10 @@ def ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
             stim_undet.sort()
         stim_array = np.array(stim_det + stim_undet)
         det_stim_duration = rec.stim_durations[rec.detected_stim]
-        linkage_data = data[:, 0:int(det_stim_duration.sum())]
+        if det_ordering:
+            linkage_data = data[:, 0:int(det_stim_duration.sum())]
+        else:
+            linkage_data = data
     else:
         stim_bar = []
         for i in range(rec.stim_time.shape[0]):
@@ -539,8 +542,8 @@ if __name__ == '__main__':
             rec = RecordingAmplDet(folder, 0, roi_path, cache=True)
             if plot_ordered_heatmap:
                 ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
-                                time_span="pre_stim", window=0.5, estimator="Max",
-                                det_sorted=True, amp_sorted=True)
+                                time_span="pre_stim", window=0.5, estimator="Min",
+                                det_sorted=True, amp_sorted=True, det_ordering=False)
             if plot_responsivity_heatmap:
                 resp_heatmap(rec, n_type="EXC")
 
@@ -552,7 +555,7 @@ if __name__ == '__main__':
         if plot_ordered_heatmap:
             ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
                             time_span="stim", window=0.5, estimator=None,
-                            det_sorted=True, amp_sorted=True)
+                            det_sorted=True, amp_sorted=True, det_ordering=False)
         if plot_responsivity_heatmap:
             resp_heatmap(rec, n_type="EXC")
 
