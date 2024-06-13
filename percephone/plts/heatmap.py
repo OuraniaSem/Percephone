@@ -419,16 +419,12 @@ def ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
         tax1.imshow(stim_array.reshape(1, -1), cmap=cmap, aspect='auto', interpolation='none', extent=extent)
         tax1.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
 
-    # Manual sorting of the neurons
-    means = linkage_data.mean(axis=1)
-    median = np.median(linkage_data, axis=1)
-    sorted_idx = np.argsort(means)[::-1]
-    data_reordered = data[sorted_idx]
 
     # neurons clustering and data display
-    Z = linkage(linkage_data, 'single', metric='euclidean', optimal_ordering=True)
-    dn_exc = dendrogram(Z, no_plot=True, count_sort="ascending", distance_sort="ascending")
-    # im = ax.imshow(data_reordered, cmap=cmap, interpolation='none', aspect='auto',
+    Z = linkage(linkage_data, 'ward', metric='euclidean', optimal_ordering=True)
+    dn_exc = dendrogram(Z, no_plot=True, count_sort=False, distance_sort=False)
+    # manually_arranged_idx = dn_exc['leaves'][0:40] + dn_exc['leaves'][41:][::-1]    #KO
+    # manually_arranged_idx = dn_exc['leaves'][::-1]    #WT
     im = ax.imshow(data[dn_exc['leaves']], cmap=cmap, interpolation='none', aspect='auto',
                    vmin=np.nanpercentile(np.ravel(data), 1),
                    vmax=np.nanpercentile(np.ravel(data), 99), extent=extent)
@@ -522,7 +518,7 @@ if __name__ == '__main__':
     # Record import
     plt.ion()
     user = "Célien"
-    plot_all_records = False
+    plot_all_records = True
     plot_ordered_heatmap = True
     plot_responsivity_heatmap = False
 
@@ -543,13 +539,15 @@ if __name__ == '__main__':
             rec = RecordingAmplDet(folder, 0, roi_path, cache=True)
             if plot_ordered_heatmap:
                 ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
-                                time_span="stim", window=0.5, estimator=None,
+                                time_span="pre_stim", window=0.5, estimator="Max",
                                 det_sorted=True, amp_sorted=True)
             if plot_responsivity_heatmap:
                 resp_heatmap(rec, n_type="EXC")
 
     else:
-        directory = "C:/Users/cvandromme/Desktop/Data/20231009_5886_00_synchro/"
+        # directory = "C:/Users/cvandromme/Desktop/Data/20231031_5879_00_synchro/"  #WT
+        # directory = "C:/Users/cvandromme/Desktop/Data/20231025_5893_00_synchro/"    #KO
+        directory = "C:/Users/cvandromme/Desktop/Data/20231008_5890_03_synchro/"  #KO-Hypo
         rec = RecordingAmplDet(directory, 0, roi_path, cache=True)
         if plot_ordered_heatmap:
             ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,

@@ -122,10 +122,14 @@ def neuron_mean_std_corr(array, estimator):
     """
     if estimator is None:
         return array
-    if estimator == "Mean":
+    elif estimator == "Mean":
         return np.mean(array, axis=0)
-    if estimator == "Std":
+    elif estimator == "Std":
         return np.std(array, axis=0)
+    elif estimator == "Max":
+        return np.max(array, axis=0)
+    elif estimator == "Min":
+        return np.min(array, axis=0)
 
 
 def get_zscore(rec, exc_neurons=True, inh_neurons=False, time_span="stim", window=0.5, estimator=None, sort=False,
