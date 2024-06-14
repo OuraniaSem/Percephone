@@ -425,10 +425,10 @@ def ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
 
     # neurons clustering and data display
     Z = linkage(data, 'ward', metric='euclidean', optimal_ordering=True)
-    dn_exc = dendrogram(Z, no_plot=True, count_sort=False, distance_sort=False)
-    manually_arranged_idx = dn_exc['leaves'][25:]
-    # manually_arranged_idx = dn_exc['leaves'][::-1]    #WT
-    im = ax.imshow(data[manually_arranged_idx], cmap=cmap, interpolation='none', aspect='auto',
+    dn_exc = dendrogram(Z, no_plot=True, count_sort=True, distance_sort=False)
+    # manually_arranged_idx = dn_exc['leaves'][25:]
+    # manually_arranged_idx = dn_exc['leaves'][24:] + dn_exc['leaves'][0:24][::-1]  #WT
+    im = ax.imshow(data[dn_exc['leaves']], cmap=cmap, interpolation='none', aspect='auto',
                    vmin=np.nanpercentile(np.ravel(data), 1),
                    vmax=np.nanpercentile(np.ravel(data), 99), extent=extent)
 
@@ -522,9 +522,8 @@ if __name__ == '__main__':
     # Record import
     from percephone.analysis.utils import corrected_prestim_windows
     plt.ion()
-    roi_path = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/FmKO_ROIs&inhibitory.xlsx"
-    user = "Théo"
 
+    user = "Célien"
     plot_all_records = False
     plot_ordered_heatmap = True
     plot_responsivity_heatmap = False
@@ -539,11 +538,10 @@ if __name__ == '__main__':
         server_address = "/run/user/1004/gvfs/smb-share:server=engram.local,share=data/Current_members/Ourania_Semelidou/2p/Figures_paper/"
 
     if plot_all_records:
-        directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
         files = os.listdir(directory)
         files_ = [file for file in files if file.endswith("synchro")]
         for file in files_:
-            folder = f"/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/{file}/"
+            folder = f"{directory}/{file}/"
             rec = RecordingAmplDet(folder, 0, roi_path, cache=True)
             rec.stim_time = corrected_prestim_windows(rec)
             if plot_ordered_heatmap:
@@ -554,11 +552,11 @@ if __name__ == '__main__':
                 resp_heatmap(rec, n_type="EXC")
 
     else:
-        directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02//20220710_4445_00_synchro/"
-        rec = RecordingAmplDet(directory, 0, roi_path, cache=True)
+        rec_directory = directory + "20231008_5890_03_synchro/"
+        rec = RecordingAmplDet(rec_directory, 0, roi_path, cache=True)
         if plot_ordered_heatmap:
             ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
-                            time_span="pre_stim", window=0.5, estimator="Max",
+                            time_span="stim", window=0.5, estimator=None,
                             det_sorted=True, amp_sorted=True, det_ordering=False)
         if plot_responsivity_heatmap:
             resp_heatmap(rec, n_type="EXC")
