@@ -45,8 +45,8 @@ mpl.use("Qt5Agg")
 
 wt_color = "#326993"
 light_wt_color = "#8db7d8"
-ko_color = "#CC0000"
-light_ko_color = "#ff8080"
+ko_color = "firebrick"#CC0000"
+light_ko_color = "#e49689" # "#ff8080"
 
 
 @boxplot_style
@@ -113,7 +113,7 @@ def boxplot(ax, wt, ko, ylabel, ylim=[]):
         sig_symbol = "N.A."
 
 
-    ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_signif, weight='bold')
+    ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_signif)
 
 
 def barplot(wt, ko, ylabel):
@@ -157,10 +157,10 @@ def barplot(wt, ko, ylabel):
     pval = stat_varplot(wt, ko, ylabel)
     sig_symbol = symbol_pval(pval)
 
-    ax.text((x1 + x2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, weight='bold')
+    ax.text((x1 + x2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col)
 
 @boxplot_style
-def paired_boxplot(ax, det, undet, ylabel, title, ylim=[], colors=[ko_color, light_ko_color], allow_stats_skip=False):
+def paired_boxplot(ax, det, undet, ylabel, title, ylim=[], colors=[ko_color, light_ko_color], allow_stats_skip=False, variant = False):
     """
     create boxplot for two data groups.
 
@@ -177,24 +177,30 @@ def paired_boxplot(ax, det, undet, ylabel, title, ylim=[], colors=[ko_color, lig
 
     """
     print("Boxplot plotting.")
+    marker1, marker2 = "o",  "o"
+    if variant:
+        marker2 = "v"
     det_nan = np.array(det)[~np.isnan(det)]
     undet_nan = np.array(undet)[~np.isnan(undet)]
     ax.set_ylabel(ylabel)
     ax.boxplot(det_nan, positions=[0.15], patch_artist=True, showfliers=False, widths=0.2,
-               meanprops=dict(marker='o', markerfacecolor=colors[0], markeredgecolor='black'),
+               meanprops=dict(marker="o", markerfacecolor=colors[0], markeredgecolor='black'),
                boxprops=dict(facecolor='white', color=colors[0]),
                capprops=dict(color=colors[0]),
                whiskerprops=dict(color=colors[0]),
                medianprops=dict(color=colors[0]))
     ax.boxplot(undet_nan, positions=[0.40], patch_artist=True, showfliers=False, widths=0.2,
-               meanprops=dict(marker='o', markerfacecolor=colors[1], markeredgecolor='black'),
+               meanprops=dict(marker="o", markerfacecolor=colors[1], markeredgecolor='black'),
                boxprops=dict(facecolor='white', color=colors[1]),
                capprops=dict(color=colors[1]),
                whiskerprops=dict(color=colors[1]),
                medianprops=dict(color=colors[1]))
     for i in range(len(det)):
-        ax.plot([0.15, 0.40], [det[i], undet[i]], marker=".", color=colors[1], alpha=0.5, linewidth=2.5,
-                markersize=28, markeredgewidth=4, markeredgecolor=colors[0], markerfacecolor=colors[1])
+        ax.plot([0.15], [det[i]], marker=marker1, alpha=0.5,markersize=14, markeredgewidth=4,
+                markeredgecolor=colors[0], markerfacecolor=(1,1,1,0))
+        ax.plot([0.40], [undet[i]], marker=marker2, alpha=0.5, markersize=14, markeredgewidth=4,
+                markeredgecolor=colors[1], markerfacecolor=(1,1,1,0))
+        ax.plot([0.15, 0.40], [det[i], undet[i]], marker="", color=colors[1], linewidth=2.5)
 
     ax.set_xlabel(None)
     max_y = max(np.nanmax(det), np.nanmax(undet))
@@ -219,14 +225,13 @@ def paired_boxplot(ax, det, undet, ylabel, title, ylim=[], colors=[ko_color, lig
         try:
             pval = stat_boxplot(det, undet, ylabel, paired=True)
             sig_symbol = symbol_pval(pval)
-            ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_signif,
-                    weight='bold')
+            ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_signif)
         except ValueError:
             pass
     else:
         pval = stat_boxplot(det, undet, ylabel, paired=True)
         sig_symbol = symbol_pval(pval)
-        ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_signif, weight='bold')
+        ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_signif)
 
     ax.set_xticks([0.15, 0.40], ['', ""])
     ax.tick_params(axis="x", which="both", bottom=False)
@@ -295,11 +300,11 @@ def dmso_bms(ax, wt_dmso, wt_bms, ko_dmso, ko_bms, ylabel, title, ylim=[], color
 
     pval = stat_boxplot(wt_dmso, wt_bms, ylabel, paired=True)
     sig_symbol = symbol_pval(pval)
-    ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_signif, weight='bold')
+    ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_signif)
 
     pval_2 = stat_boxplot(ko_dmso, ko_bms, ylabel, paired=True)
     sig_symbol_2 = symbol_pval(pval_2)
-    ax.text((x_3 + x_4) * 0.5, y, sig_symbol_2, ha='center', va='bottom', c=col, fontsize=font_signif, weight='bold')
+    ax.text((x_3 + x_4) * 0.5, y, sig_symbol_2, ha='center', va='bottom', c=col, fontsize=font_signif)
 
 
     ax.set_xticks([x_1, x_2, x_3, x_4], ["WT-DMSO", "WT-BMS", "KO-DMSO", "KO-BMS"])
@@ -388,8 +393,7 @@ def boxplot_anova(groups_data, lim_y, label_y, filename, colors, annot_text=[],
         y_offset = i * h * offset  # Apply offset
         plt.plot([pos1, pos1, pos2, pos2], [y + y_offset, y + h + y_offset, y + h + y_offset, y + y_offset], lw=3,
                  c=col)
-        plt.text((pos1 + pos2) * .5, y + y_offset + fixed_star_distance, star, ha='center', va='bottom', color=col,
-                 weight='bold')
+        plt.text((pos1 + pos2) * .5, y + y_offset + fixed_star_distance, star, ha='center', va='bottom', color=col)
 
     fig.tight_layout()
 
@@ -457,7 +461,7 @@ def boxplot_3_conditions(group1_data, group2_data, cond_labels=["A", "B", "C"],
         max_d = np.concatenate([np.concatenate(group1_data), np.concatenate(group2_data)]).max()
         y, h, col = max_d + abs(0.10 * max_d), 0.025 * abs(max_d), 'k'
         axs[i].plot([x1, x1, x2, x2], [y, y + h, y + h, y], lw=3, c=col)
-        axs[i].text((x1 + x2) * .5, y + h, sig_symbol, ha='center', va='bottom', color=col, weight='bold', fontsize=font_signif)
+        axs[i].text((x1 + x2) * .5, y + h, sig_symbol, ha='center', va='bottom', color=col, fontsize=font_signif)
 
     axs[0].set_ylabel(label_y)
     axs[0].tick_params(axis='y')
@@ -486,15 +490,15 @@ def boxplot_3_conditions(group1_data, group2_data, cond_labels=["A", "B", "C"],
 
 if __name__ == "__main__":
     wt_dmso = [11, 15, 13, 14, 16, 18, 19, 15]       # WT DMSO
-    wt_bms =  [11, 14, 16, 15, 15, 18, 19, 14]   # WT BMS
+    wt_bms = [11, 14, 16, 15, 15, 18, 19, 14]   # WT BMS
     ko_dmso = [48, 49, 49, 41, 49, 47]               # KO DMSO
-    ko_bms =  [20, 21, 18, 19, 20, 22]           # KO BMS
+    ko_bms = [20, 21, 18, 19, 20, 22]           # KO BMS
     cond = [["WT", "DMSO"], ["WT", "BMS"], ["KO", "BMS"], ["KO", "DMSO"]]
     labs = ["Genotype", "Treatment"]
     fig, ax = plt.subplots(figsize=(8, 8))
 
-    dmso_bms(ax, wt_dmso, wt_bms, ko_dmso, ko_bms, "Variable", "Titre", ylim=[],
-             colors=[wt_color, light_wt_color, ko_color, light_ko_color])
+    paired_boxplot(ax, wt_dmso, wt_bms, "Variable", "Titre", ylim=[],
+             colors=[light_ko_color, ko_color], variant=True)
     # boxplot(ax, wt_dmso, wt_bms, ylabel="Test")
     plt.tight_layout()
     plt.show()
