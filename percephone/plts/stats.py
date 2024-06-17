@@ -313,18 +313,18 @@ def dmso_bms(ax, wt_dmso, wt_bms, ko_dmso, ko_bms, ylabel, title="", ylim=[], co
     y_dmso = max(max_y_wt, max_y_ko) + 0.10 * (top - bottom)
     y_bms = y_dmso + 0.05 * (top - bottom)
 
-    for positions, groups, y in zip([[x_1, x_2], [x_3, x_4]], [[wt_dmso, wt_bms], [ko_dmso, ko_bms]], [[y_wt, y_wt], [y_ko, y_ko]]):
+    for positions, groups, nan_groups, y in zip([[x_1, x_2], [x_3, x_4]], [[wt_dmso, wt_bms], [ko_dmso, ko_bms]], [[wt_dmso_nan, wt_bms_nan], [ko_dmso_nan, ko_bms_nan]], [[y_wt, y_wt], [y_ko, y_ko]]):
         ax.plot(positions, y, lw=mpl.rcParams['axes.linewidth'], c=color)
-        if len(groups[0]) > 2 and len(groups[1]) > 2:
+        if len(nan_groups[0]) > 2 and len(nan_groups[1]) > 2:
             pval = stat_boxplot(groups[0], groups[1], ylabel, paired=True) * 2  # multiplied by 2 because of Bonferroni correction
             sig_symbol = symbol_pval(pval)
         else:
             sig_symbol = "N.A."
         ax.text((positions[0] + positions[1]) * 0.5, y[0], sig_symbol, ha='center', va='bottom', c=color, fontsize=font_signif)
 
-    for positions, groups, y in zip([[x_1, x_3], [x_2, x_4]], [[wt_dmso, ko_dmso], [wt_bms, ko_bms]], [[y_dmso, y_dmso], [y_bms, y_bms]]):
+    for positions, groups, nan_groups, y in zip([[x_1, x_3], [x_2, x_4]], [[wt_dmso, ko_dmso], [wt_bms, ko_bms]], [[wt_dmso_nan, ko_dmso_nan], [wt_bms_nan, ko_bms_nan]], [[y_dmso, y_dmso], [y_bms, y_bms]]):
         ax.plot(positions, y, lw=mpl.rcParams['axes.linewidth'], c=color)
-        if len(groups[0]) > 2 and len(groups[1]) > 2:
+        if len(nan_groups[0]) > 2 and len(nan_groups[1]) > 2:
             pval = stat_boxplot(groups[0], groups[1], ylabel, paired=False) * 2
             sig_symbol = symbol_pval(pval)
         else:
