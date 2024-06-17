@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 from itertools import combinations
 import math
+import warnings
 from percephone.plts.style import *
 from percephone.plts.utils import *
 
@@ -45,9 +46,11 @@ mpl.use("Qt5Agg")
 
 wt_color = "#3d6993"
 wt_light_color = "#7aabd2"
+wt_bms_color = "#2bd0f1"
 
 all_ko_color = "#CC0000"
 all_ko_light_color = "#ff8080"
+all_ko_bms_color = "#c74375"
 
 hypo_color = "firebrick"
 hypo_light_color = "#e18282"
@@ -55,8 +58,9 @@ hypo_light_color = "#e18282"
 ko_color = "#c57c9a"
 
 
+
 @boxplot_style
-def boxplot(ax, gp1, gp2, ylabel, paired=False, title="", ylim=[], colors=[wt_color, hypo_color]):
+def boxplot(ax, gp1, gp2, ylabel, paired=False, title="", ylim=[], colors=[wt_color, hypo_color], det_marker=True):
     """
     create boxplot for two data groups.
 
@@ -76,7 +80,7 @@ def boxplot(ax, gp1, gp2, ylabel, paired=False, title="", ylim=[], colors=[wt_co
 
     groups = [gp1_nan, gp2_nan]
     x = [0.15, 0.40]
-    markers = ["o", "o"] if not paired else ["o", "v"]
+    markers = ["o", "v"] if paired else ["o", "o"] if det_marker else ["v", "v"]
 
     for index in range(2):
         # Plot the boxplots
@@ -100,9 +104,12 @@ def boxplot(ax, gp1, gp2, ylabel, paired=False, title="", ylim=[], colors=[wt_co
 
     # Retrieving the maximum of the data for the ylim and significance
     max_y = max(np.nanmax(gp1), np.nanmax(gp2))
+    min_y = min(np.nanmin(gp1), np.nanmin(gp2))
 
     # Setting the ylim if specified
     if len(ylim) != 0:
+        if not (ylim[0] <= min_y and ylim[1] >= max_y):
+            warnings.warn("The ylim you have set don't cover the data range.")
         ax.set_ylim(ylim)
     else:
         lim_max = max(int(max_y * 0.15 + max_y), int(math.ceil(max_y / 2)) * 2)
@@ -121,7 +128,6 @@ def boxplot(ax, gp1, gp2, ylabel, paired=False, title="", ylim=[], colors=[wt_co
     else:
         sig_symbol = "N.A."
     ax.text((x[0] + x[1]) * 0.5, y, sig_symbol, ha='center', va='bottom', c=bar_color, fontsize=font_signif)
-
 
     yticks = list(ax.get_yticks())
     ax.set_yticks(sorted(yticks))
@@ -154,7 +160,7 @@ def barplot(wt, ko, ylabel):
     print(np.var(ko))
     y = [np.var(wt), np.var(ko)]
     fig, ax = plt.subplots(figsize=(8, 6))
-    ax.bar([1.7, 1.8], width=0.05, height=y, color=[light_wt_color, light_ko_color], edgecolor=[wt_color, ko_color],
+    ax.bar([1.7, 1.8], width=0.05, height=y, color=[wt_light_color, all_ko_light_color], edgecolor=[wt_color, all_ko_color],
            linewidth=3)
     ax.set_xlim([1.65, 1.9])
 
@@ -176,7 +182,7 @@ def barplot(wt, ko, ylabel):
 
 # kept for backwards compatibility
 @boxplot_style
-def paired_boxplot(ax, det, undet, ylabel, title, ylim=[], colors=[ko_color, light_ko_color], allow_stats_skip=False, variant = False):
+def paired_boxplot(ax, det, undet, ylabel, title, ylim=[], colors=[all_ko_color, all_ko_light_color], allow_stats_skip=False, variant = False):
     """
     create boxplot for two data groups.
 
@@ -256,38 +262,46 @@ def paired_boxplot(ax, det, undet, ylabel, title, ylim=[], colors=[ko_color, lig
 
 
 @boxplot_style
-def dmso_bms(ax, wt_dmso, wt_bms, ko_dmso, ko_bms, ylabel, title, ylim=[], colors=[wt_color, wt_light_color, all_ko_color, all_ko_light_color]):
+def dmso_bms(ax, wt_dmso, wt_bms, ko_dmso, ko_bms, ylabel, title="", ylim=[], colors=[wt_color, wt_bms_color, all_ko_color, all_ko_bms_color], marker="o"):
     print("Boxplot plotting.")
-
     wt_dmso_nan = np.array(wt_dmso)[~np.isnan(wt_dmso)]
     wt_bms_nan = np.array(wt_bms)[~np.isnan(wt_bms)]
     ko_dmso_nan = np.array(ko_dmso)[~np.isnan(ko_dmso)]
     ko_bms_nan = np.array(ko_bms)[~np.isnan(ko_bms)]
     x_1, x_2, x_3, x_4 = [0.05, 0.30, 0.60, 0.85]
-    ax.set_ylabel(ylabel)
+
     for position, group, color in zip([x_1, x_2, x_3, x_4], [wt_dmso_nan, wt_bms_nan, ko_dmso_nan, ko_bms_nan], colors):
-        print(position, group, color)
         ax.boxplot(group, positions=[position], patch_artist=True, showfliers=False, widths=0.2,
                    meanprops=dict(marker='o', markerfacecolor=color, markeredgecolor='black'),
                    boxprops=dict(facecolor='white', color=color),
                    capprops=dict(color=color),
                    whiskerprops=dict(color=color),
                    medianprops=dict(color=color))
-
+        ax.plot([position]*len(group), group, marker=marker, alpha=0.5, ms=14, markerfacecolor="None",
+                linestyle="None", markeredgecolor=color, markeredgewidth=4)
     for i in range(len(wt_dmso)):
-        ax.plot([x_1, x_2], [wt_dmso[i], wt_bms[i]], marker="o", color=colors[1], alpha=0.9, linewidth=1.5,
-                markersize=10, markeredgewidth=2, markeredgecolor=colors[0], markerfacecolor=colors[1])
+        ax.plot([x_1, x_2], [wt_dmso[i], wt_bms[i]], marker=None, color=colors[1], alpha=0.5, linewidth=2.5,
+                markersize=14, markeredgewidth=4, markeredgecolor=colors[0], markerfacecolor=colors[1])
 
     for j in range(len(ko_dmso)):
-        ax.plot([x_3, x_4], [ko_dmso[j], ko_bms[j]], marker="o", color=colors[3], alpha=0.9, linewidth=1.5,
-                markersize=10, markeredgewidth=2, markeredgecolor=colors[2], markerfacecolor=colors[3])
+        ax.plot([x_3, x_4], [ko_dmso[j], ko_bms[j]], marker=None, color=colors[3], alpha=0.5, linewidth=2.5,
+                markersize=14, markeredgewidth=4, markeredgecolor=colors[2], markerfacecolor=colors[3])
 
-    ax.set_xlabel(None)
     max_y = max(np.nanmax(wt_dmso), np.nanmax(wt_bms), np.nanmax(ko_dmso), np.nanmax(ko_bms))
+    print(max_y)
+    max_y_wt = max(np.nanmax(wt_dmso), np.nanmax(wt_bms))
+    max_y_ko = max(np.nanmax(ko_dmso), np.nanmax(ko_bms))
+
+    color = "black"
+    y_wt = max_y_wt + 0.10 * abs(max_y_wt)
+    y_ko = max_y_ko + 0.10 * abs(max_y_ko)
+    y_dmso = max_y + 0.20 * abs(max_y)
+    y_bms = y_dmso + 0.10 * abs(max_y)
+
     if len(ylim) != 0:
         ax.set_ylim(ylim)
     else:
-        lim_max = max(int(max_y * 0.15 + max_y), int(math.ceil(max_y / 2)) * 2)
+        lim_max = max(int(y_bms * 0.15 + y_bms), int(math.ceil(y_bms / 2)) * 2)
         min_y = min(np.nanmin(wt_dmso), np.nanmin(wt_bms))
         lim_inf = min(0, min_y + 0.15 * min_y)
         ax.set_ylim(ymin=lim_inf, ymax=lim_max)
@@ -295,27 +309,25 @@ def dmso_bms(ax, wt_dmso, wt_bms, ko_dmso, ko_bms, ylabel, title, ylim=[], color
     ax.set_yticks(sorted(yticks))
     ax.set_xticks([])
 
-    max_data = max([np.nanmax(wt_dmso), np.nanmax(wt_bms), np.nanmax(ko_dmso), np.nanmax(ko_bms)])
-    y, col = max_data + 0.10 * abs(max_data), 'k'
-    y_2 = y + 5
 
-    for positions, groups in zip([[x_1, x_2], [x_3, x_4]], [[wt_dmso, wt_bms], [ko_dmso, ko_bms]]):
-        ax.plot(positions, [y, y], lw=3, c=col)
-        pval = stat_boxplot(groups[0], groups[1], ylabel, paired=True)
+
+    for positions, groups, y in zip([[x_1, x_2], [x_3, x_4]], [[wt_dmso, wt_bms], [ko_dmso, ko_bms]], [[y_wt, y_wt], [y_ko, y_ko]]):
+        ax.plot(positions, y, lw=mpl.rcParams['axes.linewidth'], c=color)
+        pval = stat_boxplot(groups[0], groups[1], ylabel, paired=True) * 2  # multiplied by 2 because of Bonferroni correction
         sig_symbol = symbol_pval(pval)
-        ax.text((positions[0] + positions[1]) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_signif, weight='bold')
+        ax.text((positions[0] + positions[1]) * 0.5, y[0], sig_symbol, ha='center', va='bottom', c=color, fontsize=font_signif)
 
-    ax.plot([x_1, x_4], [y_2, y_2], lw=3, c=col)
-    pval = stat_boxplot(groups[0], groups[1], ylabel, paired=True)
-    sig_symbol = symbol_pval(pval)
-    ax.text((positions[0] + positions[1]) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_signif, weight='bold')
+    for positions, groups, y in zip([[x_1, x_3], [x_2, x_4]], [[wt_dmso, ko_dmso], [wt_bms, ko_bms]], [[y_dmso, y_dmso], [y_bms, y_bms]]):
+        ax.plot(positions, y, lw=mpl.rcParams['axes.linewidth'], c=color)
+        pval = stat_boxplot(groups[0], groups[1], ylabel, paired=False) * 2
+        sig_symbol = symbol_pval(pval)
+        ax.text((positions[0] + positions[1]) * 0.5, y[0], sig_symbol, ha='center', va='bottom', c=color, fontsize=font_signif)
 
-    pval_ko = stat_boxplot(ko_dmso, ko_bms, ylabel, paired=True)
-
-    ax.set_xticks([x_1, x_2, x_3, x_4], ["WT-DMSO", "WT-BMS", "KO-DMSO", "KO-BMS"])
+    ax.set_xlabel(None)
+    ax.set_ylabel(ylabel)
+    # ax.set_xticks([x_1, x_2, x_3, x_4], ["WT-DMSO", "WT-BMS", "KO-DMSO", "KO-BMS"])
     ax.tick_params(axis="x", which="both", bottom=False, labelrotation=45)
     ax.set_title(title)
-    ax.tick_params(axis='y')
 
 
 def boxplot_anova(groups_data, lim_y, label_y, filename, colors, annot_text=[],
@@ -501,8 +513,8 @@ if __name__ == "__main__":
     labs = ["Genotype", "Treatment"]
     fig, ax = plt.subplots(figsize=(8, 8))
 
-    # dmso_bms(ax, wt_dmso, wt_bms, ko_dmso, ko_bms, "Variable", "Titre", ylim=[],
-    #          colors=[wt_color, light_wt_color, ko_color, light_ko_color])
-    boxplot(ax, ko_dmso, ko_bms, "ylabel", paired=True, title="", ylim=[], colors=[wt_color, wt_light_color])
+    dmso_bms(ax, wt_dmso, wt_bms, ko_dmso, ko_bms, "Variable", "Titre", ylim=[],
+             colors=[wt_color, wt_bms_color, all_ko_color, all_ko_bms_color])
+    # boxplot(ax, ko_dmso, ko_bms, "ylabel", paired=True, title="", ylim=[0, 20], colors=[wt_color, wt_light_color])
     plt.tight_layout()
     plt.show()
