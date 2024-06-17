@@ -47,10 +47,12 @@ mpl.use("Qt5Agg")
 wt_color = "#3d6993"
 wt_light_color = "#7aabd2"
 wt_bms_color = "#2bd0f1"
+wt_bms_light_color = "#95e7f8"
 
 all_ko_color = "#CC0000"
 all_ko_light_color = "#ff8080"
 all_ko_bms_color = "#c74375"
+all_ko_bms_light_color = "#e3a1ba"
 
 hypo_color = "firebrick"
 hypo_light_color = "#e18282"
@@ -75,8 +77,12 @@ def boxplot(ax, gp1, gp2, ylabel, paired=False, title="", ylim=[], colors=[wt_co
 
     """
     print("Boxplot plotting.")
-    gp1_nan = np.array(gp1)[~np.isnan(gp1)]
-    gp2_nan = np.array(gp2)[~np.isnan(gp2)]
+    if paired:
+        gp1_nan = np.array(gp1)[~np.isnan(gp1) & ~np.isnan(gp2)]
+        gp2_nan = np.array(gp2)[~np.isnan(gp1) & ~np.isnan(gp2)]
+    else:
+        gp1_nan = np.array(gp1)[~np.isnan(gp1)]
+        gp2_nan = np.array(gp2)[~np.isnan(gp2)]
 
     groups = [gp1_nan, gp2_nan]
     x = [0.15, 0.40]
@@ -113,7 +119,6 @@ def boxplot(ax, gp1, gp2, ylabel, paired=False, title="", ylim=[], colors=[wt_co
         ax.set_ylim(ylim)
     else:
         lim_max = max(int(max_y * 0.15 + max_y), int(math.ceil(max_y / 2)) * 2)
-        min_y = min(np.nanmin(gp1), np.nanmin(gp2))
         lim_inf = min(0, min_y + 0.15 * min_y)
         ax.set_ylim(ymin=lim_inf, ymax=lim_max)
 
@@ -288,41 +293,47 @@ def dmso_bms(ax, wt_dmso, wt_bms, ko_dmso, ko_bms, ylabel, title="", ylim=[], co
                 markersize=14, markeredgewidth=4, markeredgecolor=colors[2], markerfacecolor=colors[3])
 
     max_y = max(np.nanmax(wt_dmso), np.nanmax(wt_bms), np.nanmax(ko_dmso), np.nanmax(ko_bms))
-    print(max_y)
+    min_y = min(np.nanmin(wt_dmso), np.nanmin(wt_bms), np.nanmin(ko_dmso), np.nanmin(ko_bms))
     max_y_wt = max(np.nanmax(wt_dmso), np.nanmax(wt_bms))
     max_y_ko = max(np.nanmax(ko_dmso), np.nanmax(ko_bms))
 
-    color = "black"
-    y_wt = max_y_wt + 0.10 * abs(max_y_wt)
-    y_ko = max_y_ko + 0.10 * abs(max_y_ko)
-    y_dmso = max_y + 0.20 * abs(max_y)
-    y_bms = y_dmso + 0.10 * abs(max_y)
-
     if len(ylim) != 0:
+        if not (ylim[0] <= min_y and ylim[1] >= max_y):
+            warnings.warn("The ylim you have set don't cover the data range.")
         ax.set_ylim(ylim)
     else:
-        lim_max = max(int(y_bms * 0.15 + y_bms), int(math.ceil(y_bms / 2)) * 2)
-        min_y = min(np.nanmin(wt_dmso), np.nanmin(wt_bms))
+        lim_max = max(int(max_y * 0.20 + max_y), int(math.ceil(max_y / 2)) * 2.1)
         lim_inf = min(0, min_y + 0.15 * min_y)
         ax.set_ylim(ymin=lim_inf, ymax=lim_max)
-    yticks = list(ax.get_yticks())
-    ax.set_yticks(sorted(yticks))
-    ax.set_xticks([])
 
-
+    bottom, top = ax.get_ylim()
+    color = "black"
+    y_wt = max_y_wt + 0.05 * (top - bottom)
+    y_ko = max_y_ko + 0.05 * (top - bottom)
+    y_dmso = max(max_y_wt, max_y_ko) + 0.10 * (top - bottom)
+    y_bms = y_dmso + 0.05 * (top - bottom)
 
     for positions, groups, y in zip([[x_1, x_2], [x_3, x_4]], [[wt_dmso, wt_bms], [ko_dmso, ko_bms]], [[y_wt, y_wt], [y_ko, y_ko]]):
         ax.plot(positions, y, lw=mpl.rcParams['axes.linewidth'], c=color)
-        pval = stat_boxplot(groups[0], groups[1], ylabel, paired=True) * 2  # multiplied by 2 because of Bonferroni correction
-        sig_symbol = symbol_pval(pval)
+        if len(groups[0]) > 2 and len(groups[1]) > 2:
+            pval = stat_boxplot(groups[0], groups[1], ylabel, paired=True) * 2  # multiplied by 2 because of Bonferroni correction
+            sig_symbol = symbol_pval(pval)
+        else:
+            sig_symbol = "N.A."
         ax.text((positions[0] + positions[1]) * 0.5, y[0], sig_symbol, ha='center', va='bottom', c=color, fontsize=font_signif)
 
     for positions, groups, y in zip([[x_1, x_3], [x_2, x_4]], [[wt_dmso, ko_dmso], [wt_bms, ko_bms]], [[y_dmso, y_dmso], [y_bms, y_bms]]):
         ax.plot(positions, y, lw=mpl.rcParams['axes.linewidth'], c=color)
-        pval = stat_boxplot(groups[0], groups[1], ylabel, paired=False) * 2
-        sig_symbol = symbol_pval(pval)
+        if len(groups[0]) > 2 and len(groups[1]) > 2:
+            pval = stat_boxplot(groups[0], groups[1], ylabel, paired=False) * 2
+            sig_symbol = symbol_pval(pval)
+        else:
+            sig_symbol = "N.A."
         ax.text((positions[0] + positions[1]) * 0.5, y[0], sig_symbol, ha='center', va='bottom', c=color, fontsize=font_signif)
 
+    yticks = list(ax.get_yticks())
+    ax.set_yticks(sorted(yticks))
+    ax.set_xticks([])
     ax.set_xlabel(None)
     ax.set_ylabel(ylabel)
     # ax.set_xticks([x_1, x_2, x_3, x_4], ["WT-DMSO", "WT-BMS", "KO-DMSO", "KO-BMS"])
