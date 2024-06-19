@@ -331,7 +331,7 @@ def dmso_bms(ax, wt_dmso, wt_bms, ko_dmso, ko_bms, ylabel, title="", ylim=[], co
             pval = stat_boxplot(groups[0], groups[1], ylabel, title=f"{title} ({groups[0]}/{groups[1]})", paired=False) * 2
             sig_symbol = symbol_pval(pval)
         else:
-            sig_symbol = "N.A."
+            sig_symbol = "n.a."
         ax.text((positions[0] + positions[1]) * 0.5, y[0], sig_symbol, ha='center', va='bottom', c=color, fontsize=font_signif)
 
     yticks = list(ax.get_yticks())
