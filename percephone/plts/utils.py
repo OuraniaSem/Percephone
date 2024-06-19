@@ -36,7 +36,7 @@ def symbol_pval(pval):
     return sig_symbol
 
 
-def stat_boxplot(group_1, group_2, ylabel, paired=False):
+def stat_boxplot(group_1, group_2, ylabel, title="", paired=False):
     """
     Returns the p-value for the comparison between 2 independant or paired sample's distribution.
 
@@ -67,7 +67,7 @@ def stat_boxplot(group_1, group_2, ylabel, paired=False):
     * For paired samples: If the normality can be assumed a standard t-test is used, otherwise, a Wilcoxon signed-rank
     test is performed.
     """
-    print(f"--- {ylabel} ---")
+    print(f"--- {ylabel}: {title} ---")
     print(ss.shapiro(group_1))
     print(ss.shapiro(group_2))
     # Normality of the distribution testing
