@@ -26,6 +26,7 @@ plt.switch_backend("Qt5Agg")
 matplotlib.use("Qt5Agg")
 warnings.filterwarnings('ignore')
 fontsize = 30
+server_address = "/run/user/1004/gvfs/smb-share:server=engram.local,share=data/Current_members/Ourania_Semelidou/2p/Figures_paper/"
 
 
 def classification_graph(hit_accuracy, miss_accuracy, title):
@@ -46,23 +47,24 @@ def classification_graph(hit_accuracy, miss_accuracy, title):
     ax.set_ylim([0, 1])
     ax.vlines(0, ymin=0, ymax=1, linestyle="--", color="red")
     ax.legend( fontsize=15)
-    ax.set_title(title, fontsize=fontsize)
+    ax.set_title(title, fontsize=fontsize, pad=40)
     fig.tight_layout()
+    fig.savefig(server_address+"Figure2/modelling/"+title+".pdf")
 
 
-def split_data(rec, frame, train_ratio=0.8, stratify=False, seed=None, neurons="all"):
+def split_data(rec, frame, train_ratio=0.8, stratify=True, seed=None, neurons="all"):
     id_exc_act, id_exc_inh = idx_resp_neur(rec, n_type="EXC")
     id_inh_act, id_inh_inh = idx_resp_neur(rec, n_type="INH")
-    full_exc_id = np.arange(rec.df_f_exc.shape[0])
-    full_inh_id = np.arange(rec.df_f_inh.shape[0])
+    full_exc_id = np.arange(rec.zscore_exc.shape[0])
+    full_inh_id = np.arange(rec.zscore_inh.shape[0])
     id_exc_dict = {"all": full_exc_id, "activated": id_exc_act, "inhibited": id_exc_inh, "both": np.concatenate([id_exc_act, id_exc_inh])}
     id_inh_dict = {"all": full_inh_id, "activated": id_inh_act, "inhibited": id_inh_inh, "both": np.concatenate([id_inh_act, id_inh_inh])}
     exc_filter = np.isin(full_exc_id, id_exc_dict[neurons])
     inh_filter = np.isin(full_inh_id, id_inh_dict[neurons])
     # print(f"EXC : {id_exc_dict[neurons].shape[0]/ full_exc_id.shape[0]:^5.1%} ({id_exc_dict[neurons].shape[0]:^3}/{full_exc_id.shape[0]:^3}) - INH : {id_inh_dict[neurons].shape[0]/ full_inh_id.shape[0]:^5.1%} ({id_inh_dict[neurons].shape[0]:^3}/{full_inh_id.shape[0]:^3})")
 
-    filtered_exc_dff = rec.df_f_exc[exc_filter]
-    filtered_inh_dff = rec.df_f_inh[inh_filter]
+    filtered_exc_dff = rec.zscore_exc[exc_filter]
+    filtered_inh_dff = rec.zscore_inh[inh_filter]
     record_dict= {}
     record_dict["X"] = np.row_stack((filtered_exc_dff[:, rec.stim_time+frame], filtered_inh_dff[:, rec.stim_time+frame])).T
     record_dict["y"] = rec.detected_stim
@@ -104,7 +106,7 @@ def frame_model(rec, frame, resampler, neurons="all"):
 
 
 if __name__ == '__main__':
-    user = "Célien"
+    user = "Théo"
     if user == "Célien":
         directory = "C:/Users/cvandromme/Desktop/Data/"
         roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
@@ -141,9 +143,9 @@ if __name__ == '__main__':
     smote = imb.over_sampling.SMOTE(sampling_strategy='auto', k_neighbors=4)
     adasyn = imb.over_sampling.ADASYN(sampling_strategy='auto')
     rus = imb.under_sampling.RandomUnderSampler(sampling_strategy='auto')
-    resampler = ros
+    resampler = rus
 
-    neurons = "activated"
+    neurons ="all" # "activated"#
 
 # per group
     wt_hit, wt_miss, ko_hypo_hit, ko_hypo_miss = [], [], [], []
@@ -165,8 +167,8 @@ if __name__ == '__main__':
             print(f"{rec.filename} -> Failed")
             continue
 
-    classification_graph(wt_hit, wt_miss, f"WT ({resampler}/{neurons})")
-    classification_graph(ko_hypo_hit, ko_hypo_miss, f"KO-Hypo ({resampler}/{neurons})")
+    classification_graph(wt_hit, wt_miss, f"WT ({resampler}-{neurons})")
+    classification_graph(ko_hypo_hit, ko_hypo_miss, f"KO-Hypo ({resampler}-{neurons})")
 
     # for f in [6601, 6606, 6609, 6611,]:
     #     recs[f].responsivity()

@@ -523,10 +523,10 @@ if __name__ == '__main__':
     from percephone.analysis.utils import corrected_prestim_windows
     plt.ion()
 
-    user = "Célien"
-    plot_all_records = False
-    plot_ordered_heatmap = True
-    plot_responsivity_heatmap = False
+    user = "Théo"
+    plot_all_records = True
+    plot_ordered_heatmap = False
+    plot_responsivity_heatmap = True
 
     if user == "Célien":
         directory = "C:/Users/cvandromme/Desktop/Data/"

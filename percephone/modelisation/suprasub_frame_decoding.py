@@ -27,7 +27,7 @@ warnings.filterwarnings('ignore')
 fontsize = 30
 
 
-def classification_graph(accus, title):
+def classification_graph_group(accus, title):
     """plot the Hit vs miss classification graph like in Fig3 of Rowland et al """
     y_err_hit_sup  = sem(accus[0], axis=1, nan_policy="omit")
     y_err_miss_sup = sem(accus[1], axis=1, nan_policy="omit")
@@ -53,15 +53,42 @@ def classification_graph(accus, title):
     fig.tight_layout()
 
 
+def classification_graph(accus, title):
+    """plot the Hit vs miss classification graph like in Fig3 of Rowland et al """
+    # y_err_hit_sup  = sem(accus[0], axis=1, nan_policy="omit")
+    # y_err_miss_sup = sem(accus[1], axis=1, nan_policy="omit")
+    # y_err_hit_sub  = sem(accus[2], axis=1, nan_policy="omit")
+    # y_err_miss_sub = sem(accus[3], axis=1, nan_policy="omit")
+    fig, ax = plt.subplots(1, 1, figsize=(10, 8))
+    times = np.linspace(-1, 1, int(2*30))
+    # ax.plot(times, np.nanmean(accus[0], axis=1), label="Supra hit trials")
+    ax.plot(times, accus[:,1], label="Supra miss trials")
+    # ax.plot(times, np.nanmean(accus[2], axis=1), label="Sub hit trials")
+    ax.plot(times, accus[:,3], label="Sub miss trials")
+    # ax.fill_between(times, np.nanmean(accus[0], axis=1) - y_err_hit_sup,  np.nanmean(accus[0], axis=1) + y_err_hit_sup, alpha=0.2)
+    # ax.fill_between(times, np.nanmean(accus[1], axis=1) - y_err_miss_sup, np.nanmean(accus[1], axis=1) + y_err_miss_sup, alpha=0.2,)
+    # ax.fill_between(times, np.nanmean(accus[2], axis=1) - y_err_hit_sub,  np.nanmean(accus[2], axis=1) + y_err_hit_sub, alpha=0.2)
+    # ax.fill_between(times, np.nanmean(accus[3], axis=1) - y_err_miss_sub, np.nanmean(accus[3], axis=1) + y_err_miss_sub, alpha=0.2, )
+    ax.set_ylabel("Hit versus Miss classification")
+    ax.set_xlabel("Time (s)")
+    ax.set_xticks([-1, -0.5, 0, 0.5, 1])
+    ax.set_ylim([0, 1])
+    ax.vlines(0, ymin=0, ymax=1, linestyle="--", color="red")
+    ax.legend(fontsize=15)
+    ax.set_title(title, fontsize=fontsize)
+    fig.tight_layout()
+
+
 def split_data(rec, frame, train_ratio=0.8, stratify=False, seed=None):
     record_dict= {}
     record_dict["X"] = np.row_stack((rec.df_f_exc[:, rec.stim_time+frame], rec.df_f_inh[:, rec.stim_time+frame])).T
     record_dict["y"] = np.zeros(len(rec.detected_stim))
     temp_y = rec.detected_stim
-    record_dict["y"][np.logical_and(temp_y, rec.stim_ampl > rec.threshold)] = 1
-    record_dict["y"][np.logical_and(~temp_y, rec.stim_ampl > rec.threshold)] = 2
-    record_dict["y"][np.logical_and(temp_y, rec.stim_ampl <= rec.threshold)] = 3
-    record_dict["y"][np.logical_and(~temp_y, rec.stim_ampl <= rec.threshold)] = 4
+    record_dict["y"][np.logical_and(temp_y, rec.stim_ampl > 6)] = 1
+    record_dict["y"][np.logical_and(~temp_y, rec.stim_ampl > 6)] = 2
+    record_dict["y"][np.logical_and(temp_y, rec.stim_ampl <= 6)] = 3
+    record_dict["y"][np.logical_and(~temp_y, rec.stim_ampl <= 6)] = 4
+    print(record_dict["y"])
     if stratify:
         record_dict["X_train"], record_dict["X_test"], record_dict["y_train"], record_dict["y_test"] = train_test_split(record_dict["X"], record_dict["y"],
                                                                                                                         train_size=train_ratio,
@@ -84,7 +111,7 @@ def resample(record_dict, resampler):
 
 def frame_model(rec, frame, resampler):
 
-    r_dict = split_data(rec, frame, train_ratio=0.8, stratify=False, seed=None)
+    r_dict = split_data(rec, frame, train_ratio=0.8, stratify=True, seed=None)
     model = LogisticRegression(penalty='l2', max_iter=5000)
     # ros = imb.over_sampling.RandomOverSampler(sampling_strategy='auto', shrinkage=None)
     # smote = imb.over_sampling.SMOTE(sampling_strategy='auto')
@@ -94,7 +121,7 @@ def frame_model(rec, frame, resampler):
     y_pred = model.predict(r_dict["X_test"])
     print(y_pred)
     print(r_dict["y_test"])
-    conf_matrices = multilabel_confusion_matrix(r_dict["y_test"], y_pred, labels=[1,2,3,4])
+    conf_matrices = multilabel_confusion_matrix(r_dict["y_test"], y_pred, labels=[1, 2, 3, 4])
     accuracies = []
     for conf in conf_matrices:
         TP = conf[1, 1]
@@ -102,9 +129,9 @@ def frame_model(rec, frame, resampler):
         FP = conf[0, 1]
         FN = conf[1, 0]
         hit_acc = TP / (TP + FN)
-        miss_acc2 = FP/(FP + TN)
+        miss_acc2 = FP / (FP + TN)
         miss_acc = TN / (TN + FP)
-        accuracies.append(hit_acc) #(TP + TN) / (TP + TN + FP + FN))
+        accuracies.append((TP + TN) / (TP + TN + FP + FN))
     return accuracies
 
 
@@ -161,6 +188,6 @@ if __name__ == '__main__':
             wt_acc.append(acc)
         elif rec.genotype == "KO-Hypo":
             ko_hypo_acc.append(acc)
-
-    classification_graph(np.array(wt_acc), f"WT")
-    classification_graph(np.array(ko_hypo_acc), f"KO-Hypo")
+        classification_graph(np.array(acc), f"{rec.filename} - {rec.genotype}")
+    # classification_graph(np.array(wt_acc), f"WT")
+    # classification_graph(np.array(ko_hypo_acc), f"KO-Hypo")
