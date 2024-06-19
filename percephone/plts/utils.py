@@ -31,6 +31,8 @@ def symbol_pval(pval):
         sig_symbol = '**'
     elif pval < 0.05:
         sig_symbol = '*'
+    elif pval <= 0.1:
+        sig_symbol = f"{pval:.3f}"
     else:
         sig_symbol = 'n.s'
     return sig_symbol
@@ -185,27 +187,28 @@ def anova(data_df, formula):
 
 
 if __name__ == "__main__":
-    group1 = [11, 15, 13, 14, 16, 18, 19]       # WT DMSO
-    gp1_id = [1, 2, 3, 4, 5, 6, 7]
-    group2 = [11, 14, 16, 15, 15, 18, 19, 14]   # WT BMS
-    gp2_id = [1, 2, 3, 4, 5, 8, 7, 9]
-    group3 = [20, 21, 18, 19, 20, 22]           # KO BMS
-    gp3_id = [50, 51, 52, 53, 54, 55]
-    group4 = [48, 49, 49, 41, 49]               # KO DMSO
-    gp4_id = [50, 51, 52, 54, 56]
-    cond = [["WT", "DMSO"], ["WT", "BMS"], ["KO", "BMS"], ["KO", "DMSO"]]
-    labs = ["Genotype", "Treatment"]
-    df = build_aov_df([group1, group2, group3, group4], cond, labs, subject_id=[gp1_id, gp2_id, gp3_id, gp4_id])
-    print(df)
-
-    formula = "Variable ~ Subject + C(Genotype) + C(Treatment) + C(Genotype):C(Treatment)"
-    result = anova(df, formula)
-    print(result)
-    print(result["PR(>F)"]["Subject"])
-
-    print("============= Post-hoc =============")
-    #['confint', 'data', 'df_total', 'groups', 'groupsunique', 'meandiffs', 'plot_simultaneous', 'pvalues', 'q_crit', 'reject', 'reject2', 'std_pairs', 'summary', 'variance']
-    post_hoc = pairwise_tukeyhsd(df["Variable"], df["Group"], 0.05)
-    print(post_hoc)
-    print(pairwise_tukeyhsd(df["Variable"], df["Group"], 0.05).groups)
-    print(pairwise_tukeyhsd(df["Variable"], df["Group"], 0.05).pvalues)
+    # group1 = [11, 15, 13, 14, 16, 18, 19]       # WT DMSO
+    # gp1_id = [1, 2, 3, 4, 5, 6, 7]
+    # group2 = [11, 14, 16, 15, 15, 18, 19, 14]   # WT BMS
+    # gp2_id = [1, 2, 3, 4, 5, 8, 7, 9]
+    # group3 = [20, 21, 18, 19, 20, 22]           # KO BMS
+    # gp3_id = [50, 51, 52, 53, 54, 55]
+    # group4 = [48, 49, 49, 41, 49]               # KO DMSO
+    # gp4_id = [50, 51, 52, 54, 56]
+    # cond = [["WT", "DMSO"], ["WT", "BMS"], ["KO", "BMS"], ["KO", "DMSO"]]
+    # labs = ["Genotype", "Treatment"]
+    # df = build_aov_df([group1, group2, group3, group4], cond, labs, subject_id=[gp1_id, gp2_id, gp3_id, gp4_id])
+    # print(df)
+    #
+    # formula = "Variable ~ Subject + C(Genotype) + C(Treatment) + C(Genotype):C(Treatment)"
+    # result = anova(df, formula)
+    # print(result)
+    # print(result["PR(>F)"]["Subject"])
+    #
+    # print("============= Post-hoc =============")
+    # #['confint', 'data', 'df_total', 'groups', 'groupsunique', 'meandiffs', 'plot_simultaneous', 'pvalues', 'q_crit', 'reject', 'reject2', 'std_pairs', 'summary', 'variance']
+    # post_hoc = pairwise_tukeyhsd(df["Variable"], df["Group"], 0.05)
+    # print(post_hoc)
+    # print(pairwise_tukeyhsd(df["Variable"], df["Group"], 0.05).groups)
+    # print(pairwise_tukeyhsd(df["Variable"], df["Group"], 0.05).pvalues)
+    print(symbol_pval(0.8))
