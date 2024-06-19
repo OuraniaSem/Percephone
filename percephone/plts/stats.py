@@ -9,6 +9,9 @@ import matplotlib as mpl
 from itertools import combinations
 import math
 import warnings
+
+import numpy as np
+
 from percephone.plts.style import *
 from percephone.plts.utils import *
 
@@ -441,39 +444,41 @@ def boxplot_3_conditions(group1_data, group2_data, cond_labels=["A", "B", "C"],
     -------
     object
     """
-    linewidth = 5
-
+    group1_data_nan = []
+    group2_data_nan = []
+    for conditions_idx in range(len(cond_labels)):
+        group1_data_nan.append(np.array(group1_data[conditions_idx])[~np.isfinite(group1_data[conditions_idx])])
+        group2_data_nan.append(np.array(group2_data[conditions_idx])[~np.isfinite(group2_data[conditions_idx])])
+    print(group1_data_nan)
+    print(group2_data_nan)
     fig, axs = plt.subplots(1, 3, figsize=(14, 8), sharey="all")
     for i, ax in enumerate(axs.flat):
-        bx = ax.boxplot([group1_data[i], group2_data[i]],
+        bx = ax.boxplot([group1_data_nan[i], group2_data_nan[i]],
                         positions=[0.15, 0.40],
                         showfliers=False,
                         widths=0.2,
-                        boxprops=dict(linewidth=linewidth, color=color2),
-                        whiskerprops=dict(color=color2, linewidth=linewidth),
-                        capprops=dict(color=color2, linewidth=linewidth),
-                        medianprops=dict(color=color2, linewidth=linewidth),
+                        boxprops=dict(color=color2),
+                        whiskerprops=dict(color=color2),
+                        capprops=dict(color=color2),
+                        medianprops=dict(color=color2),
                         meanline=True,
                         showmeans=True)
-        bx["boxes"][0].set(color=color1, linewidth=linewidth)
-        bx["whiskers"][0].set(color=color1, linewidth=linewidth)
-        bx["whiskers"][1].set(color=color1, linewidth=linewidth)
-        bx["caps"][0].set(color=color1, linewidth=linewidth)
-        bx["caps"][1].set(color=color1, linewidth=linewidth)
-        bx["medians"][0].set(color=color1, linewidth=linewidth)
-        bx["means"][0].set(linewidth=linewidth)
-        bx["means"][1].set(linewidth=linewidth)
+        bx["boxes"][0].set(color=color1)
+        bx["whiskers"][0].set(color=color1)
+        bx["whiskers"][1].set(color=color1)
+        bx["caps"][0].set(color=color1)
+        bx["caps"][1].set(color=color1)
+        bx["medians"][0].set(color=color1)
         ax.spines['right'].set_visible(False)
         ax.spines['top'].set_visible(False)
         ax.spines['bottom'].set_visible(False)
         ax.spines["left"].set_color("black")
         ax.set_xticks([0.15, 0.40], ['', ""])
         ax.set_xlabel(cond_labels[i])
-        ax.grid(False)
         ax.set_facecolor("white")
-        y = group1_data[i]
+        y = group1_data_nan[i]
         x = np.random.normal(0.15, 0.02, size=len(y))
-        y1 = group2_data[i]
+        y1 = group2_data_nan[i]
         x1 = np.random.normal(0.40, 0.02, size=len(y1))
         ax.plot(x1, y1, ".", alpha=0.5, ms=28, markerfacecolor='none', markeredgecolor=color2, markeredgewidth=4)
         ax.plot(x, y, ".", alpha=0.5, ms=28, markerfacecolor='none', markeredgecolor=color1, markeredgewidth=4)
@@ -481,8 +486,11 @@ def boxplot_3_conditions(group1_data, group2_data, cond_labels=["A", "B", "C"],
             ax.spines['left'].set_visible(False)
             ax.tick_params(axis="y", which="both", left=False)
         ax.tick_params(axis="x", which="both", bottom=False, top=False, left=True)
-        pval = stat_boxplot(group1_data[i], group2_data[i], f"{cond_labels[i]} group comp")
-        sig_symbol = symbol_pval(pval)
+        if len(group1_data_nan[i]) > 2 and len(group2_data_nan[i]) > 2:
+            pval = stat_boxplot(group1_data_nan[i], group2_data_nan[i], f"{cond_labels[i]} group comp")
+            sig_symbol = symbol_pval(pval)
+        else:
+            sig_symbol = "n.a"
 
         x1, x2, = 0.15, 0.40
         max_d = np.concatenate([np.concatenate(group1_data), np.concatenate(group2_data)]).max()
@@ -524,8 +532,11 @@ if __name__ == "__main__":
     labs = ["Genotype", "Treatment"]
     fig, ax = plt.subplots(figsize=(8, 8))
 
-    dmso_bms(ax, wt_dmso, wt_bms, ko_dmso, ko_bms, "Variable", "Titre", ylim=[],
-             colors=[wt_color, wt_bms_color, all_ko_color, all_ko_bms_color])
+    # dmso_bms(ax, wt_dmso, wt_bms, ko_dmso, ko_bms, "Variable", "Titre", ylim=[],
+    #          colors=[wt_color, wt_bms_color, all_ko_color, all_ko_bms_color])
     # boxplot(ax, ko_dmso, ko_bms, "ylabel", paired=True, title="", ylim=[0, 20], colors=[wt_color, wt_light_color])
     plt.tight_layout()
     plt.show()
+    gp1 = [[1, 2, np.nan, 3], [1, np.nan, 3, 5], [1, 2, 3, 5]]
+    gp2 = [[1, 2, 4, 3], [np.nan, 3, 5, 6], [1, np.NaN, np.NaN, 5]]
+    boxplot_3_conditions(gp1, gp2)
