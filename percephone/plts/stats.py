@@ -428,6 +428,7 @@ def boxplot_anova(groups_data, lim_y, label_y, filename, colors, annot_text=[],
 
     fig.tight_layout()
 
+
 def boxplot_3_conditions(group1_data, group2_data, cond_labels=["A", "B", "C"],
                          title="",
                          lim_y="auto",

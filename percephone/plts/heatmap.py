@@ -527,7 +527,7 @@ if __name__ == '__main__':
     plot_all_records = True
     plot_ordered_heatmap = False
     plot_responsivity_heatmap = True
-
+    plot_normal_heatmap = False
     if user == "Célien":
         directory = "C:/Users/cvandromme/Desktop/Data/"
         roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
@@ -542,14 +542,16 @@ if __name__ == '__main__':
         files_ = [file for file in files if file.endswith("synchro")]
         for file in files_:
             folder = f"{directory}/{file}/"
-            rec = RecordingAmplDet(folder, 0, roi_path, cache=True)
+            rec = RecordingAmplDet(folder, 0, roi_path, cache=False)
             rec.stim_time = corrected_prestim_windows(rec)
             if plot_ordered_heatmap:
                 ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
-                                time_span="pre_stim", window=0.5, estimator="Min",
+                                time_span="stim", window=0.5, estimator="Mean",
                                 det_sorted=True, amp_sorted=True, det_ordering=False)
             if plot_responsivity_heatmap:
                 resp_heatmap(rec, n_type="EXC")
+            if plot_normal_heatmap:
+                interactive_heatmap(rec, rec.df_f_exc)
 
     else:
         rec_directory = directory + "20231008_5890_03_synchro/"
