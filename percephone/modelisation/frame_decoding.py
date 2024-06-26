@@ -28,7 +28,6 @@ plt.switch_backend("Qt5Agg")
 matplotlib.use("Qt5Agg")
 warnings.filterwarnings('ignore')
 fontsize = 30
-server_address = "/run/user/1004/gvfs/smb-share:server=engram.local,share=data/Current_members/Ourania_Semelidou/2p/Figures_paper/"
 
 
 def classification_graph(hit_accuracy, miss_accuracy, title, colors):
@@ -52,7 +51,7 @@ def classification_graph(hit_accuracy, miss_accuracy, title, colors):
     ax.legend(fontsize=15)
     ax.set_title(title, fontsize=fontsize, pad=40)
     fig.tight_layout()
-    fig.savefig(server_address + "Figure2/modelling/" + title + ".pdf")
+    fig.savefig(server_address + f"{save_folder}/modelling/" + title + ".pdf")
 
 
 def split_data(rec, frame, train_ratio=0.8, stratify=False, seed=None, neurons="all"):
@@ -198,14 +197,52 @@ def frame_model(rec, frame, resampler, cv=False, neurons="all"):
 if __name__ == '__main__':
     import numpy as np
 
+    condition = "DMSO"
+
+    stim_period_to_correlate = "second_half"
+
+    stim_dict = {"all": [30, 45], "second_half": [37, 45], "first_half": [30, 37]}
+    stim_corr_start = stim_dict[stim_period_to_correlate][0]
+    stim_corr_end = stim_dict[stim_period_to_correlate][1]
+
+    wt_genotype = "WT"
+    ko_genotype = "KO-Hypo"
+
+    save_folder = "Figure2"
+
+    if condition is not None:
+        wt_genotype = f"WT-{condition}"
+        ko_genotype = f"KO-{condition}"
+        save_folder = "Figure4"
+
+    wt_color = ppt.wt_color
+    wt_light_color = ppt.wt_light_color
+    ko_color = ppt.hypo_color
+    ko_light_color = ppt.hypo_light_color
+
+    if condition == "DMSO":
+        ko_color = ppt.all_ko_color
+        ko_light_color = ppt.all_ko_light_color
+    elif condition == "BMS":
+        wt_color = ppt.wt_bms_color
+        wt_light_color = ppt.wt_bms_light_color
+        ko_color = ppt.all_ko_bms_color
+        ko_light_color = ppt.all_ko_bms_light_color
+
+
     np.random.seed(42)
-    user = "Théo"
+    user = "Célien"
     if user == "Célien":
-        directory = "C:/Users/cvandromme/Desktop/Data/"
-        roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
+        directory = "C:/Users/cvandromme/Desktop/Data_DMSO_BMS/"
+        roi_path = "C:/Users/cvandromme/Desktop/Fmko_bms&dmso_info.xlsx"
+        if condition is None:
+            directory = "C:/Users/cvandromme/Desktop/Data/"
+            roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
+        server_address = "Z:/Current_members/Ourania_Semelidou/2p/Figures_paper/"
     elif user == "Théo":
         directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
         roi_path = directory + "/FmKO_ROIs&inhibitory.xlsx"
+        server_address = "/run/user/1004/gvfs/smb-share:server=engram.local,share=data/Current_members/Ourania_Semelidou/2p/Figures_paper/"
     roi_info = roi_path
     files = os.listdir(directory)
     files_ = [file for file in files if file.endswith("synchro")]
@@ -223,7 +260,7 @@ if __name__ == '__main__':
     elif user == "Théo":
         pool = Pool(processes=workers)
     async_results = [pool.apply_async(opening_rec, args=(file, i)) for i, file in enumerate(files_)]
-    recs = {ar.get().filename: ar.get() for ar in async_results}
+    recs = {str(ar.get().filename) + ar.get().genotype: ar.get() for ar in async_results}
 
     # for single recording only
 
@@ -255,53 +292,58 @@ if __name__ == '__main__':
                 acc = frame_model(rec, i, resampler, neurons=neurons, cv=6)
                 acc_hit.append(acc[0])
                 acc_miss.append(acc[1])
-            stim_hit = np.mean(acc_hit[30:45])
-            stim_miss = np.mean(acc_miss[30:45])
-            if rec.genotype == "WT":
+            stim_hit = np.mean(acc_hit[stim_corr_start:stim_corr_end])
+            stim_miss = np.mean(acc_miss[stim_corr_start:stim_corr_end])
+            print(rec.genotype)
+            if rec.genotype == wt_genotype:
                 wt_hit.append(acc_hit)
                 wt_miss.append(acc_miss)
                 wt_stim_hit.append(stim_hit)
                 wt_stim_miss.append(stim_miss)
-            elif rec.genotype == "KO-Hypo":
+            elif rec.genotype == ko_genotype:
                 ko_hypo_hit.append(acc_hit)
                 ko_hypo_miss.append(acc_miss)
                 ko_hypo_stim_hit.append(stim_hit)
                 ko_hypo_stim_miss.append(stim_miss)
+            # print(f"acc_hit: {acc_hit}, acc_miss: {acc_miss.shape}")
         except ValueError:
             print(f"{rec.filename} -> Failed")
             continue
 
-    classification_graph(wt_hit, wt_miss, f"WT ({resampler}-{neurons})", colors=[ppt.wt_color, ppt.wt_light_color])
-    classification_graph(ko_hypo_hit, ko_hypo_miss, f"KO-Hypo ({resampler}-{neurons})",
-                         colors=[ppt.hypo_color, ppt.hypo_light_color])
+    classification_graph(wt_hit, wt_miss, f"{wt_genotype} ({resampler}-{neurons})", colors=[wt_color, wt_light_color])
+    classification_graph(ko_hypo_hit, ko_hypo_miss, f"{ko_genotype} ({resampler}-{neurons})",
+                         colors=[ko_color, ko_light_color])
 
     fig, axs = plt.subplots(1, 2, figsize=(12, 8))
     # ppt.boxplot(axs[0], np.subtract(wt_stim_hit, wt_stim_miss), np.subtract(ko_hypo_stim_hit,ko_hypo_stim_miss), "Hit accuracy", ylim=[0, 1])
-    ppt.boxplot(axs[0], wt_stim_hit, ko_hypo_stim_hit, "Hit accuracy", ylim=[0, 1])
+    ppt.boxplot(axs[0], wt_stim_hit, ko_hypo_stim_hit, "Hit accuracy", ylim=[0, 1], colors=[wt_color, ko_color])
 
-    ppt.boxplot(axs[1], wt_stim_miss, ko_hypo_stim_miss, "Miss error", ylim=[0, 1])
-    fig.savefig(server_address + "Figure2/modelling/model_accuracy.pdf")
+    ppt.boxplot(axs[1], wt_stim_miss, ko_hypo_stim_miss, "Miss error", ylim=[0, 1], colors=[wt_light_color, ko_light_color])
+    fig.savefig(server_address + f"{save_folder}/modelling/model_accuracy_{condition}({stim_period_to_correlate}_stim).pdf")
     plt.show()
     print("Done")
 
     # Correlation of frame model accuracy with cosine similarity of zscore (Trial-by-trial variability)
-
-    cosine_file = np.load(server_address + "Figure2/cosine_similarity/cosine_sim.npy", allow_pickle=True)
-    wt_cosine = cosine_file[0]  # first array should be wt
-    hypo_cosine = cosine_file[1]
+    if condition is None:
+        cosine_file = np.load(server_address + f"{save_folder}/cosine_similarity/cosine_sim.npy", allow_pickle=True)
+        wt_cosine = cosine_file[0]  # first array should be wt
+        hypo_cosine = cosine_file[1]
+    else:
+        wt_cosine = np.load(server_address + f"{save_folder}/cosine_similarity/cosine_sim_wt_{condition}.npy", allow_pickle=True)
+        hypo_cosine = np.load(server_address + f"{save_folder}/cosine_similarity/cosine_sim_ko_{condition}.npy", allow_pickle=True)
 
     fig1, ax = plt.subplots(1, 1, figsize=(12, 12))
 
-    ax.scatter(wt_cosine, wt_stim_hit, color=ppt.wt_color, marker=".")
+    ax.scatter(wt_cosine, wt_stim_hit, color=wt_color, marker=".")
     x = np.linspace(0, 1, 30)
     reg = LinearRegression().fit(np.array(wt_cosine).reshape(-1, 1), wt_stim_hit)
     y_pred = reg.predict(np.linspace(0, 1, 30).reshape(-1, 1))
-    ax.plot(x, y_pred, color=ppt.wt_color, lw=3, )
+    ax.plot(x, y_pred, color=wt_color, lw=3, )
 
-    ax.scatter(hypo_cosine, ko_hypo_stim_hit, color=ppt.hypo_color, marker=".")
+    ax.scatter(hypo_cosine, ko_hypo_stim_hit, color=ko_color, marker=".")
     reg = LinearRegression().fit(np.array(hypo_cosine).reshape(-1, 1), ko_hypo_stim_hit)
     y_pred = reg.predict(np.linspace(0, 1, 30).reshape(-1, 1))
-    ax.plot(x, y_pred, color=ppt.hypo_color, lw=3 )
+    ax.plot(x, y_pred, color=ko_color, lw=3 )
     sstst, pvalwt = pearsonr(wt_cosine, wt_stim_hit)
     sstst, pvalko = pearsonr(hypo_cosine, ko_hypo_stim_hit)
     ax.set_title(f"wt pval:{pvalwt :.3f} ko: {pvalko: .3f}")
@@ -310,7 +352,7 @@ if __name__ == '__main__':
     ax.set_xlim([0, 1])
     ax.set_ylim([0.4, 1])
     ax.spines[["right", "top"]].set_visible(False)
-    fig1.savefig(server_address + "Figure2/modelling/correlation_model_accuracy_and_cosine_sim.pdf")
+    fig1.savefig(server_address + f"{save_folder}/modelling/correlation_model_accuracy_and_cosine_sim_{condition}({stim_period_to_correlate}_stim).pdf")
 
     # Correlation of frame model accuracy with number of driver cells
     from percephone.analysis.utils import idx_resp_neur
@@ -319,22 +361,22 @@ if __name__ == '__main__':
         nb_act, nb_inh = idx_resp_neur(rec, n_type="EXC")
         nb_i_act, nb_i_inh = idx_resp_neur(rec, n_type="INH")
         total_drivers = len(nb_act) + len(nb_inh) + len(nb_i_act) + len(nb_i_inh)
-        if rec.genotype == "WT":
+        if rec.genotype == wt_genotype:
             drivers_len_wt.append( total_drivers)
-        if rec.genotype == "KO-Hypo":
+        if rec.genotype == ko_genotype:
             drivers_len_ko.append( total_drivers)
     fig1, ax = plt.subplots(1, 1, figsize=(12, 12))
 
-    ax.scatter( drivers_len_wt, wt_stim_hit, color=ppt.wt_color, marker=".")
+    ax.scatter(drivers_len_wt, wt_stim_hit, color=wt_color, marker=".")
     x = np.linspace(0, 100, 100)
     reg = LinearRegression().fit(np.array( drivers_len_wt).reshape(-1, 1), wt_stim_hit)
     y_pred = reg.predict(np.linspace(0, 100, 100).reshape(-1, 1))
-    ax.plot(x, y_pred, color=ppt.wt_color, lw=3, )
+    ax.plot(x, y_pred, color=wt_color, lw=3, )
 
-    ax.scatter(drivers_len_ko, ko_hypo_stim_hit, color=ppt.hypo_color, marker=".")
+    ax.scatter(drivers_len_ko, ko_hypo_stim_hit, color=ko_color, marker=".")
     reg = LinearRegression().fit(np.array(drivers_len_ko).reshape(-1, 1), ko_hypo_stim_hit)
     y_pred = reg.predict(np.linspace(0, 100, 100).reshape(-1, 1))
-    ax.plot(x, y_pred, color=ppt.hypo_color, lw=3)
+    ax.plot(x, y_pred, color=ko_color, lw=3)
     sstst, pvalwt = pearsonr(drivers_len_wt, wt_stim_hit)
     sstst, pvalko = pearsonr(drivers_len_ko, ko_hypo_stim_hit)
     ax.set_title(f"wt pval:{pvalwt :.3f} ko: {pvalko: .3f}")
@@ -343,7 +385,7 @@ if __name__ == '__main__':
     ax.set_xlim([0, 110])
     ax.set_ylim([0.4, 1])
     ax.spines[["right", "top"]].set_visible(False)
-    fig1.savefig(server_address + "Figure2/modelling/correlation_model_accuracy_and_n_drivers_neurons.pdf")
+    fig1.savefig(server_address + f"{save_folder}/modelling/correlation_model_accuracy_and_n_drivers_neurons_{condition}({stim_period_to_correlate}_stim).pdf")
 
     # Correlation of frame model accuracy with number of responsive cells
     resp_wt, resp_ko = [], []
@@ -354,22 +396,22 @@ if __name__ == '__main__':
         fraction_n_inh = np.mean(np.count_nonzero(responsivity_inh, axis=0))
         total_n = rec.zscore_exc.shape[0] + rec.zscore_exc.shape[0]
         fraction_n = ((fraction_n_exc + fraction_n_inh) / total_n)*100
-        if rec.genotype == "WT":
+        if rec.genotype == wt_genotype:
             resp_wt.append(fraction_n)
-        if rec.genotype == "KO-Hypo":
+        if rec.genotype == ko_genotype:
             resp_ko.append(fraction_n)
     fig1, ax = plt.subplots(1, 1, figsize=(12, 12))
 
-    ax.scatter( resp_wt, wt_stim_hit, color=ppt.wt_color, marker=".")
+    ax.scatter( resp_wt, wt_stim_hit, color=wt_color, marker=".")
     x = np.linspace(0, 30, 30)
     reg = LinearRegression().fit(np.array( resp_wt).reshape(-1, 1), wt_stim_hit)
     y_pred = reg.predict(np.linspace(0, 30, 30).reshape(-1, 1))
-    ax.plot(x, y_pred, color=ppt.wt_color, lw=3, )
+    ax.plot(x, y_pred, color=wt_color, lw=3, )
 
-    ax.scatter(resp_ko, ko_hypo_stim_hit, color=ppt.hypo_color, marker=".")
+    ax.scatter(resp_ko, ko_hypo_stim_hit, color=ko_color, marker=".")
     reg_ko = LinearRegression().fit(np.array(resp_ko).reshape(-1, 1), ko_hypo_stim_hit)
     y_pred_ko = reg_ko.predict(np.linspace(0, 30, 30).reshape(-1, 1))
-    ax.plot(x, y_pred_ko, color=ppt.hypo_color, lw=3)
+    ax.plot(x, y_pred_ko, color=ko_color, lw=3)
     sstst, pvalwt = pearsonr(resp_wt, wt_stim_hit)
     sstst, pvalko = pearsonr(resp_ko, ko_hypo_stim_hit)
     ax.set_title(f"wt pval:{pvalwt :.3f} ko: {pvalko: .3f}")
@@ -378,6 +420,6 @@ if __name__ == '__main__':
     ax.set_xlim([0, 30])
     ax.set_ylim([0.4, 1])
     ax.spines[["right", "top"]].set_visible(False)
-    fig1.savefig(server_address + "Figure2/modelling/correlation_model_accuracy_and_resp_nueronss_neurons.pdf")
+    fig1.savefig(server_address + f"{save_folder}/modelling/correlation_model_accuracy_and_resp_nueronss_neurons_{condition}({stim_period_to_correlate}_stim).pdf")
 
 
