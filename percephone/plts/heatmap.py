@@ -10,7 +10,7 @@ from scipy.cluster.hierarchy import dendrogram, linkage
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from percephone.core.recording import RecordingAmplDet
-from percephone.plts.utils import get_zscore
+from percephone.analysis.utils import get_zscore
 
 matplotlib.use("Qt5Agg")
 import matplotlib.pyplot as plt
@@ -253,7 +253,7 @@ def interactive_heatmap(rec, activity):
     for to_range in lick_index:
         stim_vector_lick[to_range] = 2
     conv_licks = stim_vector_lick
-    extent = [time_range[0] - dt / 2, time_range[-1] + dt / 2, len(activity) - 0.5, -0.5]
+    extent = [time_range[0] , time_range[-1], len(activity), 0]
     tax2.imshow(conv_licks.reshape(1, -1), cmap=cmap, aspect='auto', interpolation='none', extent=extent)
     tax2.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
     tax1.imshow(conv_stim.reshape(1, -1), cmap=cmap, aspect='auto', interpolation='none', extent=extent)
@@ -326,10 +326,11 @@ def amp_tuning_heatmap(ax, rec, activity, title=""):
     cmap = 'inferno'
     amps_reponses = []
     for amp in [2, 4, 6, 8, 10, 12]:
-        stims = rec.stim_time[rec.stim_ampl == amp]
+        stims = rec.stim_time[(rec.stim_ampl == amp) & rec.detected_stim]
+        if stims.shape[0] ==0:
+            return
         response = activity[:, np.linspace(stims, stims + int(1 * rec.sf), int(1 * rec.sf), dtype=int)]
-        responses = response.reshape(len(activity), len(stims) * int(1 * rec.sf))
-        response_ = np.mean(responses, axis=1)
+        response_ = np.mean(np.mean(response, axis=1), axis=1)
         amps_reponses.append(response_)
 
     tune_act = np.transpose(amps_reponses)
@@ -348,8 +349,33 @@ def amp_tuning_heatmap(ax, rec, activity, title=""):
 
 def ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
                     time_span="stim", window=0.5, estimator=None,
-                    det_sorted=False, amp_sorted=False):
+                    det_sorted=False, amp_sorted=False, det_ordering=False):
+    """
+    Plot the heatmap of a recording, keeping only the selected time span. It is possible to sort trials according to
+    their detection and amplitude.
 
+    Parameters
+    ----------
+    rec : RecordingAmplDet object
+        Object that contains the recording data of a mouse.
+    exc_neurons : bool, optional
+        Whether to include excitatory neurons in the heatmap. Default is True.
+    inh_neurons : bool, optional
+        Whether to include inhibitory neurons in the heatmap. Default is False.
+    time_span : str, optional
+        The time span to consider for the heatmap. Can be "stim", "pre_stim", "reward", or "timeout".
+        Default is "stim".
+    window : float, optional
+        The window size for the time span period in seconds. Only applicable if time_span is not "stim".
+        Default is 0.5.
+    estimator : str, optional
+        The estimator to use for calculating the Z-score. Can be "Mean" or "Std".
+        Default is None.
+    det_sorted : bool, optional
+        Whether to sort the stimulation amplitudes by detected status. Default is False.
+    amp_sorted : bool, optional
+        Whether to sort the stimulation amplitudes in ascending order. Default is False.
+    """
     data, stim_dur = get_zscore(rec, exc_neurons=exc_neurons, inh_neurons=inh_neurons,
                                 time_span=time_span, window=window, estimator=estimator,
                                 sort=det_sorted, amp_sort=amp_sorted)
@@ -377,6 +403,11 @@ def ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
             stim_det.sort()
             stim_undet.sort()
         stim_array = np.array(stim_det + stim_undet)
+        det_stim_duration = rec.stim_durations[rec.detected_stim]
+        if det_ordering:
+            linkage_data = data[:, 0:int(det_stim_duration.sum())]
+        else:
+            linkage_data = data
     else:
         stim_bar = []
         for i in range(rec.stim_time.shape[0]):
@@ -385,14 +416,18 @@ def ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
             elif time_span == "pre_stim":
                 stim_bar.extend([rec.stim_ampl[i]] * int(window * rec.sf))
         stim_array = np.array(stim_bar)
+        linkage_data = data
 
     if (time_span == "stim" or time_span == "pre_stim"):
         tax1.imshow(stim_array.reshape(1, -1), cmap=cmap, aspect='auto', interpolation='none', extent=extent)
         tax1.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
 
+
     # neurons clustering and data display
-    Z = linkage(data, 'ward', optimal_ordering=True)
-    dn_exc = dendrogram(Z, no_plot=True, count_sort="ascending")
+    Z = linkage(data, 'ward', metric='euclidean', optimal_ordering=True)
+    dn_exc = dendrogram(Z, no_plot=True, count_sort=True, distance_sort=False)
+    # manually_arranged_idx = dn_exc['leaves'][25:]
+    # manually_arranged_idx = dn_exc['leaves'][24:] + dn_exc['leaves'][0:24][::-1]  #WT
     im = ax.imshow(data[dn_exc['leaves']], cmap=cmap, interpolation='none', aspect='auto',
                    vmin=np.nanpercentile(np.ravel(data), 1),
                    vmax=np.nanpercentile(np.ravel(data), 99), extent=extent)
@@ -485,34 +520,46 @@ def resp_heatmap(rec, n_type="EXC"):
 
 if __name__ == '__main__':
     # Record import
+    from percephone.analysis.utils import corrected_prestim_windows
     plt.ion()
-    roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
 
-    plot_all_records = False
+    user = "Théo"
+    plot_all_records = True
     plot_ordered_heatmap = False
     plot_responsivity_heatmap = True
+    plot_normal_heatmap = False
+    if user == "Célien":
+        directory = "C:/Users/cvandromme/Desktop/Data/"
+        roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
+        server_address = "Z:/Current_members/Ourania_Semelidou/2p/Figures_paper/"
+    elif user == "Théo":
+        directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
+        roi_path = directory + "/FmKO_ROIs&inhibitory.xlsx"
+        server_address = "/run/user/1004/gvfs/smb-share:server=engram.local,share=data/Current_members/Ourania_Semelidou/2p/Figures_paper/"
 
     if plot_all_records:
-        directory = "C:/Users/cvandromme/Desktop/Data/"
         files = os.listdir(directory)
         files_ = [file for file in files if file.endswith("synchro")]
         for file in files_:
-            folder = f"C:/Users/cvandromme/Desktop/Data/{file}/"
-            rec = RecordingAmplDet(folder, 0, roi_path, cache=True)
+            folder = f"{directory}/{file}/"
+            rec = RecordingAmplDet(folder, 0, roi_path, cache=False)
+            rec.stim_time = corrected_prestim_windows(rec)
             if plot_ordered_heatmap:
                 ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
-                                time_span="stim", window=0.5, estimator=None,
-                                det_sorted=True, amp_sorted=True)
+                                time_span="stim", window=0.5, estimator="Mean",
+                                det_sorted=True, amp_sorted=True, det_ordering=False)
             if plot_responsivity_heatmap:
                 resp_heatmap(rec, n_type="EXC")
+            if plot_normal_heatmap:
+                interactive_heatmap(rec, rec.df_f_exc)
 
     else:
-        directory = "C:/Users/cvandromme/Desktop/Data/20220715_4456_00_synchro/"
-        rec = RecordingAmplDet(directory, 0, roi_path, cache=True)
+        rec_directory = directory + "20231008_5890_03_synchro/"
+        rec = RecordingAmplDet(rec_directory, 0, roi_path, cache=True)
         if plot_ordered_heatmap:
             ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
                             time_span="stim", window=0.5, estimator=None,
-                            det_sorted=True, amp_sorted=True)
+                            det_sorted=True, amp_sorted=True, det_ordering=False)
         if plot_responsivity_heatmap:
             resp_heatmap(rec, n_type="EXC")
 

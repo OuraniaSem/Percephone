@@ -1,5 +1,5 @@
 """
-01/11/2024
+01/11/2023
 Ourania Semelidou
 Théo Gauvrit
 
@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import scipy.signal as ss
 import matplotlib.pyplot as plt
-from percephone.utils.io import read_info, correction_drift_fluo
+from percephone.utils.io import read_info, correction_drift_fluo, get_idx_frame_mesc
 from percephone.analysis.response import resp_matrice, auc_matrice, delay_matrice, peak_matrices
 from percephone.analysis.mlr import mlr
 from percephone.analysis.mlr_models import classic_model
@@ -129,6 +129,7 @@ class Recording:
         """
         print("Calculation Delta F / F.")
         f_ = np.load(self.input_path + 'F.npy', allow_pickle=True)
+        print(f"Nb of frames in F: {len(f_[0])}")
         f_neu = np.load(self.input_path + 'Fneu.npy', allow_pickle=True)
         f_ = f_[cell_ids, :]
         f_neu = f_neu[cell_ids, :]
@@ -517,6 +518,10 @@ class RecordingAmplDet(Recording):
                 index_iti_final.append(elem)
 
         # index_iti_final.append(index_iti_analog[-1])
+        # correction of temporal shift due to instability of frame rate
+        # if correction:
+        #     timestamps = np.load(self.input_path + "timestamps_frames.npy")
+
 
         # get the info for the recorded trials and align it with the excel
         reward_to_analog = []
@@ -550,6 +555,7 @@ class RecordingAmplDet(Recording):
                     lick_time = int((index_licks[0] / analog_s) * self.sf)
                     if correction:
                         lick_time = lick_time - int(((1 / self.sf) * (index_licks[0] / analog_s)) * (1 / 3))
+                        # lick_time = get_idx_frame_mesc(index_licks[0], timestamps)
                     self.lick_time.append(lick_time)
             if len(index_reward) != 0:
                 self.reward_time.append(int((index_reward[0] / analog_s) * self.sf))
@@ -562,6 +568,7 @@ class RecordingAmplDet(Recording):
                 index_stim = int((index_stimulus[0] / analog_s) * self.sf)
                 if correction:
                     self.stim_time.append(index_stim - int(((1 / self.sf) * (index_stimulus[0] / analog_s)) * (1 / 3)))
+                    # self.stim_time.append(get_idx_frame_mesc(index_stimulus[0], timestamps))
                 else:
                     self.stim_time.append(index_stim)
                 self.stim_ampl.append(amp)
@@ -635,7 +642,7 @@ class RecordingAmplDet(Recording):
         ----------
         stim_ampl : str or list[int]
             The amplitudes of stimulation that we want to select. List of absolute values or relative to threshold
-            (threshold, supra, sub or all)
+            (threshold, supra, sub, supra_wt_threshold, sub_wt_threshold or all)
 
         include_no_go : bool (optional, default = False)
             Whether to include no-go trials (amplitude 0) or not.
@@ -658,6 +665,10 @@ class RecordingAmplDet(Recording):
             amplitudes = all_ampl[all_ampl < self.threshold]
         elif stim_ampl == "all":
             amplitudes = all_ampl
+        elif stim_ampl == "supra_wt_threshold":
+            amplitudes = all_ampl[all_ampl > 6]
+        elif stim_ampl == "sub_wt_threshold":
+            amplitudes = all_ampl[all_ampl < 6]
         else:
             amplitudes = np.array(stim_ampl)
         selected_stim = np.isin(self.stim_ampl, amplitudes)
@@ -666,16 +677,37 @@ class RecordingAmplDet(Recording):
 
 if __name__ == '__main__':
     import percephone.plts.heatmap as hm
+    from percephone.analysis.utils import corrected_prestim_windows
 
-    directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/DMSO and BMS/"
-    roi_info = directory + "FmKO_ROIs&inhibitory.xlsx"
-    folder = "20231103_5893_04_synchro"
-    path_to_mesc = directory + "20231103_5893_det_DMSO.mesc"
+    directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/Amplitude_Detection_DMSO_BMS/"
+    roi_info = directory + "Fmko_bms&dmso_info.xlsx"
+    folder = "20231107_5893_00_BMS_synchro"
+    path_to_mesc = directory + "20231107_5893_BMS_det.mesc"
+    # # folder = "20231107_5886_00_DMSO_synchro"
+    # # path_to_mesc = directory + "20231107_5886_DMSO_det.mesc"
+    # analog = pd.read_csv(directory + folder + "/"+"analog.txt", sep="\t", header=None)
+    # cut_idx = np.argwhere(np.diff(analog.iloc[:, 3]) > 0)[-1]
+    # analog_cropped = np.array(analog.iloc[:cut_idx[0]])
+    # np.savetxt(directory + folder + "/"+"analog.txt", analog_cropped, fmt='%.8g', delimiter="\t")
+    # plt.plot(analog_cropped.iloc[:, 3])
 
-    extract_analog_from_mesc(path_to_mesc, (0, 4),  30.9609, 20000, directory + folder + "/")
-    rec = RecordingAmplDet(directory + folder + "/", 0, roi_info, cache=False, correction=False)
+    extract_analog_from_mesc(path_to_mesc, (0, 0),  30.9609, 20000, directory + folder + "/")
+    rec = RecordingAmplDet(directory + folder + "/", 0, roi_info, cache=False, correction=True)
+    rec.stim_time = corrected_prestim_windows(rec)
     hm.interactive_heatmap(rec, rec.zscore_exc)
+    from percephone.plts.heatmap import ordered_heatmap, get_zscore
+    zsc, t_stim = get_zscore(rec, exc_neurons=True, sort=True, amp_sort=True)
+    ordered_heatmap(rec,  exc_neurons=True, inh_neurons=False,time_span="pre_stim", det_sorted=True, amp_sorted=True)
 
-    from percephone.analysis.neuron_var import plot_heatmap, get_zscore
-    zsc,t_stim = get_zscore(rec, exc_neurons=True, sort=True, amp_sort=True)
-    plot_heatmap(rec,  zsc, sorted=True, amp_sorted=True)
+
+    # directory ="/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
+    # roi_info = directory + "/FmKO_ROIs&inhibitory.xlsx"
+    # folder = "20231008_5890_03_synchro"
+    # rec = RecordingAmplDet(directory + folder + "/", 0, roi_info, cache=True, correction=False)
+    # rec.stim_time = corrected_prestim_windows(rec)
+    #
+    # hm.interactive_heatmap(rec, rec.zscore_inh)
+    # from percephone.plts.heatmap import ordered_heatmap, get_zscore
+    # zsc, t_stim = get_zscore(rec, exc_neurons=True, sort=True, amp_sort=True)
+    # ordered_heatmap(rec,  exc_neurons=False, inh_neurons=True, det_sorted=True, amp_sorted=True)
+    # ordered_heatmap(rec, exc_neurons=False, inh_neurons=True, time_span="pre_stim", det_sorted=True, amp_sorted=True)
