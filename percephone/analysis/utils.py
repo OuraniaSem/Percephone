@@ -133,7 +133,7 @@ def neuron_mean_std_corr(array, estimator):
 
 
 def get_zscore(rec, exc_neurons=True, inh_neurons=False, time_span="stim", window=0.5, estimator=None, sort=False,
-               amp_sort=False):
+               amp_sort=False, single_frame_estimator=False):
     if amp_sort:
         assert sort
     if sort or amp_sort:
@@ -211,7 +211,7 @@ def get_zscore(rec, exc_neurons=True, inh_neurons=False, time_span="stim", windo
         X = np.row_stack((X_det, X_undet))
         t_stim = t_det + t_undet
 
-    if estimator is not None:
+    if estimator is not None and not single_frame_estimator:
         if time_span == "stim":
             X = np.repeat(X, t_stim, axis=0)
         else:

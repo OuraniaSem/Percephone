@@ -65,7 +65,7 @@ ko_color = "#c57c9a"
 
 
 @boxplot_style
-def boxplot(ax, gp1, gp2, ylabel, paired=False, title="", ylim=[], colors=[wt_color, hypo_color], det_marker=True):
+def boxplot(ax, gp1, gp2, ylabel, paired=False, title="", ylim=[], colors=[wt_color, hypo_color], det_marker=True, force_markers_identity=False):
     """
     create boxplot for two data groups.
 
@@ -89,7 +89,10 @@ def boxplot(ax, gp1, gp2, ylabel, paired=False, title="", ylim=[], colors=[wt_co
 
     groups = [gp1_nan, gp2_nan]
     x = [0.15, 0.40]
-    markers = ["o", "v"] if paired else ["o", "o"] if det_marker else ["v", "v"]
+    if not paired or force_markers_identity:
+        markers = ["o", "o"] if det_marker else ["v", "v"]
+    else:
+        markers = ["o", "v"]
 
     for index in range(2):
         # Plot the boxplots
@@ -107,13 +110,15 @@ def boxplot(ax, gp1, gp2, ylabel, paired=False, title="", ylim=[], colors=[wt_co
         ax.plot(x_random, groups[index], marker=markers[index], alpha=0.5, ms=14, markerfacecolor="None", linestyle="None", markeredgecolor=colors[index], markeredgewidth=4)
     # Plot the connecting lines between data points if paired
     if paired:
-        for i in range(len(gp1)):
+        for i in range(len(gp1_nan)):
             ax.plot([x[0], x[1]], [gp1[i], gp2[i]], marker=None, color=colors[1], alpha=0.5, linewidth=2.5,
                     markersize=14, markeredgewidth=4, markeredgecolor=colors[0], markerfacecolor=colors[1])
 
     # Retrieving the maximum of the data for the ylim and significance
-    max_y = max(np.nanmax(gp1), np.nanmax(gp2))
-    min_y = min(np.nanmin(gp1), np.nanmin(gp2))
+    max_y_0 = max(np.nanmax(gp1), np.nanmax(gp2))
+    min_y_0 = min(np.nanmin(gp1), np.nanmin(gp2))
+    max_y = max_y_0 if np.isfinite(max_y_0) else 1
+    min_y = min_y_0 if np.isfinite(min_y_0) else 0
 
     # Setting the ylim if specified
     if len(ylim) != 0:
@@ -535,7 +540,7 @@ if __name__ == "__main__":
 
     # dmso_bms(ax, wt_dmso, wt_bms, ko_dmso, ko_bms, "Variable", "Titre", ylim=[],
     #          colors=[wt_color, wt_bms_color, all_ko_color, all_ko_bms_color])
-    # boxplot(ax, ko_dmso, ko_bms, "ylabel", paired=True, title="", ylim=[0, 20], colors=[wt_color, wt_light_color])
+    boxplot(ax, ko_dmso, ko_bms, "ylabel", paired=True, title="", ylim=[0, 20], colors=[wt_color, wt_light_color])
     plt.tight_layout()
     plt.show()
     gp1 = [[1, 2, np.nan, 3], [1, np.nan, 3, 5], [1, 2, 3, 5]]
