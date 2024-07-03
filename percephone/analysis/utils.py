@@ -61,7 +61,12 @@ def get_iter_range(rec, time_span):
     -------
     The iter range corresponding to the provided time span.
     """
-    if time_span == "stim" or time_span == "pre_stim" or time_span == "spaced_pre_stim":
+    if (time_span == "stim"
+            or time_span == "pre_stim"
+            or time_span == "spaced_pre_stim"
+            or time_span == "fixed_stim"
+            or time_span == "prestim_fixed_stim"
+            or time_span == "wide_trials"):
         iter_range = rec.stim_time.shape[0]
     elif time_span == "reward":
         iter_range = rec.reward_time.shape[0]
@@ -88,6 +93,15 @@ def get_timepoints(rec, i, time_span, window=0.5):
     if time_span == "stim":
         start = rec.stim_time[i]
         end = rec.stim_time[i] + int(rec.stim_durations[i])
+    elif time_span == "fixed_stim":
+        start = rec.stim_time[i]
+        end = rec.stim_time[i] + int(0.5 * rec.sf)
+    elif time_span == "prestim_fixed_stim":
+        start = rec.stim_time[i] - int(window * rec.sf)
+        end = rec.stim_time[i] + int(0.5 * rec.sf)
+    elif time_span == "wide_trials":
+        start = rec.stim_time[i] - 75
+        end = rec.stim_time[i] + 15 + 75
     elif time_span == "pre_stim":
         start = rec.stim_time[i] - int(window * rec.sf)
         end = rec.stim_time[i]
