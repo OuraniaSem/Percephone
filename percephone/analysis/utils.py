@@ -61,7 +61,12 @@ def get_iter_range(rec, time_span):
     -------
     The iter range corresponding to the provided time span.
     """
-    if time_span == "stim" or time_span == "pre_stim" or time_span == "spaced_pre_stim":
+    if (time_span == "stim"
+            or time_span == "pre_stim"
+            or time_span == "spaced_pre_stim"
+            or time_span == "fixed_stim"
+            or time_span == "prestim_fixed_stim"
+            or time_span == "wide_trials"):
         iter_range = rec.stim_time.shape[0]
     elif time_span == "reward":
         iter_range = rec.reward_time.shape[0]
@@ -88,6 +93,15 @@ def get_timepoints(rec, i, time_span, window=0.5):
     if time_span == "stim":
         start = rec.stim_time[i]
         end = rec.stim_time[i] + int(rec.stim_durations[i])
+    elif time_span == "fixed_stim":
+        start = rec.stim_time[i]
+        end = rec.stim_time[i] + int(0.5 * rec.sf)
+    elif time_span == "prestim_fixed_stim":
+        start = rec.stim_time[i] - int(window * rec.sf)
+        end = rec.stim_time[i] + int(0.5 * rec.sf)
+    elif time_span == "wide_trials":
+        start = rec.stim_time[i] - 75
+        end = rec.stim_time[i] + 15 + 75
     elif time_span == "pre_stim":
         start = rec.stim_time[i] - int(window * rec.sf)
         end = rec.stim_time[i]
@@ -133,7 +147,7 @@ def neuron_mean_std_corr(array, estimator):
 
 
 def get_zscore(rec, exc_neurons=True, inh_neurons=False, time_span="stim", window=0.5, estimator=None, sort=False,
-               amp_sort=False):
+               amp_sort=False, single_frame_estimator=False):
     if amp_sort:
         assert sort
     if sort or amp_sort:
@@ -211,7 +225,7 @@ def get_zscore(rec, exc_neurons=True, inh_neurons=False, time_span="stim", windo
         X = np.row_stack((X_det, X_undet))
         t_stim = t_det + t_undet
 
-    if estimator is not None:
+    if estimator is not None and not single_frame_estimator:
         if time_span == "stim":
             X = np.repeat(X, t_stim, axis=0)
         else:
