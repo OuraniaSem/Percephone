@@ -448,8 +448,8 @@ def boxplot_3_conditions(group1_data, group2_data, cond_labels=["A", "B", "C"],
     group1_data_nan = []
     group2_data_nan = []
     for conditions_idx in range(len(cond_labels)):
-        group1_data_nan.append(np.array(group1_data[conditions_idx])[~np.isfinite(group1_data[conditions_idx])])
-        group2_data_nan.append(np.array(group2_data[conditions_idx])[~np.isfinite(group2_data[conditions_idx])])
+        group1_data_nan.append(np.array(group1_data[conditions_idx])[np.isfinite(group1_data[conditions_idx])])
+        group2_data_nan.append(np.array(group2_data[conditions_idx])[np.isfinite(group2_data[conditions_idx])])
     print(group1_data_nan)
     print(group2_data_nan)
     fig, axs = plt.subplots(1, 3, figsize=(14, 8), sharey="all")
@@ -531,13 +531,12 @@ if __name__ == "__main__":
     ko_bms =  [11, 21, 18, 19, 20, 22]           # KO BMS
     cond = [["WT", "DMSO"], ["WT", "BMS"], ["KO", "BMS"], ["KO", "DMSO"]]
     labs = ["Genotype", "Treatment"]
-    fig, ax = plt.subplots(figsize=(8, 8))
-
+    # fig, ax = plt.subplots(figsize=(8, 8))
     # dmso_bms(ax, wt_dmso, wt_bms, ko_dmso, ko_bms, "Variable", "Titre", ylim=[],
     #          colors=[wt_color, wt_bms_color, all_ko_color, all_ko_bms_color])
     # boxplot(ax, ko_dmso, ko_bms, "ylabel", paired=True, title="", ylim=[0, 20], colors=[wt_color, wt_light_color])
-    plt.tight_layout()
-    plt.show()
+    # plt.tight_layout()
+    # plt.show()
     gp1 = [[1, 2, np.nan, 3], [1, np.nan, 3, 5], [1, 2, 3, 5]]
     gp2 = [[1, 2, 4, 3], [np.nan, 3, 5, 6], [1, np.NaN, np.NaN, 5]]
     boxplot_3_conditions(gp1, gp2)
