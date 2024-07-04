@@ -22,12 +22,28 @@ from sklearn.linear_model import LogisticRegression
 from scipy.stats import mannwhitneyu, sem, pearsonr
 from sklearn.linear_model import LinearRegression
 
-plt.rcParams['font.size'] = 30
-plt.rcParams['axes.linewidth'] = 3
+plt.rcParams['font.size'] = 35
+
+plt.rcParams['axes.linewidth'] = 4
+plt.rcParams["xtick.labelsize"] = plt.rcParams['font.size']
+plt.rcParams["ytick.labelsize"] = plt.rcParams['font.size']
+plt.rcParams["axes.labelsize"] = plt.rcParams['font.size']
+plt.rcParams["axes.titlesize"] = 20
+plt.rcParams["lines.markersize"] = 28
+
+plt.rcParams['font.sans-serif'] = ["Arial"]
+plt.rcParams['svg.fonttype'] = 'none'
+
+plt.rcParams["xtick.major.width"] = 3
+plt.rcParams["xtick.minor.width"] = 2
+plt.rcParams["xtick.major.size"] = 8
+plt.rcParams["ytick.major.width"] = 3
+plt.rcParams["ytick.minor.width"] = 2
+plt.rcParams["ytick.major.size"] = 6
+plt.rcParams["ytick.left"] = True
 plt.switch_backend("Qt5Agg")
 matplotlib.use("Qt5Agg")
 warnings.filterwarnings('ignore')
-fontsize = 30
 
 
 def classification_graph(hit_accuracy, miss_accuracy, title, colors):
@@ -49,7 +65,7 @@ def classification_graph(hit_accuracy, miss_accuracy, title, colors):
     ax.vlines(0, ymin=0, ymax=1, linestyle="--", color="red")
     ax.vlines(0.5, ymin=0, ymax=1, linestyle="--", color="black")
     ax.legend(fontsize=15)
-    ax.set_title(title, fontsize=fontsize, pad=40)
+    ax.set_title(title, pad=40)
     fig.tight_layout()
     fig.savefig(server_address + f"{save_folder}/modelling/" + title + ".pdf")
 
@@ -197,9 +213,9 @@ def frame_model(rec, frame, resampler, cv=False, neurons="all"):
 if __name__ == '__main__':
     import numpy as np
 
-    condition = "DMSO"
+    condition = None
 
-    stim_period_to_correlate = "second_half"
+    stim_period_to_correlate = "all" # "second_half"
 
     stim_dict = {"all": [30, 45], "second_half": [37, 45], "first_half": [30, 37]}
     stim_corr_start = stim_dict[stim_period_to_correlate][0]
@@ -231,14 +247,10 @@ if __name__ == '__main__':
 
 
     np.random.seed(42)
-    user = "Célien"
+    user = "Théo"
     if user == "Célien":
-        directory = "C:/Users/cvandromme/Desktop/Data_DMSO_BMS/"
-        roi_path = "C:/Users/cvandromme/Desktop/Fmko_bms&dmso_info.xlsx"
-        if condition is None:
-            directory = "C:/Users/cvandromme/Desktop/Data/"
-            roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
-        server_address = "Z:/Current_members/Ourania_Semelidou/2p/Figures_paper/"
+        directory = "C:/Users/cvandromme/Desktop/Data/"
+        roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
     elif user == "Théo":
         directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
         roi_path = directory + "/FmKO_ROIs&inhibitory.xlsx"
@@ -332,7 +344,7 @@ if __name__ == '__main__':
         wt_cosine = np.load(server_address + f"{save_folder}/cosine_similarity/cosine_sim_wt_{condition}.npy", allow_pickle=True)
         hypo_cosine = np.load(server_address + f"{save_folder}/cosine_similarity/cosine_sim_ko_{condition}.npy", allow_pickle=True)
 
-    fig1, ax = plt.subplots(1, 1, figsize=(12, 12))
+    fig1, ax = plt.subplots(1, 1, figsize=(10, 8))
 
     ax.scatter(wt_cosine, wt_stim_hit, color=wt_color, marker=".")
     x = np.linspace(0, 1, 30)
@@ -352,6 +364,7 @@ if __name__ == '__main__':
     ax.set_xlim([0, 1])
     ax.set_ylim([0.4, 1])
     ax.spines[["right", "top"]].set_visible(False)
+    fig1.tight_layout()
     fig1.savefig(server_address + f"{save_folder}/modelling/correlation_model_accuracy_and_cosine_sim_{condition}({stim_period_to_correlate}_stim).pdf")
 
     # Correlation of frame model accuracy with number of driver cells
@@ -365,7 +378,7 @@ if __name__ == '__main__':
             drivers_len_wt.append( total_drivers)
         if rec.genotype == ko_genotype:
             drivers_len_ko.append( total_drivers)
-    fig1, ax = plt.subplots(1, 1, figsize=(12, 12))
+    fig1, ax = plt.subplots(1, 1, figsize=(10, 8))
 
     ax.scatter(drivers_len_wt, wt_stim_hit, color=wt_color, marker=".")
     x = np.linspace(0, 100, 100)
@@ -385,6 +398,7 @@ if __name__ == '__main__':
     ax.set_xlim([0, 110])
     ax.set_ylim([0.4, 1])
     ax.spines[["right", "top"]].set_visible(False)
+    fig1.tight_layout()
     fig1.savefig(server_address + f"{save_folder}/modelling/correlation_model_accuracy_and_n_drivers_neurons_{condition}({stim_period_to_correlate}_stim).pdf")
 
     # Correlation of frame model accuracy with number of responsive cells
@@ -400,7 +414,7 @@ if __name__ == '__main__':
             resp_wt.append(fraction_n)
         if rec.genotype == ko_genotype:
             resp_ko.append(fraction_n)
-    fig1, ax = plt.subplots(1, 1, figsize=(12, 12))
+    fig1, ax = plt.subplots(1, 1, figsize=(10, 8))
 
     ax.scatter( resp_wt, wt_stim_hit, color=wt_color, marker=".")
     x = np.linspace(0, 30, 30)
@@ -420,6 +434,7 @@ if __name__ == '__main__':
     ax.set_xlim([0, 30])
     ax.set_ylim([0.4, 1])
     ax.spines[["right", "top"]].set_visible(False)
+    fig1.tight_layout()
     fig1.savefig(server_address + f"{save_folder}/modelling/correlation_model_accuracy_and_resp_nueronss_neurons_{condition}({stim_period_to_correlate}_stim).pdf")
 
 

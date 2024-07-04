@@ -110,7 +110,7 @@ def boxplot(ax, gp1, gp2, ylabel, paired=False, title="", ylim=[], colors=[wt_co
         ax.plot(x_random, groups[index], marker=markers[index], alpha=0.5, ms=14, markerfacecolor="None", linestyle="None", markeredgecolor=colors[index], markeredgewidth=4)
     # Plot the connecting lines between data points if paired
     if paired:
-        for i in range(len(gp1_nan)):
+        for i in range(len(gp1)):
             ax.plot([x[0], x[1]], [gp1[i], gp2[i]], marker=None, color=colors[1], alpha=0.5, linewidth=2.5,
                     markersize=14, markeredgewidth=4, markeredgecolor=colors[0], markerfacecolor=colors[1])
 
@@ -453,8 +453,8 @@ def boxplot_3_conditions(group1_data, group2_data, cond_labels=["A", "B", "C"],
     group1_data_nan = []
     group2_data_nan = []
     for conditions_idx in range(len(cond_labels)):
-        group1_data_nan.append(np.array(group1_data[conditions_idx])[~np.isfinite(group1_data[conditions_idx])])
-        group2_data_nan.append(np.array(group2_data[conditions_idx])[~np.isfinite(group2_data[conditions_idx])])
+        group1_data_nan.append(np.array(group1_data[conditions_idx])[np.isfinite(group1_data[conditions_idx])])
+        group2_data_nan.append(np.array(group2_data[conditions_idx])[np.isfinite(group2_data[conditions_idx])])
     print(group1_data_nan)
     print(group2_data_nan)
     fig, axs = plt.subplots(1, 3, figsize=(14, 8), sharey="all")
@@ -541,8 +541,8 @@ if __name__ == "__main__":
     # dmso_bms(ax, wt_dmso, wt_bms, ko_dmso, ko_bms, "Variable", "Titre", ylim=[],
     #          colors=[wt_color, wt_bms_color, all_ko_color, all_ko_bms_color])
     boxplot(ax, ko_dmso, ko_bms, "ylabel", paired=True, title="", ylim=[0, 20], colors=[wt_color, wt_light_color])
-    plt.tight_layout()
-    plt.show()
+    # plt.tight_layout()
+    # plt.show()
     gp1 = [[1, 2, np.nan, 3], [1, np.nan, 3, 5], [1, 2, 3, 5]]
     gp2 = [[1, 2, 4, 3], [np.nan, 3, 5, 6], [1, np.NaN, np.NaN, 5]]
     boxplot_3_conditions(gp1, gp2)
