@@ -12,11 +12,10 @@ import numpy as np
 import pandas as pd
 import scipy.signal as ss
 import matplotlib.pyplot as plt
-from percephone.utils.io import read_info, correction_drift_fluo, get_idx_frame_mesc
+from percephone.utils.io import read_info, correction_drift_fluo, get_idx_frame_mesc, extract_analog_from_mesc
 from percephone.analysis.response import resp_matrice, auc_matrice, delay_matrice, peak_matrices
 from percephone.analysis.mlr import mlr
 from percephone.analysis.mlr_models import classic_model
-from percephone.utils.io import extract_analog_from_mesc
 matplotlib.use("Qt5Agg")
 plt.switch_backend("Qt5Agg")
 

@@ -1,10 +1,14 @@
 """Théo Gauvrit, 15/09/2023
 utility functions for input/output management
 """
+import os
+
 import numpy as np
 import pandas as pd
 import h5py
 import matplotlib.pyplot as plt
+from multiprocessing import Pool, cpu_count, pool
+import percephone.core.recording as pc
 
 
 def read_info(folder_name, rois):
@@ -107,19 +111,61 @@ def get_idx_frame_mesc(time_ms, timestamps):
     return idx_frame
 
 
+def get_recs_dict(user, cache=True, BMS=False):
+
+    workers = cpu_count()
+
+    if user == "Célien":
+        pool_ = pool.ThreadPool(processes=workers)
+        if BMS:
+            directory = "C:/Users/cvandromme/Desktop/Data_DMSO_BMS/"
+            roi_path = "C:/Users/cvandromme/Desktop/Fmko_bms&dmso_info.xlsx"
+        else:
+            directory = "C:/Users/cvandromme/Desktop/Data/"
+            roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
+
+    elif user == "Théo":
+        pool_ = Pool(processes=workers)
+        directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
+        roi_path = directory + "/FmKO_ROIs&inhibitory.xlsx"
+
+    files = os.listdir(directory)
+    files_ = [file for file in files if file.endswith("synchro")]
+
+    def opening_rec(fil, i):
+        print(fil)
+        rec = pc.RecordingAmplDet(directory + fil + "/", 0, roi_path, cache=cache)
+        return rec
+
+    async_results = [pool_.apply_async(opening_rec, args=(file, i)) for i, file in enumerate(files_)]
+    if BMS:
+        recs = {str(ar.get().filename) + ar.get().genotype: ar.get() for ar in async_results}
+    else:
+        recs = {str(ar.get().filename): ar.get() for ar in async_results}
+
+    return recs
+
+
+def get_server_address(user):
+    if user == "Célien":
+        server_address = "Z:/Current_members/Ourania_Semelidou/2p/Figures_paper/"
+    elif user == "Théo":
+        server_address = "/run/user/1004/gvfs/smb-share:server=engram.local,share=data/Current_members/Ourania_Semelidou/2p/Figures_paper/"
+    return server_address
+
+
 if __name__ == '__main__':
-    import percephone.core.recording as pc
     import percephone.plts.heatmap as hm
 
-    path = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
-    roi_info = path + "/FmKO_ROIs&inhibitory.xlsx"
+    path = "C:/Users/cvandromme/Desktop/Data_DMSO_BMS/"
+    roi_info = "C:/Users/cvandromme/Desktop/Fmko_bms&dmso_info.xlsx"
     # folder = "20240404_6601_04_synchro_temp"
     # folder = "20240404_6602_01_synchro_temp"
     # path_to_mesc = path + "/20240404_6602_det.mesc"
-    folder = "20231009_5896_04_synchro"
+    folder = "20240501_6611_01_detBMS_synchro"
     path_to_mesc = path + "20231009_5896_det.mesc"
 
-    extract_analog_from_mesc(path_to_mesc, (0, 4), 30.9609, 20000, path + folder + "/")
+    # extract_analog_from_mesc(path_to_mesc, (0, 4), 30.9609, 20000, path + folder + "/")
     rec = pc.RecordingAmplDet(path + folder + "/", 0, roi_info,  cache=False, correction=False)
-    hm.intereactive_heatmap(rec, rec.zscore_exc)
+    hm.interactive_heatmap(rec, rec.zscore_exc)
 
