@@ -436,6 +436,8 @@ class RecordingAmplDet(Recording):
 
         self.zscore_exc = self.zscore(self.df_f_exc)
         self.zscore_inh = self.zscore(self.df_f_inh)
+        # removing timeout_times that comes after the end of the neuronal record
+        self.timeout_time = np.array([i for i in self.timeout_time if i <= self.zscore_exc.shape[1]])
 
     def zscore(self, dff):
         """
@@ -557,11 +559,22 @@ class RecordingAmplDet(Recording):
                         # lick_time = get_idx_frame_mesc(index_licks[0], timestamps)
                     self.lick_time.append(lick_time)
             if len(index_reward) != 0:
-                self.reward_time.append(int((index_reward[0] / analog_s) * self.sf))
+                index_rew= int((index_reward[0] / analog_s) * self.sf)
+                if correction:
+                    self.reward_time.append(
+                        index_rew - int(((1 / self.sf) * (index_reward[0] / analog_s)) * (1 / 3)))
+                else:
+                    self.reward_time.append(index_rew)
+
             if len(index_timeout) != 0:
-                self.timeout_time.append(int((index_timeout[0] / analog_s) * self.sf))
                 if len(index_stimulus) == 0:
                     timeout_trial = next(ampl_recording_iter)
+                index_timeo = int((index_timeout[0] / analog_s) * self.sf)
+                if correction:
+                    self.timeout_time.append(index_timeo - int(((1 / self.sf) * (index_timeout[0] / analog_s)) * (1 / 3)))
+                else:
+                    self.timeout_time.append(index_timeo)
+
             if len(index_stimulus) != 0:
                 amp = next(ampl_recording_iter)
                 index_stim = int((index_stimulus[0] / analog_s) * self.sf)
@@ -672,6 +685,13 @@ class RecordingAmplDet(Recording):
             amplitudes = np.array(stim_ampl)
         selected_stim = np.isin(self.stim_ampl, amplitudes)
         return selected_stim
+
+    def timeout_filter(self, no_lick_period_duration):
+        mask = []
+        for time in self.timeout_time:
+            pre_time = [time - (i + 1) for i in range(int(no_lick_period_duration * self.sf))]
+            mask.append(not any(np.isin(pre_time, self.lick_time)))
+        return mask
 
 
 if __name__ == '__main__':

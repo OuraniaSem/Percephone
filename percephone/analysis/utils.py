@@ -66,12 +66,15 @@ def get_iter_range(rec, time_span):
             or time_span == "spaced_pre_stim"
             or time_span == "fixed_stim"
             or time_span == "prestim_fixed_stim"
-            or time_span == "wide_trials"):
+            or time_span == "wide_trials"
+            or time_span == "baseline"):
         iter_range = rec.stim_time.shape[0]
     elif time_span == "reward":
         iter_range = rec.reward_time.shape[0]
-    elif time_span == "timeout":
+    elif time_span == "all_timeout":
         iter_range = rec.timeout_time.shape[0]
+    elif time_span == "isolated_timeout" or time_span == "pre_isolated_timeout":
+        iter_range = rec.timeout_time[rec.timeout_filter(1)].shape[0]
     return iter_range
 
 
@@ -111,9 +114,18 @@ def get_timepoints(rec, i, time_span, window=0.5):
     elif time_span == "reward":
         start = rec.reward_time[i]
         end = rec.reward_time[i] + int(window * rec.sf)
-    elif time_span == "timeout":
+    elif time_span == "all_timeout":
         start = rec.timeout_time[i]
         end = rec.timeout_time[i] + int(window * rec.sf)
+    elif time_span == "isolated_timeout":
+        start = rec.timeout_time[rec.timeout_filter(1)][i]
+        end = rec.timeout_time[rec.timeout_filter(1)][i] + int(window * rec.sf)
+    elif time_span == "pre_isolated_timeout":
+        start = rec.timeout_time[rec.timeout_filter(1)][i] - int(window * rec.sf)
+        end = rec.timeout_time[rec.timeout_filter(1)][i]
+    elif time_span == "baseline":
+        start = rec.stim_time[i] - int((window + 0.5) * rec.sf)
+        end = rec.stim_time[i] - int(0.5 * rec.sf)
     return start, end
 
 
