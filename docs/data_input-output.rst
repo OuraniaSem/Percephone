@@ -23,8 +23,6 @@ F.npy
     Calcium fluorescent signal traces for each neuron. From suite2p.  Dimension: (n_neurons * time)
 Fneu.npy
     Calcium fluorescent neuropile signal traces for each neuron. From suite2p. Dimension: (n_neurons * time)
-spks.npy
-    Spikes trains for each neuron, obtained from the deconvolution of the calcium traces. From suite2p.  Dimension: (n_neurons * time)
 
 Group metada excel sheet
 -------------------------
@@ -39,9 +37,6 @@ Trough the different automatic processes in Percephone like synchronisation, com
 multiple files will be generated automatically in the input folder in order to increase speed of process for next utilizations or save usefull information.
 These files are the following:
 
-analog_synchronized.csv
-    same as analog but the time is now synchronized between stimulations and F traces. The format is csv to speed up the
-    reading the next utilizations.
 df_f_exc.npy
     delta f over f traces for each excitatory neurons. Dimension: (n_neurons * time)
 df_f_inh.npy
