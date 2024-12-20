@@ -372,7 +372,7 @@ class RecordingAmplDet(Recording):
         (nb neurons * nb frames)
     """
     def __init__(self, input_path, starting_trial, rois_path, tuple_mesc=(0, 0), mean_f=False, correction=True,
-                 cache=True):
+                 cache=True, iti="ITI2"):
         """
         Parameters
         ----------
@@ -432,7 +432,7 @@ class RecordingAmplDet(Recording):
             else:
                 self.analog[0] = (self.analog[0]).astype(int)
                 analog_sf = 1000
-            self.synchronization_with_iti(starting_trial, analog_sf, correction)
+            self.synchronization_with_iti(starting_trial, analog_sf, correction, iti)
 
         self.zscore_exc = self.zscore(self.df_f_exc)
         self.zscore_inh = self.zscore(self.df_f_inh)
@@ -463,7 +463,7 @@ class RecordingAmplDet(Recording):
         zsc = np.divide(np.subtract(dff, mean_bsl[:, np.newaxis]), std[:, np.newaxis])
         return zsc
 
-    def synchronization_with_iti(self, starting_trial, analog_s, correction):
+    def synchronization_with_iti(self, starting_trial, analog_s, correction, iti):
         """
         Update the analog file with information on stimulus time, reward time and timeout time
 
@@ -486,15 +486,23 @@ class RecordingAmplDet(Recording):
         print('Synchronization method with ITI.')
 
         # get the ITI2, reward, timeout and stimulus from the xls
-        data_iti = self.xls[self.xls[0] == 'STATE'][self.xls[4] == 'ITI2']
+        if iti == "ITI2":
+            data_iti = self.xls[self.xls[0] == 'STATE'][self.xls[4] == 'ITI2']
+        else:
+            data_iti = self.xls[self.xls[0] == 'STATE'][self.xls[4] == 'ITI']
         data_reward = self.xls[self.xls[0] == 'STATE'][self.xls[4] == 'Reward']
         data_timeout = self.xls[self.xls[0] == 'STATE'][self.xls[4] == 'Timeout']
         data_stimulus = self.xls[self.xls[0] == 'STATE'][self.xls[4] == 'Stimulus']
 
         splitted = np.split(self.xls, self.xls[self.xls[4] == 'The trial ended'].index)
-        licks = [np.round(((split[2][(split[0] == 'EVENT') & (split[4] == 94)].values - 2) * analog_s).astype(float))
-                 for
-                 split in splitted]
+        if iti == "ITI2":
+            licks = [np.round(((split[2][(split[0] == 'EVENT') & (split[4] == 94)].values - 2) * analog_s).astype(float))
+                     for
+                     split in splitted]
+        else:
+            licks = [np.round(((split[2][(split[0] == 'EVENT') & (split[4] == 94)].values ) * analog_s).astype(float))
+                     for
+                     split in splitted]
 
         # get the time for ITI2, reward, timeout and stimulus
         ITI_time_xls = data_iti[2].values.astype(float)
@@ -503,9 +511,15 @@ class RecordingAmplDet(Recording):
         stimulus_time = data_stimulus[2].values.astype(float)
 
         # calculate the time of reward and timeout relative to ITI2
-        reward_time_to_ITI = np.around((reward_time - 2) * analog_s).tolist()  # in ms
-        timeout_time_to_ITI = np.around((timeout_time - 2) * analog_s).tolist()  # in ms
-        stimulus_time_to_ITI = np.around((stimulus_time - 2) * analog_s).tolist()  # in ms
+        if iti == "ITI2":
+            reward_time_to_ITI = np.around((reward_time - 2) * analog_s).tolist()  # in ms
+            timeout_time_to_ITI = np.around((timeout_time - 2) * analog_s).tolist()  # in ms
+            stimulus_time_to_ITI = np.around((stimulus_time - 2) * analog_s).tolist()  # in ms
+        else:
+
+            reward_time_to_ITI = np.around((reward_time ) * analog_s).tolist()  # in ms
+            timeout_time_to_ITI = np.around((timeout_time ) * analog_s).tolist()  # in ms
+            stimulus_time_to_ITI = np.around((stimulus_time ) * analog_s).tolist()  # in ms
 
         self.analog.columns = ['t', 'stimulus', 't_iti', 'iti']
         # Get the ITI2 from the analog file, as the first "1" value in the digital input of the analog file
@@ -608,7 +622,10 @@ class RecordingAmplDet(Recording):
             else:
                 durations[i] = diff_ar[diff_ar.argmin()]
         self.stim_durations = durations
-
+        # self.stim_time = self.stim_time[self.stim_time < len(self.df_f_exc[0])]
+        # self.stim_ampl = self.stim_ampl[:len(self.stim_time )]
+        # self.reward_time = self.reward_time[:len(self.stim_time)]
+        # self.stim_durations = self.stim_durations[:len(self.stim_time)]
         to_save = {"stim_time": self.stim_time.tolist(),
                    "stim_ampl": stim_ampl.tolist(),
                    "stim_durations": self.stim_durations.tolist(),
@@ -710,14 +727,14 @@ if __name__ == '__main__':
     # np.savetxt(directory + folder + "/"+"analog.txt", analog_cropped, fmt='%.8g', delimiter="\t")
     # plt.plot(analog_cropped.iloc[:, 3])
 
-    extract_analog_from_mesc(path_to_mesc, (0, 0),  30.9609, 20000, directory + folder + "/")
-    rec = RecordingAmplDet(directory + folder + "/", 0, roi_info, cache=False, correction=True)
-    rec.stim_time = corrected_prestim_windows(rec)
-    hm.interactive_heatmap(rec, rec.zscore_exc)
-    from percephone.plts.heatmap import ordered_heatmap, get_zscore
-    zsc, t_stim = get_zscore(rec, exc_neurons=True, sort=True, amp_sort=True)
-    ordered_heatmap(rec,  exc_neurons=True, inh_neurons=False,time_span="pre_stim", det_sorted=True, amp_sorted=True)
-
+    # extract_analog_from_mesc(path_to_mesc, (0, 0),  30.9609, 20000, directory + folder + "/")
+    # rec = RecordingAmplDet(directory + folder + "/", 0, roi_info, cache=False, correction=True)
+    # rec.stim_time = corrected_prestim_windows(rec)
+    # hm.interactive_heatmap(rec, rec.zscore_exc)
+    # from percephone.plts.heatmap import ordered_heatmap, get_zscore
+    # zsc, t_stim = get_zscore(rec, exc_neurons=True, sort=True, amp_sort=True)
+    # ordered_heatmap(rec,  exc_neurons=True, inh_neurons=False, time_span="pre_stim", det_sorted=True, amp_sorted=True)
+    #
 
     # directory ="/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
     # roi_info = directory + "/FmKO_ROIs&inhibitory.xlsx"
@@ -726,7 +743,32 @@ if __name__ == '__main__':
     # rec.stim_time = corrected_prestim_windows(rec)
     #
     # hm.interactive_heatmap(rec, rec.zscore_inh)
-    # from percephone.plts.heatmap import ordered_heatmap, get_zscore
+    from percephone.plts.heatmap import ordered_heatmap, get_zscore
     # zsc, t_stim = get_zscore(rec, exc_neurons=True, sort=True, amp_sort=True)
     # ordered_heatmap(rec,  exc_neurons=False, inh_neurons=True, det_sorted=True, amp_sorted=True)
     # ordered_heatmap(rec, exc_neurons=False, inh_neurons=True, time_span="pre_stim", det_sorted=True, amp_sorted=True)
+
+    #06-12-2024 tst ourania new recordings
+    directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/testing_activity_DMSO/"
+    roi_info = directory + "FmKO_ROIs&inhibitory.xlsx"
+    folder = "20241217_7539_00_synchro"
+    rec = RecordingAmplDet(directory + folder + "/", 0, roi_info, cache=False, correction=True, iti="ITI2")
+    hm.interactive_heatmap(rec, rec.zscore_exc)
+    ordered_heatmap(rec,  exc_neurons=True, inh_neurons=False, time_span="stim", det_sorted=True, amp_sorted=True)
+
+    # first batch recording
+    # directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
+    # roi_info = directory + "FmKO_ROIs&inhibitory.xlsx"
+    # folder = "20220715_4456_00_synchro"
+    # rec = RecordingAmplDet(directory + folder + "/", 0, roi_info, cache=False, correction=True, iti="ITI2")
+    # hm.interactive_heatmap(rec, rec.zscore_exc)
+    # ordered_heatmap(rec,  exc_neurons=True, inh_neurons=False, time_span="stim", det_sorted=True, amp_sorted=True)
+
+    #10-12-2024
+    # directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/testing_activity_DMSO/"
+    # roi_info = directory + "FmKO_ROIs&inhibitory.xlsx"
+    # folder = "20241211_7539_02_synchro"
+    # extract_analog_from_mesc(directory + folder + "/20241211_DMSO_7539.mesc", (0, 2),  30.9609, 20000, directory + folder + "/")
+    # rec = RecordingAmplDet(directory + folder + "/", 0, roi_info, cache=False, correction=False)
+    # hm.interactive_heatmap(rec, rec.zscore_exc)
+    # ordered_heatmap(rec,  exc_neurons=True, inh_neurons=False, time_span="pre_stim", det_sorted=True, amp_sorted=True)

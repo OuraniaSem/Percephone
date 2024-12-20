@@ -8,7 +8,7 @@ import pandas as pd
 import h5py
 import matplotlib.pyplot as plt
 from multiprocessing import Pool, cpu_count, pool
-import percephone.core.recording as pc
+# import percephone.core.recording as pc
 
 
 def read_info(folder_name, rois):
@@ -50,9 +50,9 @@ def extract_analog_from_mesc(path_mesc, tuple_mesc, frame_rate,analog_fs =20000,
     file = h5py.File(path_mesc)
     dset = file['MSession_' + str(tuple_mesc[0])]
     unit = dset['MUnit_' + str(tuple_mesc[1])]
-    iti = unit['Curve_2']  # 3 in general   # 4 for after 01-2024
+    iti = unit['Curve_3']  # 3 in general   # 4 for after 01-2024
     iti_curve = np.array(iti['CurveDataYRawData'])
-    timings = unit['Curve_0']  # 1
+    timings = unit['Curve_1']  # 1 or 0
     timing_curve = np.array(timings['CurveDataYRawData'])
     # if timings.attrs.get("CurveDataYConversionType") == 2:
     #     refvalues = np.array(timings.attrs.get("CurveDataYConversionReferenceValues"))
@@ -69,7 +69,7 @@ def extract_analog_from_mesc(path_mesc, tuple_mesc, frame_rate,analog_fs =20000,
     fig, ax = plt.subplots(1, 1, figsize=(18, 10))
     diff_frames = np.diff(timing_curve * np.array(timings.attrs.get("CurveDataYConversionConversionLinearScale")))
     ax.plot(diff_frames)
-    latency = np.sum(np.subtract(diff_frames,(1/frame_rate)*1000))
+    latency = np.sum(np.subtract(diff_frames, (1/frame_rate)*1000))
     ax.set_title(f"Check lost frames!  Total latency: {latency:.2f}")
     plt.show()
     print(f"Start timings: {start_timings }")
@@ -80,7 +80,7 @@ def extract_analog_from_mesc(path_mesc, tuple_mesc, frame_rate,analog_fs =20000,
     end_timings_iti = len(iti_curve[::factor])/10
     print(f"end timing iti {end_timings_iti}")
     nb_points = int(len(iti_curve[::factor]))  # int(end_timings_frames*10)  #  #int(end_timings*10)
-    timings_c = np.linspace(0,   end_timings_iti, nb_points)
+    timings_c = np.linspace(0, end_timings_frames, nb_points)
     analog_np = np.zeros((4, nb_points))
     analog_np[0] = timings_c
     analog_np[1] = analog_np[1]  # no stim analog in the new format
@@ -89,7 +89,7 @@ def extract_analog_from_mesc(path_mesc, tuple_mesc, frame_rate,analog_fs =20000,
     analog_np[3] = iti_curve_[:nb_points]
     analog_t = np.transpose(analog_np)
     np.savetxt(savepath + 'analog.txt', analog_t, fmt='%.8g', delimiter="\t")
-    np.save(savepath + 'timestamps_frames.npy',timing_curve * np.array(timings.attrs.get("CurveDataYConversionConversionLinearScale")))
+    np.save(savepath + 'timestamps_frames.npy', timing_curve * np.array(timings.attrs.get("CurveDataYConversionConversionLinearScale")))
     print(f"len analog : {analog_np.shape}")
     print(f"last analog : {analog_np[:,-1]}")
     print("Analog saved.")
@@ -111,39 +111,39 @@ def get_idx_frame_mesc(time_ms, timestamps):
     return idx_frame
 
 
-def get_recs_dict(user, cache=True, BMS=False):
-
-    workers = cpu_count()
-
-    if user == "Célien":
-        pool_ = pool.ThreadPool(processes=workers)
-        if BMS:
-            directory = "C:/Users/cvandromme/Desktop/Data_DMSO_BMS/"
-            roi_path = "C:/Users/cvandromme/Desktop/Fmko_bms&dmso_info.xlsx"
-        else:
-            directory = "C:/Users/cvandromme/Desktop/Data/"
-            roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
-
-    elif user == "Théo":
-        pool_ = Pool(processes=workers)
-        directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
-        roi_path = directory + "/FmKO_ROIs&inhibitory.xlsx"
-
-    files = os.listdir(directory)
-    files_ = [file for file in files if file.endswith("synchro")]
-
-    def opening_rec(fil, i):
-        print(fil)
-        rec = pc.RecordingAmplDet(directory + fil + "/", 0, roi_path, cache=cache)
-        return rec
-
-    async_results = [pool_.apply_async(opening_rec, args=(file, i)) for i, file in enumerate(files_)]
-    if BMS:
-        recs = {str(ar.get().filename) + ar.get().genotype: ar.get() for ar in async_results}
-    else:
-        recs = {str(ar.get().filename): ar.get() for ar in async_results}
-
-    return recs
+# def get_recs_dict(user, cache=True, BMS=False):
+#
+#     workers = cpu_count()
+#
+#     if user == "Célien":
+#         pool_ = pool.ThreadPool(processes=workers)
+#         if BMS:
+#             directory = "C:/Users/cvandromme/Desktop/Data_DMSO_BMS/"
+#             roi_path = "C:/Users/cvandromme/Desktop/Fmko_bms&dmso_info.xlsx"
+#         else:
+#             directory = "C:/Users/cvandromme/Desktop/Data/"
+#             roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
+#
+#     elif user == "Théo":
+#         pool_ = Pool(processes=workers)
+#         directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
+#         roi_path = directory + "/FmKO_ROIs&inhibitory.xlsx"
+#
+#     files = os.listdir(directory)
+#     files_ = [file for file in files if file.endswith("synchro")]
+#
+#     def opening_rec(fil, i):
+#         print(fil)
+#         rec = pc.RecordingAmplDet(directory + fil + "/", 0, roi_path, cache=cache)
+#         return rec
+#
+#     async_results = [pool_.apply_async(opening_rec, args=(file, i)) for i, file in enumerate(files_)]
+#     if BMS:
+#         recs = {str(ar.get().filename) + ar.get().genotype: ar.get() for ar in async_results}
+#     else:
+#         recs = {str(ar.get().filename): ar.get() for ar in async_results}
+#
+#     return recs
 
 
 def get_server_address(user):
