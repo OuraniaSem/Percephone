@@ -372,7 +372,7 @@ class RecordingAmplDet(Recording):
         (nb neurons * nb frames)
     """
     def __init__(self, input_path, starting_trial, rois_path, tuple_mesc=(0, 0), mean_f=False, correction=True,
-                 cache=True, iti="ITI2"):
+                 cache=True, iti="ITI2", habituation=False):
         """
         Parameters
         ----------
@@ -432,7 +432,7 @@ class RecordingAmplDet(Recording):
             else:
                 self.analog[0] = (self.analog[0]).astype(int)
                 analog_sf = 1000
-            self.synchronization_with_iti(starting_trial, analog_sf, correction, iti)
+            self.synchronization_with_iti(starting_trial, analog_sf, correction, iti, habituation)
 
         self.zscore_exc = self.zscore(self.df_f_exc)
         self.zscore_inh = self.zscore(self.df_f_inh)
@@ -463,7 +463,7 @@ class RecordingAmplDet(Recording):
         zsc = np.divide(np.subtract(dff, mean_bsl[:, np.newaxis]), std[:, np.newaxis])
         return zsc
 
-    def synchronization_with_iti(self, starting_trial, analog_s, correction, iti):
+    def synchronization_with_iti(self, starting_trial, analog_s, correction, iti, habituation):
         """
         Update the analog file with information on stimulus time, reward time and timeout time
 
@@ -604,7 +604,7 @@ class RecordingAmplDet(Recording):
                     self.detected_stim.append(False)
         stim_ampl = np.around(self.stim_ampl, decimals=1)
         stim_ampl_sort = np.sort(np.unique(stim_ampl))
-        convert = {4: [4, 6, 8, 10], 5: [4, 6, 8, 10, 12], 6: [2, 4, 6, 8, 10, 12], 7: [0, 2, 4, 6, 8, 10, 12]}
+        convert = {1: [14], 4: [4, 6, 8, 10], 5: [4, 6, 8, 10, 12], 6: [2, 4, 6, 8, 10, 12], 7: [0, 2, 4, 6, 8, 10, 12]}
         for i in range(len(stim_ampl_sort)):
             stim_ampl[stim_ampl == stim_ampl_sort[i]] = convert[len(stim_ampl_sort)][i]
         self.stim_ampl = stim_ampl
@@ -615,12 +615,13 @@ class RecordingAmplDet(Recording):
         self.lick_time = np.array(self.lick_time)
         # stim duration extraction
         durations = np.zeros(len(self.stim_time))
-        for i, stim_t in enumerate(self.stim_time):
-            diff_ar = np.absolute(self.reward_time - stim_t)
-            if diff_ar[diff_ar.argmin()] >= int(0.5 * self.sf) - 1:
-                durations[i] = int(0.5*self.sf)
-            else:
-                durations[i] = diff_ar[diff_ar.argmin()]
+        if not habituation:
+            for i, stim_t in enumerate(self.stim_time):
+                diff_ar = np.absolute(self.reward_time - stim_t)
+                if diff_ar[diff_ar.argmin()] >= int(0.5 * self.sf) - 1:
+                    durations[i] = int(0.5*self.sf)
+                else:
+                    durations[i] = diff_ar[diff_ar.argmin()]
         self.stim_durations = durations
         # self.stim_time = self.stim_time[self.stim_time < len(self.df_f_exc[0])]
         # self.stim_ampl = self.stim_ampl[:len(self.stim_time )]
@@ -715,10 +716,11 @@ if __name__ == '__main__':
     import percephone.plts.heatmap as hm
     from percephone.analysis.utils import corrected_prestim_windows
 
-    directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/Amplitude_Detection_DMSO_BMS/"
-    roi_info = directory + "Fmko_bms&dmso_info.xlsx"
-    folder = "20231107_5893_00_BMS_synchro"
-    path_to_mesc = directory + "20231107_5893_BMS_det.mesc"
+    # directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/Amplitude_Detection_DMSO_BMS/"
+    # roi_info = directory + "Fmko_bms&dmso_info.xlsx"
+    # folder = "20231107_5893_00_BMS_synchro"
+    # path_to_mesc = directory + "20231107_5893_BMS_det.mesc"
+
     # # folder = "20231107_5886_00_DMSO_synchro"
     # # path_to_mesc = directory + "20231107_5886_DMSO_det.mesc"
     # analog = pd.read_csv(directory + folder + "/"+"analog.txt", sep="\t", header=None)
@@ -749,12 +751,12 @@ if __name__ == '__main__':
     # ordered_heatmap(rec, exc_neurons=False, inh_neurons=True, time_span="pre_stim", det_sorted=True, amp_sorted=True)
 
     #06-12-2024 tst ourania new recordings
-    directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/testing_activity_DMSO/"
-    roi_info = directory + "FmKO_ROIs&inhibitory.xlsx"
-    folder = "20241217_7539_00_synchro"
-    rec = RecordingAmplDet(directory + folder + "/", 0, roi_info, cache=False, correction=True, iti="ITI2")
-    hm.interactive_heatmap(rec, rec.zscore_exc)
-    ordered_heatmap(rec,  exc_neurons=True, inh_neurons=False, time_span="stim", det_sorted=True, amp_sorted=True)
+    # directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/testing_activity_DMSO/"
+    # roi_info = directory + "FmKO_ROIs&inhibitory.xlsx"
+    # folder = "20241217_7539_00_synchro"
+    # rec = RecordingAmplDet(directory + folder + "/", 0, roi_info, cache=False, correction=True, iti="ITI2")
+    # hm.interactive_heatmap(rec, rec.zscore_exc)
+    # ordered_heatmap(rec,  exc_neurons=True, inh_neurons=False, time_span="stim", det_sorted=True, amp_sorted=True)
 
     # first batch recording
     # directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
@@ -772,3 +774,10 @@ if __name__ == '__main__':
     # rec = RecordingAmplDet(directory + folder + "/", 0, roi_info, cache=False, correction=False)
     # hm.interactive_heatmap(rec, rec.zscore_exc)
     # ordered_heatmap(rec,  exc_neurons=True, inh_neurons=False, time_span="pre_stim", det_sorted=True, amp_sorted=True)
+
+    #Test new recordings 1 amp 07-01-2025
+    directory = "Z:/Current_members/Ourania_Semelidou/2p/Ca_imaging_analysis_PreSynchro/Fmko/Habituation/"
+    roi_info = directory + "FmKO_ROIs&inhibitory.xlsx"
+    folder = "20250103_7553_00_synchro"
+    rec = RecordingAmplDet(directory + folder + "/", 0, roi_info, cache=False, correction=True, iti="ITI2", habituation=True)
+    hm.interactive_heatmap(rec, rec.zscore_exc)
