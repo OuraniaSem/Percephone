@@ -17,9 +17,22 @@ font_s = 10
 
 
 def psycho_like_plot(rec, roi_info, ax):
+    """
+    Generates the psychometric curve from the data found in the ROI file.
+
+    Parameters
+    ----------
+    rec : Recording
+        The rec object to be plotted.
+    roi_info : dict
+        The dictionary that contains the data from the ROI file.
+    ax
+        The matplotlib axis object to be plotted.
+    """
+    # Retrieving the detection for each amplitude from the ROI file
     seq = roi_info["Stimulus detection"][roi_info["Number"] == rec.filename].values
-    converted_list = eval("[" + seq[0] + "]")
-    # converted_list = [float(x) for x in seq[0].split(',')]
+    converted_list = [float(x) for x in seq[0].split(',')]
+    # Plotting the retrieved values
     ax.plot([0, 2, 4, 6, 8, 10, 12], converted_list)
     ax.set_xticks([0, 2, 4, 6, 8, 10, 12])
     ax.set_ylim([0, 1])
@@ -30,14 +43,16 @@ def psycho_like_plot(rec, roi_info, ax):
 
 
 def psycho_like_plot_and_synchro(rec, roi_info, ax):
+    # Retrieving the detection for each amplitude from the ROI file
     seq = roi_info["Stimulus detection"][roi_info["Number"] == rec.filename].values
-    # converted_list = eval("[" + seq[0] + "]")
     converted_list = [float(x) for x in seq[0].split(',')]
     to_plot = []
     for amp in [0, 2, 4, 6, 8, 10, 12]:
+        # 0 is plotted if there is no trial of the specified amplitude that has been detected
         if len(rec.detected_stim[rec.stim_ampl == amp]) == 0:
             to_plot.append(0)
         else:
+            #TODO: verify this formula, what does it compute ?
             res = sum(rec.detected_stim[rec.stim_ampl == amp]) / len(rec.detected_stim[rec.stim_ampl == amp])
             to_plot.append(res)
     ax.plot([0, 2, 4, 6, 8, 10, 12], converted_list)
@@ -50,14 +65,19 @@ def psycho_like_plot_and_synchro(rec, roi_info, ax):
 
 
 def correlation_beh_neur(rec, roi_info, n_type="EXC", detected_trials=True, undetected_trials=True):
-    """ Correlation with EXC and INH activity for behavior"""
+    """
+    Computes the Pearson correlation coefficient (linear relationship) between the number of responsive neurons and the
+    detection level for all amplitudes.
+    """
+    assert detected_trials or undetected_trials, "Please select at least one trial type."
+    # Retrieving the detection for each amplitude from the ROI file
     seq = roi_info["Stimulus detection"][roi_info["Number"] == rec.filename].values
     converted_list = [float(x) for x in seq[0].split(',')]
-    neura_activity, behav = [], []
+    neura_activity = []
     resp_mat = np.array(rec.matrices[n_type]["Responsivity"])
     total_n = rec.zscore_exc.shape[0] if n_type == "EXC" else rec.zscore_inh.shape[0]
     for amp in [0, 2, 4, 6, 8, 10, 12]:
-        # neural activity
+        # Getting the neural responsivity corresponding to the selected trial type
         if detected_trials and undetected_trials:
             stim_filter = rec.stim_ampl == amp
         elif detected_trials:
@@ -65,14 +85,29 @@ def correlation_beh_neur(rec, roi_info, n_type="EXC", detected_trials=True, unde
         elif undetected_trials:
             stim_filter = np.logical_and(np.invert(rec.detected_stim), rec.stim_ampl == amp)
         trials = resp_mat[:, stim_filter]
+        # Counting and computing the percentage of responsive neurons for this amplitude
         recruited_det = np.mean(np.count_nonzero(trials, axis=0))
         perc_n_det = (recruited_det / total_n) * 100
         neura_activity.append(perc_n_det)
+    # Testing if there is a linear relationship between the neural activity and the detection level
     coef_cor, p_value = ss.pearsonr(neura_activity, converted_list)
     return coef_cor, p_value
 
 
 def zscore_by_amp(rec, neuron_zscore):
+    """
+    Computes the mean zscore during the trials of each amplitude for a single neuron.
+
+    Parameters
+    ----------
+    rec
+    neuron_zscore
+
+    Returns
+    -------
+    list
+        A list of the mean zscore of the neuron during the trials for each amplitude.
+    """
     firing_curve = []
     for amp in [0, 2, 4, 6, 8, 10, 12]:
         timings = rec.stim_time[rec.stim_ampl == amp]
@@ -81,6 +116,19 @@ def zscore_by_amp(rec, neuron_zscore):
 
 
 def activation_proportion(rec, neur_id):
+    """
+    Computes the proportion of trials in which the neuron was activated for each amplitude.
+
+    Parameters
+    ----------
+    rec
+    neur_id
+
+    Returns
+    -------
+    list
+        A list of the proportion of trials in which the neuron was activated for each amplitude.
+    """
     proportion_by_amp = []
     for amp in np.unique(rec.stim_ampl):
         amp_filter = rec.stim_ampl_filter([amp])
@@ -93,13 +141,26 @@ def activation_proportion(rec, neur_id):
 
 
 def ei_ratio_per_amp(rec):
+    """
+    Computes the level of E/I ratio compared to the maximum level for each amplitude.
+
+    Parameters
+    ----------
+    rec
+
+    Returns
+    -------
+
+    """
     ei_ratios = []
     for amp in np.unique(rec.stim_ampl):
         amp_filter = rec.stim_ampl_filter([amp])
+        # Counting th mean number of activated EXC neurons per trial of the selected amplitude
         exc_mat = rec.matrices["EXC"]["Responsivity"]
         exc_mat = exc_mat[:, amp_filter]
         exc_mat[exc_mat != 1] = 0
         exc = np.mean(np.count_nonzero(exc_mat, axis=0))
+        # Counting th mean number of activated INH neurons per trial of the selected amplitude
         inh_mat = rec.matrices["INH"]["Responsivity"]
         inh_mat = inh_mat[:, amp_filter]
         inh_mat[inh_mat != 1] = 0
@@ -111,51 +172,92 @@ def ei_ratio_per_amp(rec):
     return np.array(ei_ratios)/max(ei_ratios)
 
 
-def individuals_neurons_tuning(rec, roi_info):
+def individuals_neurons_tuning(rec, roi_info, normalize=False):
     """Plot the psychometric curves. Compute the activity curve for single neurons for zscore and activation rate (proportion of trials per
     amplitude for which the neurons is considered active"""
     colors = {"WT": ppt.wt_color, "KO": ppt.ko_color, "KO-Hypo": ppt.hypo_color}
     color_behavior = colors[rec.genotype]
+    # === Plot 1 ===
+    # Retrieving the detection for each amplitude from the ROI file
     seq = roi_info["Stimulus detection"][roi_info["Number"] == rec.filename].values
     converted_list = [float(x) for x in seq[0].split(',')]
     fig, ax = plt.subplots(4, 1, figsize=(8, 20), sharex=True)
-    x, y, k = sigmoid_fit(np.array([0, 0.16, 0.33, 0.5, 0.66, 0.83, 1]), converted_list)
-    ax[0].plot(x, y, color=color_behavior)
-    ax[0].plot(np.array([0, 0.16, 0.33, 0.5, 0.66, 0.83, 1]), converted_list, ".", color=color_behavior)
+    # Fitting a sigmoid curve on the data (psychometric curve)
+    x, y, k = sigmoid_fit(np.array(np.linspace(0, 1, 7)), converted_list)
+    ax[0].plot(x, y, color=color_behavior)  # the fitted curve
+    ax[0].plot(np.array(np.linspace(0, 1, 7)), converted_list, ".", color=color_behavior)  # the data points
+    # Plotting the level of E/I ratio
     ei_ratio = ei_ratio_per_amp(rec)
     if ei_ratio.all() != np.nan:
-        ax[0].plot(np.array([0, 0.16, 0.33, 0.5, 0.66, 0.83, 1]), ei_ratio)
+        ax[0].plot(np.array(np.linspace(0, 1, 7)), ei_ratio)
+
+    # === Plot 2 ===
+    # Computing population of neurons metrics
+    cluster_no = []
+    cluster_bin = []
+    cluster_amp = []
+    cluster_color_dict = {"cluster_no": "gray", "cluster_bin": "purple", "cluster_amp": "pink"}
     zscores = []
     ks = []
+    skipped_neurons = 0
     act_n, desact_n = pu.idx_resp_neur(rec)
+    # For each neuron:
     for idx, zscore in enumerate(rec.zscore_exc):
+        # Computing the mean zscore for each amplitude
         zsc = zscore_by_amp(rec, zscore)
-        zsc_normalised = (np.array(zsc) - zsc[0]) / zsc[-1]
-        zsc = zsc * -1 if decrease_activity(zsc) else zsc
+        # Normalization
+        if normalize:
+            # zsc_normalised_theo = (np.array(zsc) - zsc[0]) / zsc[-1]
+            max_abs_value = np.max(np.abs(zsc)) * np.sign(zsc[np.argmax(np.abs(zsc))])
+            zsc_normalised = np.array(zsc) / max_abs_value
+        else:
+            zsc_normalised = np.array(zsc)
+        # Handling the case where the neuron is less active as the amplitude increases
+        zsc_normalised = zsc_normalised * -1 if decrease_activity(zsc_normalised) else zsc_normalised
+        # Discard neurons activity that are not fitting sigmoid fit
         try:
-            # discard neurons activity that are not fitting sigmoid fit
-            x, y, k = sigmoid_fit(np.array([0, 0.16, 0.33, 0.5, 0.66, 0.83, 1]), zsc)
+            x, y, k = sigmoid_fit(np.array(np.linspace(0, 1, 7)), zsc_normalised)
             ks.append(k)
         except:
+            skipped_neurons += 1
             continue
-        ax[1].plot(x, y)
-        # proportion activation neurons
-        prop_act = activation_proportion(rec,idx)
-        ax[2].plot([0, 0.16, 0.33, 0.5, 0.66, 0.83, 1], prop_act)
+        # if abs(zsc_normalised[-1] - zsc_normalised[0]) < 0.1:
+        if k < 0.1 or k >= 10:
+            cluster_name = "cluster_no"
+            cluster_no.append(idx)
+        elif 1 < k < 10:
+            cluster_name = "cluster_bin"
+            cluster_bin.append(idx)
+        else:
+            cluster_name = "cluster_amp"
+            cluster_amp.append(idx)
+        ax[1].plot(x, y, color=cluster_color_dict[cluster_name], lw=2)
 
-        ax[3].plot([0, 0.16, 0.33, 0.5, 0.66, 0.83, 1], zsc)
+        # === Plot 3 ===
+        # Computing the proportion of trials in which the neuron was activated for each amplitude
+        prop_act = activation_proportion(rec,idx)
+        ax[2].plot(np.linspace(0, 1, 7), prop_act)
+
+        # === Plot 4 ===
+        # Plotting the raw mean zscore of the neuron for each amplitude
+        ax[3].plot(np.linspace(0, 1, 7), zsc)
         zscores.append(zsc)
-    ax[3].plot([0, 0.16, 0.33, 0.5, 0.66, 0.83, 1], np.average(zscores, axis=0), lw=5, linestyle="dashed", color="black")
+    # Computing and plotting the average for all neurons of the mean zscore of each neuron for each amplitude
+    ax[3].plot(np.linspace(0, 1, 7), np.average(zscores, axis=0), lw=5, linestyle="dashed", color="black")
+    # Computing the mean correaltion coeficient to have an idea of how similarly the neurons respond to the different amplitudes of stimulation
     cor_coef = np.mean(np.corrcoef(zscores))
-    ax[0].set_title(str(rec.filename) + "-" + str(rec.genotype) + str(round(cor_coef, 2)), fontsize=40)
+    ax[0].set_title(f"{rec.filename}-{rec.genotype} {round(cor_coef, 2)} {skipped_neurons}", fontsize=40)
     ax[0].set_ylim([0, 1])
     ax[2].set_ylim([0, 1])
     ax[0].set_xlim([0.16, 1])
-    ax[1].set_title("Sigmoid fit with z-score for single neur")
+    ax[1].set_title(f"Sigmoid fit with z-score for single neur norm={normalize}")
     ax[2].set_title("Activition rate by amp for single neur")
     ax[3].set_title("Z-score by amp for single neur")
+    ax[3].set_xticks(np.linspace(0, 1, 7))
+    ax[3].set_xticklabels([0, 2, 4, 6, 8, 10, 12])
     fig.tight_layout()
     plt.show()
+    print(min(ks), max(ks))
     return np.mean(ks), np.std(ks)
 
 
@@ -192,7 +294,7 @@ def sigmoid_fit(xdata, ydata):
 
 
 if __name__ == '__main__':
-    user = "Théo"
+    user = "Célien"
     if user == "Célien":
         directory = "C:/Users/cvandromme/Desktop/Data/"
         roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
@@ -223,25 +325,25 @@ if __name__ == '__main__':
 
     # neural tuning curves for individuals neurons
     for rec in recs.values():
-        avg_k, std_k = individuals_neurons_tuning(rec, roi_info)
+        avg_k, std_k = individuals_neurons_tuning(rec, roi_info, normalize=True)
         if rec.genotype == "WT":
             wt.append([avg_k, std_k, rec.threshold])
         elif rec.genotype == "KO-Hypo":
             ko.append([avg_k, std_k, rec.threshold])
 
-fig, axs = plt.subplots(ncols=2)
-ppt.boxplot(axs[0], np.array(wt)[:, 0], np.array(ko)[:, 0], "average k")
-print(f"Avg half-activation point: \n WT {np.mean(np.array(wt)[:, 0])}, KO {np.median(np.array(ko)[:, 0])}")
-print(f"Detection threshold: \n WT {np.mean(np.array(wt)[:, 2])}, KO {np.mean(np.array(ko)[:, 2])}")
-ppt.boxplot(axs[1], np.array(wt)[:, 1], np.array(ko)[:, 1], "std k")
-fig.tight_layout()
+    fig, axs = plt.subplots(ncols=2)
+    ppt.boxplot(axs[0], np.array(wt)[:, 0], np.array(ko)[:, 0], "average k")
+    print(f"Avg half-activation point: \n WT {np.mean(np.array(wt)[:, 0])}, KO {np.median(np.array(ko)[:, 0])}")
+    print(f"Detection threshold: \n WT {np.mean(np.array(wt)[:, 2])}, KO {np.mean(np.array(ko)[:, 2])}")
+    ppt.boxplot(axs[1], np.array(wt)[:, 1], np.array(ko)[:, 1], "std k")
+    fig.tight_layout()
 
-# Correlation of the detection threshold and the average half activation of the neurons and
-# the std half activation of the neurons
+    # Correlation of the detection threshold and the average half activation of the neurons and
+    # the std half activation of the neurons
 
-fig, axs = plt.subplots(nrows=2)
-axs[0].plot(np.array(wt)[:, 0], np.array(wt)[:, 2], ".", color=ppt.wt_color)
-axs[0].plot(np.array(ko)[:, 0], np.array(ko)[:, 2], ".", color=ppt.hypo_color)
-axs[1].plot(np.array(wt)[:, 1], np.array(wt)[:, 2], ".", color=ppt.wt_color)
-axs[1].plot(np.array(ko)[:, 1], np.array(ko)[:, 2], ".", color=ppt.hypo_color)
-fig.tight_layout()
+    fig, axs = plt.subplots(nrows=2)
+    axs[0].plot(np.array(wt)[:, 0], np.array(wt)[:, 2], ".", color=ppt.wt_color)
+    axs[0].plot(np.array(ko)[:, 0], np.array(ko)[:, 2], ".", color=ppt.hypo_color)
+    axs[1].plot(np.array(wt)[:, 1], np.array(wt)[:, 2], ".", color=ppt.wt_color)
+    axs[1].plot(np.array(ko)[:, 1], np.array(ko)[:, 2], ".", color=ppt.hypo_color)
+    fig.tight_layout()
