@@ -183,22 +183,35 @@ def individuals_neurons_tuning(rec, roi_info, normalize=False):
     converted_list = [float(x) for x in seq[0].split(',')]
     fig, ax = plt.subplots(4, 1, figsize=(8, 20), sharex=True)
     # Fitting a sigmoid curve on the data (psychometric curve)
-    x, y, k = sigmoid_fit(np.array(np.linspace(0, 1, 7)), converted_list)
-    ax[0].plot(x, y, color=color_behavior)  # the fitted curve
+    x_psy, y_psy, x0_psy, k_psy = sigmoid_fit(np.array(np.linspace(0, 1, 7)), converted_list)
+    ax[0].plot(x_psy, y_psy, color=color_behavior)  # the fitted curve
     ax[0].plot(np.array(np.linspace(0, 1, 7)), converted_list, ".", color=color_behavior)  # the data points
+    # If the detection threshold lies between 0 and 12µm, it is plotted on the graph and x0 is displayed
+    if x0_psy < 1:
+        ax[0].vlines(x=x0_psy, ymin=0, ymax=1, color='red', linestyle='dashed', lw=2)
+        ax[0].text(x0_psy, -0.25, f"x0={x0_psy:.2f}", color='red', ha='center', fontsize=10)
     # Plotting the level of E/I ratio
     ei_ratio = ei_ratio_per_amp(rec)
     if ei_ratio.all() != np.nan:
         ax[0].plot(np.array(np.linspace(0, 1, 7)), ei_ratio)
 
     # === Plot 2 ===
-    # Computing population of neurons metrics
-    cluster_no = []
-    cluster_bin = []
-    cluster_amp = []
-    cluster_color_dict = {"cluster_no": "gray", "cluster_bin": "purple", "cluster_amp": "pink"}
+    # Defining the annotation to display the k value when hovering the curve
+    annot = ax[1].annotate(
+        text='',
+        fontsize=10,
+        xy=(0, 0),
+        xytext=(15, 15),
+        textcoords='offset points',
+        bbox=dict(boxstyle="round", fc="w"),
+        arrowprops=dict(arrowstyle="->"))
+    annot.set_visible(False)
+    # Initializing variables
+    dtype = [("ID", "int"), ("x0", "float"), ("k", "float"), ("cluster", "int")]
+    neurons_array = np.empty(0, dtype=dtype)
+    cluster_dict = {0: ["No response", "gray"], 1: ["Binary activation", "purple"], 2: ["Amplitude related", "pink"]}
     zscores = []
-    ks = []
+    lines_and_ks = []
     skipped_neurons = 0
     act_n, desact_n = pu.idx_resp_neur(rec)
     # For each neuron:
@@ -213,35 +226,50 @@ def individuals_neurons_tuning(rec, roi_info, normalize=False):
         else:
             zsc_normalised = np.array(zsc)
         # Handling the case where the neuron is less active as the amplitude increases
-        zsc_normalised = zsc_normalised * -1 if decrease_activity(zsc_normalised) else zsc_normalised
+        # zsc_normalised = zsc_normalised * -1 if decrease_activity(zsc_normalised) else zsc_normalised
         # Discard neurons activity that are not fitting sigmoid fit
         try:
-            x, y, k = sigmoid_fit(np.array(np.linspace(0, 1, 7)), zsc_normalised)
-            ks.append(k)
+            x, y, x0, k = sigmoid_fit(np.array(np.linspace(0, 1, 7)), zsc_normalised)
         except:
             skipped_neurons += 1
             continue
-        # if abs(zsc_normalised[-1] - zsc_normalised[0]) < 0.1:
-        if k < 0.1 or k >= 10:
-            cluster_name = "cluster_no"
-            cluster_no.append(idx)
-        elif 1 < k < 10:
-            cluster_name = "cluster_bin"
-            cluster_bin.append(idx)
+        # Clustering of neurons based on the steepness of the sigmoid (k)
+        if abs(k) < 1:
+            cluster = 0
+        elif abs(k) > 10:
+            cluster = 1
         else:
-            cluster_name = "cluster_amp"
-            cluster_amp.append(idx)
-        ax[1].plot(x, y, color=cluster_color_dict[cluster_name], lw=2)
-
+            cluster = 2
+        # Adding the new neuron's data to the array
+        new_row = np.array([(idx, x0, k, cluster)], dtype=dtype)
+        neurons_array = np.append(neurons_array, new_row)
+        # Storing the lines to be able to display the k values when hovering them
+        line, = ax[1].plot(x, y, color=cluster_dict[cluster][1], lw=2, alpha=0.75)
+        lines_and_ks.append((line, k))
         # === Plot 3 ===
         # Computing the proportion of trials in which the neuron was activated for each amplitude
-        prop_act = activation_proportion(rec,idx)
+        prop_act = activation_proportion(rec, idx)
         ax[2].plot(np.linspace(0, 1, 7), prop_act)
 
         # === Plot 4 ===
         # Plotting the raw mean zscore of the neuron for each amplitude
         ax[3].plot(np.linspace(0, 1, 7), zsc)
         zscores.append(zsc)
+
+    def update_annotation(event):
+        if event.inaxes == ax[1]:
+            for line, k_value in lines_and_ks:
+                cont, ind = line.contains(event)
+                if cont:
+                    annot.xy = (event.xdata, event.ydata)
+                    annot.set_text(f"k={k_value:.2f}")
+                    annot.set_visible(True)
+                    fig.canvas.draw_idle()
+                    return
+            annot.set_visible(False)
+            fig.canvas.draw_idle()
+    fig.canvas.mpl_connect("motion_notify_event", update_annotation)
+
     # Computing and plotting the average for all neurons of the mean zscore of each neuron for each amplitude
     ax[3].plot(np.linspace(0, 1, 7), np.average(zscores, axis=0), lw=5, linestyle="dashed", color="black")
     # Computing the mean correaltion coeficient to have an idea of how similarly the neurons respond to the different amplitudes of stimulation
@@ -257,8 +285,8 @@ def individuals_neurons_tuning(rec, roi_info, normalize=False):
     ax[3].set_xticklabels([0, 2, 4, 6, 8, 10, 12])
     fig.tight_layout()
     plt.show()
-    print(min(ks), max(ks))
-    return np.mean(ks), np.std(ks)
+    print(np.min(neurons_array["k"]), np.max(neurons_array["k"]))
+    return neurons_array
 
 
 def decrease_activity(neur_act):
@@ -290,8 +318,14 @@ def sigmoid_fit(xdata, ydata):
 
     x = np.linspace(0, fix_value, 50)
     y = sigmoid(x, *popt)
-    return x, y, popt[0]
+    return x, y, popt[0], popt[1]
 
+def group_tuning_comp(recs, normalize=False):
+    dtype = [("ID", "str"), ("Genotype", "str"),
+             ("0_nb", "int"), ("0_mean_x0", "float"), ("0_std_x0", "float"), ("0_mean_k", "float"), ("0_std_k", "float"),
+             ("1_nb", "int"), ("1_mean_x0", "float"), ("1_std_x0", "float"), ("1_mean_k", "float"), ("1_std_k", "float"),
+             ("2_nb", "int"), ("2_mean_x0", "float"), ("2_std_x0", "float"), ("2_mean_k", "float"), ("2_std_k", "float")]
+    array = np.empty(0, dtype=dtype)
 
 if __name__ == '__main__':
     user = "Célien"
@@ -321,9 +355,9 @@ if __name__ == '__main__':
         pool = Pool(processes=workers)
     async_results = [pool.apply_async(opening_rec, args=(file, i)) for i, file in enumerate(files_)]
     recs = {ar.get().filename: ar.get() for ar in async_results}
-    wt, ko = [], []
 
     # neural tuning curves for individuals neurons
+    wt, ko = [], []
     for rec in recs.values():
         avg_k, std_k = individuals_neurons_tuning(rec, roi_info, normalize=True)
         if rec.genotype == "WT":
@@ -337,6 +371,7 @@ if __name__ == '__main__':
     print(f"Detection threshold: \n WT {np.mean(np.array(wt)[:, 2])}, KO {np.mean(np.array(ko)[:, 2])}")
     ppt.boxplot(axs[1], np.array(wt)[:, 1], np.array(ko)[:, 1], "std k")
     fig.tight_layout()
+    fig.show()
 
     # Correlation of the detection threshold and the average half activation of the neurons and
     # the std half activation of the neurons
@@ -347,3 +382,4 @@ if __name__ == '__main__':
     axs[1].plot(np.array(wt)[:, 1], np.array(wt)[:, 2], ".", color=ppt.wt_color)
     axs[1].plot(np.array(ko)[:, 1], np.array(ko)[:, 2], ".", color=ppt.hypo_color)
     fig.tight_layout()
+    fig.show()
