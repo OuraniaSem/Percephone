@@ -1,5 +1,5 @@
 # Percephone
-Percephone is a tool to analyze calcium imaging recordings in combination with behavioral data obtained with a perceptual decision-making task
+Percephone is a tool developed to analyze recordings of neuronal activity (two-photon calcium imaging) obtained during a Go/No-Go perceptual decision-making task.
 
 ![image info](docs/images/dff_trace_example2.png)
 
