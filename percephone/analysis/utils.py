@@ -159,11 +159,13 @@ def neuron_mean_std_corr(array, estimator):
 
 
 def get_zscore(rec, exc_neurons=True, inh_neurons=False, time_span="stim", window=0.5, estimator=None, sort=False,
-               amp_sort=False, single_frame_estimator=False):
+               amp_sort=False, single_frame_estimator=False, avg_trials_amp=False, threshold_only=False):
     if amp_sort:
         assert sort
     if sort or amp_sort:
         assert time_span == "stim" or time_span == "pre_stim"
+    if avg_trials_amp or threshold_only:
+        single_frame_estimator = True
     # Retrieving zscore
     if exc_neurons and inh_neurons:
         zscore = np.row_stack((rec.zscore_exc, rec.zscore_inh)).T
@@ -229,10 +231,25 @@ def get_zscore(rec, exc_neurons=True, inh_neurons=False, time_span="stim", windo
     if sort:
         if amp_sort:
             for a in all_amp:
-                X_det = np.row_stack((X_det, X_amp_det[a]))
-                X_undet = np.row_stack((X_undet, X_amp_undet[a]))
-                t_det.extend(t_amp_det[a])
-                t_undet.extend(t_amp_undet[a])
+                if avg_trials_amp:
+                    if X_amp_det[a].shape[0] != 0:
+                        for i in range(X_amp_det[a].shape[0]):
+                            X_det = np.row_stack((X_det, np.mean(X_amp_det[a], axis=0)))
+                    if X_amp_undet[a].shape[0] != 0:
+                        for i in range(X_amp_undet[a].shape[0]):
+                            X_undet = np.row_stack((X_undet, np.mean(X_amp_undet[a], axis=0)))
+                    t_det.extend(t_amp_det[a])
+                    t_undet.extend(t_amp_undet[a])
+                elif threshold_only and (a == 0 or a == rec.threshold):
+                    X_det = np.row_stack((X_det, X_amp_det[a]))
+                    X_undet = np.row_stack((X_undet, X_amp_undet[a]))
+                    t_det.extend(t_amp_det[a])
+                    t_undet.extend(t_amp_undet[a])
+                else:
+                    X_det = np.row_stack((X_det, X_amp_det[a]))
+                    X_undet = np.row_stack((X_undet, X_amp_undet[a]))
+                    t_det.extend(t_amp_det[a])
+                    t_undet.extend(t_amp_undet[a])
 
         X = np.row_stack((X_det, X_undet))
         t_stim = t_det + t_undet

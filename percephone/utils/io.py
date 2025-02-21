@@ -27,13 +27,14 @@ def read_info(folder_name, rois):
     date = str(folder_name[:4]) + "-" + str(folder_name[4:6]) + "-" + str(folder_name[6:8])
     row = rois[(rois["Number"] == name) &
                (rois["Recording number"] == int(n_record)) & (rois["Date"] == pd.to_datetime(date))]
-    inhibitory_ids = eval("[" + str(row["Inhibitory neurons: ROIs"].values[0]) + "]")
+    inhibitory_ids = eval(f"[{str(row["Inhibitory neurons: ROIs"].values[0])}]")
+    hit_rates = [float(x) for x in row["Stimulus detection"].values[0].split(',')]
     return (row["Number"].values[0],
             inhibitory_ids,
-            row["Frame Rate (Hz)"].values[0], row["Genotype"].values[0], row["Threshold"].values[0])
+            row["Frame Rate (Hz)"].values[0], row["Genotype"].values[0], row["Threshold"].values[0], row["ITI1 ONLY"].values[0], hit_rates)
 
 
-def extract_analog_from_mesc(path_mesc, tuple_mesc, frame_rate,analog_fs =20000, savepath=""):
+def extract_analog_from_mesc(path_mesc, tuple_mesc, frame_rate, analog_fs=20000, savepath=""):
     """
     Extract analog from mesc file for ITI curve. Save it as analog.txt in order to be used by percephone
     Parameters
@@ -154,11 +155,13 @@ def get_server_address(user):
     return server_address
 
 
+
+
 if __name__ == '__main__':
     import percephone.plts.heatmap as hm
 
-    path = "C:/Users/cvandromme/Desktop/Data_DMSO_BMS/"
-    roi_info = "C:/Users/cvandromme/Desktop/Fmko_bms&dmso_info.xlsx"
+    path = "C:/Users/cvandromme/Desktop/Data/"
+    roi_info = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
     # folder = "20240404_6601_04_synchro_temp"
     # folder = "20240404_6602_01_synchro_temp"
     # path_to_mesc = path + "/20240404_6602_det.mesc"

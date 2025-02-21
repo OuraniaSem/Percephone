@@ -349,7 +349,7 @@ def amp_tuning_heatmap(ax, rec, activity, title=""):
 
 def ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
                     time_span="stim", window=0.5, estimator=None,
-                    det_sorted=False, amp_sorted=False, det_ordering=False):
+                    det_sorted=False, amp_sorted=False, det_ordering=False, avg_trials_amp=False, threshold_only=False):
     """
     Plot the heatmap of a recording, keeping only the selected time span. It is possible to sort trials according to
     their detection and amplitude.
@@ -378,7 +378,8 @@ def ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
     """
     data, stim_dur = get_zscore(rec, exc_neurons=exc_neurons, inh_neurons=inh_neurons,
                                 time_span=time_span, window=window, estimator=estimator,
-                                sort=det_sorted, amp_sort=amp_sorted)
+                                sort=det_sorted, amp_sort=amp_sorted,
+                                avg_trials_amp=avg_trials_amp, threshold_only=threshold_only)
 
     # figure global parameters
     fig, ax = plt.subplots(1, 1, figsize=(18, 10))
@@ -390,33 +391,42 @@ def ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
     extent = [0, data.shape[1], data.shape[0] - 0.5, -0.5]
 
     # plotting the stimulation amplitudes
-    if det_sorted:
-        stim_det = []
-        stim_undet = []
-        for i in range(rec.stim_time.shape[0]):
-            if time_span == "stim":
-                ampl_vec = [rec.stim_ampl[i]] * int(rec.stim_durations[i])
-            elif time_span == "pre_stim":
-                ampl_vec = [rec.stim_ampl[i]] * int(window * rec.sf)
-            (stim_det if rec.detected_stim[i] else stim_undet).extend(ampl_vec)
-        if amp_sorted:
-            stim_det.sort()
-            stim_undet.sort()
-        stim_array = np.array(stim_det + stim_undet)
-        det_stim_duration = rec.stim_durations[rec.detected_stim]
-        if det_ordering:
-            linkage_data = data[:, 0:int(det_stim_duration.sum())]
+    if not threshold_only:
+        if det_sorted:
+            stim_det = []
+            stim_undet = []
+            for i in range(rec.stim_time.shape[0]):
+                if time_span == "stim":
+                    if avg_trials_amp:
+                        ampl_vec = [rec.stim_ampl[i]] * 15
+                    else:
+                        ampl_vec = [rec.stim_ampl[i]] * int(rec.stim_durations[i])
+                elif time_span == "pre_stim":
+                    ampl_vec = [rec.stim_ampl[i]] * int(window * rec.sf)
+                (stim_det if rec.detected_stim[i] else stim_undet).extend(ampl_vec)
+            if amp_sorted:
+                stim_det.sort()
+                stim_undet.sort()
+            stim_array = np.array(stim_det + stim_undet)
+            det_stim_duration = rec.stim_durations[rec.detected_stim]
+            if det_ordering:
+                linkage_data = data[:, 0:int(det_stim_duration.sum())]
+            else:
+                linkage_data = data
         else:
+            stim_bar = []
+            for i in range(rec.stim_time.shape[0]):
+                if time_span == "stim":
+                    stim_bar.extend([rec.stim_ampl[i]] * int(rec.stim_durations[i]))
+                elif time_span == "pre_stim":
+                    stim_bar.extend([rec.stim_ampl[i]] * int(window * rec.sf))
+            stim_array = np.array(stim_bar)
             linkage_data = data
     else:
-        stim_bar = []
-        for i in range(rec.stim_time.shape[0]):
-            if time_span == "stim":
-                stim_bar.extend([rec.stim_ampl[i]] * int(rec.stim_durations[i]))
-            elif time_span == "pre_stim":
-                stim_bar.extend([rec.stim_ampl[i]] * int(window * rec.sf))
-        stim_array = np.array(stim_bar)
-        linkage_data = data
+        stim_det = [rec.threshold] * sum(np.array(rec.stim_ampl == rec.threshold) & np.array(rec.detected_stim))
+        stim_nogo = [0] * sum(rec.stim_ampl == 0)
+        stim_undet = [rec.threshold] * sum(np.array(rec.stim_ampl == rec.threshold) & np.invert(rec.detected_stim))
+        stim_array = np.array(stim_det + stim_nogo + stim_undet)
 
     if (time_span == "stim" or time_span == "pre_stim"):
         tax1.imshow(stim_array.reshape(1, -1), cmap=cmap, aspect='auto', interpolation='none', extent=extent)
@@ -426,32 +436,36 @@ def ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
     # neurons clustering and data display
     Z = linkage(data, 'ward', metric='euclidean', optimal_ordering=True)
     dn_exc = dendrogram(Z, no_plot=True, count_sort=True, distance_sort=False)
-    # manually_arranged_idx = dn_exc['leaves'][25:]
-    # manually_arranged_idx = dn_exc['leaves'][24:] + dn_exc['leaves'][0:24][::-1]  #WT
-    im = ax.imshow(data[dn_exc['leaves']], cmap=cmap, interpolation='none', aspect='auto',
-                   vmin=np.nanpercentile(np.ravel(data), 1),
-                   vmax=np.nanpercentile(np.ravel(data), 99), extent=extent)
+    # manually_arranged_idx = dn_exc['leaves'][0:11] + dn_exc['leaves'][11:][::-1]  #WT
+    # manually_arranged_idx = dn_exc['leaves'][18:] + dn_exc['leaves'][0:18][::-1]  #KO
+    manually_arranged_idx = dn_exc['leaves'][0:14] + dn_exc['leaves'][37:] + dn_exc['leaves'][14:37][::-1]  #Hypo
+    im = ax.imshow(data[manually_arranged_idx], cmap=cmap, interpolation='none', aspect='auto',
+                   # vmin=np.nanpercentile(np.ravel(data), 1),
+                   # vmax=np.nanpercentile(np.ravel(data), 99), extent=extent)
+                    vmin=-1,
+                   vmax=1.5, extent=extent)
 
     # plotting lines to separate stimulation
-    if time_span == "stim":
-        cumulative_stim_duration = 0
-        for stim in stim_dur:
-            cumulative_stim_duration += stim
-            ax.vlines(cumulative_stim_duration, ymin=-0.5, ymax=len(data) - 0.5, color='w', linewidth=0.5)
-        if det_sorted:
-            det_stim_duration = rec.stim_durations[rec.detected_stim]
-            ax.vlines(det_stim_duration.sum(), ymin=-0.5, ymax=len(data) - 0.5, color='b', linewidth=1)
-    elif time_span == "pre_stim":
-        for i in range(len(rec.detected_stim)):
-            ax.vlines(i * int(window * rec.sf), ymin=-0.5, ymax=len(data) - 0.5, color='w', linewidth=0.5)
-        if det_sorted:
-            ax.vlines(rec.detected_stim.sum() * int(window * rec.sf), ymin=-0.5, ymax=len(data) - 0.5, color='b',
-                      linewidth=1)
-    else:
-        iterator = len(rec.reward_time) if time_span == "reward" else (
-            len(rec.timeout_time) if time_span == "timeout" else 0)
-        for i in range(iterator):
-            ax.vlines(i * int(window * rec.sf), ymin=-0.5, ymax=len(data) - 0.5, color='w', linewidth=0.5)
+    if not avg_trials_amp and not threshold_only:
+        if time_span == "stim":
+            cumulative_stim_duration = 0
+            for stim in stim_dur:
+                cumulative_stim_duration += stim
+                ax.vlines(cumulative_stim_duration, ymin=-0.5, ymax=len(data) - 0.5, color='w', linewidth=0.5)
+            if det_sorted:
+                det_stim_duration = rec.stim_durations[rec.detected_stim]
+                ax.vlines(det_stim_duration.sum(), ymin=-0.5, ymax=len(data) - 0.5, color='b', linewidth=1)
+        elif time_span == "pre_stim":
+            for i in range(len(rec.detected_stim)):
+                ax.vlines(i * int(window * rec.sf), ymin=-0.5, ymax=len(data) - 0.5, color='w', linewidth=0.5)
+            if det_sorted:
+                ax.vlines(rec.detected_stim.sum() * int(window * rec.sf), ymin=-0.5, ymax=len(data) - 0.5, color='b',
+                          linewidth=1)
+        else:
+            iterator = len(rec.reward_time) if time_span == "reward" else (
+                len(rec.timeout_time) if time_span == "timeout" else 0)
+            for i in range(iterator):
+                ax.vlines(i * int(window * rec.sf), ymin=-0.5, ymax=len(data) - 0.5, color='w', linewidth=0.5)
 
     # color scale parameters
     cbar = plt.colorbar(im, cax=cax)
@@ -523,11 +537,11 @@ if __name__ == '__main__':
     from percephone.analysis.utils import corrected_prestim_windows
     plt.ion()
 
-    user = "Théo"
-    plot_all_records = True
+    user = "Célien"
+    plot_all_records = False
     plot_ordered_heatmap = False
-    plot_responsivity_heatmap = True
-    plot_normal_heatmap = False
+    plot_responsivity_heatmap = False
+    plot_normal_heatmap = True
     if user == "Célien":
         directory = "C:/Users/cvandromme/Desktop/Data/"
         roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
@@ -554,14 +568,19 @@ if __name__ == '__main__':
                 interactive_heatmap(rec, rec.df_f_exc)
 
     else:
-        rec_directory = directory + "20231008_5890_03_synchro/"
+        rec_directory = directory + "20220715_4456_00_synchro/"
         rec = RecordingAmplDet(rec_directory, 0, roi_path, cache=True)
+        rec.peak_delay_amp()
+        rec.auc()
         if plot_ordered_heatmap:
             ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
                             time_span="stim", window=0.5, estimator=None,
-                            det_sorted=True, amp_sorted=True, det_ordering=False)
+                            det_sorted=True, amp_sorted=True, det_ordering=False,
+                            avg_trials_amp=False, threshold_only=False)
         if plot_responsivity_heatmap:
             resp_heatmap(rec, n_type="EXC")
+        if plot_normal_heatmap:
+            interactive_heatmap(rec, rec.zscore_exc)
 
 
     # hm.plot_dff_stim_detected(rec, rec.df_f_exc)
