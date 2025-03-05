@@ -10,16 +10,23 @@ from itertools import combinations
 import math
 import warnings
 
+import mplcursors
 import numpy as np
+from scipy.stats import levene, shapiro
+import pingouin as pg
+import statsmodels.api as sm
 
 from percephone.plts.style import *
 from percephone.plts.utils import *
 
 mpl.rcParams["axes.grid"] = False
-mpl.rcParams['font.size'] = 35
+# mpl.rcParams['font.size'] = 35
+# mpl.rcParams['axes.linewidth'] = 3
+# mpl.rcParams['lines.linewidth'] = 5
+mpl.rcParams['font.size'] = 10
+mpl.rcParams['axes.linewidth'] = 1
+mpl.rcParams['lines.linewidth'] = 1
 font_signif = mpl.rcParams['font.size'] / 2
-mpl.rcParams['axes.linewidth'] = 3
-mpl.rcParams['lines.linewidth'] = 5
 
 mpl.rcParams["boxplot.whiskerprops.linewidth"] = 5
 mpl.rcParams["boxplot.boxprops.linewidth"] = 5
@@ -32,8 +39,10 @@ mpl.rcParams["boxplot.flierprops.linewidth"] = 5
 mpl.rcParams["xtick.labelsize"] = mpl.rcParams['font.size']
 mpl.rcParams["ytick.labelsize"] = mpl.rcParams['font.size']
 mpl.rcParams["axes.labelsize"] = mpl.rcParams['font.size']
-mpl.rcParams["axes.titlesize"] = 20
-mpl.rcParams["lines.markersize"] = 28
+# mpl.rcParams["axes.titlesize"] = 20
+# mpl.rcParams["lines.markersize"] = 28
+mpl.rcParams["axes.titlesize"] = 12
+mpl.rcParams["lines.markersize"] = 8
 
 mpl.rcParams['svg.fonttype'] = 'none'
 
@@ -528,6 +537,283 @@ def boxplot_3_conditions(group1_data, group2_data, cond_labels=["A", "B", "C"],
         fig.savefig(filename)
     plt.show()
     # fig.tight_layout(pad=0.1)
+
+
+def curveplot(ax, data, between="Genotype", within="Trial", variable=None,
+              title=None, ylabel=None, xlabel=None, ylim=None, colors=None, id_display=True, qq_show=True,
+              transformation=None, consider_normality=False, consider_homogeneity=False):
+    """
+    Plot the evolution of a variable across different measurements for different groups, and perform the
+    statistical analysis for the data provided in a long format Pandas DataFrame.
+
+    Parameters
+    ----------
+    ax : axis
+        The Matplotlib axis to use to plot the graph.
+    data = Pandas DataFrame
+        The Pandas DataFrame containing the data in long format (With an ID column).
+    between : str
+        The name of the column representing groups between which the variable is compared across measurements (the different curves).
+    within : str
+        The name of the column representing the different measurements of the variable (the different points on the x axis).
+    variable : str
+        The name of the column representing the variable that is plotted.
+    title : str, optional
+        The title of the plot.
+    ylabel : str, optional
+        The label for the y–axis.
+    xlabel : str, optional
+        The label for the x–axis.
+    ylim : tuple, optional
+        The y–limits for the plot.
+    colors : list, optional
+        A list of colors to use for each group.
+    id_display : bool, optional
+        Whether to display the ID of each data point on hover.
+    qq_show : bool, optional
+        Whether to display the QQ-plot.
+    consider_normality : bool, optional
+        If True, force the analysis to treat the data as normal even if the normality test fails.
+    consider_homogeneity : bool, optional
+        If True, force the analysis to treat the data as having homogeneous variances even if the test fails.
+
+    Returns
+    -------
+
+    """
+    groups_names = sorted(data[between].unique())
+    nb_groups = len(groups_names)
+    measurements = sorted(data[within].unique())
+    nb_subjetcs = len(data["ID"].unique())
+    assert len(measurements) > 1, "Please provide a dataset with at least 2 measurements."
+    # Defining colors if not provided
+    if colors:
+        assert len(colors) == nb_groups, f"Please provide {nb_groups} color(s) for the following group(s): {groups_names}"
+    else:
+        cmap = plt.get_cmap("rainbow")
+        colors = [cmap(i / max(nb_groups - 1, 1)) for i in range(nb_groups)]  # Use max to avoid error if 1 group
+    # Defining default values for xlabel, ylabel, and title
+    ylabel = ylabel or variable
+    xlabel = xlabel or within
+    title = title or f"Evolution of {variable} across {within} for {between if nb_groups > 1 else groups_names[0]}"
+    # For each measurement, plot the data points associated with each group with their label when hovering
+    x_pad = (measurements[1] - measurements[0]) / 10  # The maximum distance from the measurement x
+    scatters = []
+    all_labels = []
+    for measure in measurements:
+        # First defining the x coordinates for the different groups
+        x_coords = np.linspace(start=measure - x_pad, stop=measure + x_pad, num=nb_groups) if nb_groups > 1 else [measure]
+        for x, group, color in zip(x_coords, groups_names, colors):
+            subset = data[(data[between] == group) & (data[within] == measure)]
+            gp_measure = subset[variable].values
+            if len(gp_measure) > 0:
+                gp_plot = ax.scatter([x] * len(gp_measure), gp_measure, color=color, alpha=0.5, marker="+")
+                scatters.append(gp_plot)
+                all_labels.append(subset["ID"].values)
+                # Displaying the ID when hovering the data points
+    if id_display:
+        cursor = mplcursors.cursor(scatters, hover=True)  # Single cursor for all scatters
+
+        def on_add(sel):
+            scatter_index = scatters.index(sel.artist)
+            labels = all_labels[scatter_index]
+            sel.annotation.set_text(labels[sel.index])
+        cursor.connect("add", on_add)
+    # Get the mean value of each group for each measurement and plot the corresponding curve
+    for group, color in zip(groups_names, colors):
+        mean_group = [np.nanmean(data[(data[between] == group) & (data[within] == measure)][variable].values) for measure in measurements]
+        ax.plot(measurements, mean_group, color=color, label=f"Mean {group}")
+    cursor = mplcursors.cursor(ax.lines, hover=True)
+    cursor.connect("add", lambda sel: sel.annotation.set_text(sel.artist.get_label()))
+    # Setting the title, axis labels
+    ax.set_title(title)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.legend()
+    # Setting the ylim
+    min_data = np.nanmin(data[variable])
+    max_data = np.nanmax(data[variable])
+    if ylim:
+        if not (ylim[0] <= min_data and ylim[1] >= max_data):
+            warnings.warn("The ylim you have set don't cover the data range.")
+            ax.set_ylabel("⚠⚠⚠ " + ylabel + " ⚠⚠⚠", fontweight="bold", color="red")
+        ax.set_ylim(ylim)
+
+    # === Testing for significant difference (RM ANOVA / Friedman test + Mann-Whitney U test) ===
+    # --- Checking if the assumptions are met ---
+    # Testing the normality of the whole dataset
+    variable_col = variable
+    norm_pval = normality_check(data[variable_col], title=variable_col, plot=qq_show)
+    test_norm = f"Shapiro-Wilk ➜ {norm_pval:.3f}"
+    normality = norm_pval > 0.05
+    # First solution would be to explore the transformation of the data, because it's always better to use
+    # parametric tests whenever it's doable (don't stick to strict statistical tests to assess whether
+    # the data is normal or not)
+    if not normality or transformation:
+        trans_dict = {"log": "np.log(data[variable])",  # Compressing scale for high values (right skewness)
+                      "log1p": "np.log1p(data[variable])",  # Shifted log(1+x) to handle 0 values
+                      "sqrt": "np.sqrt(data[variable])",  # For count data or moderately skewed data
+                      "inv": "1 / data[variable]",  # Good for high skewness but exaggerate != for small values
+                      "arcsin": "np.arcsin(np.sqrt(np.divide(data[variable], 100) if np.nanmax(data[variable]) > 1 else data[variable]))",  # Percentage/proportion data, reduces variance
+                      "boxcox": "boxcox(data[variable])",  # data > 0, often achieve normality if the data follow a power-law type relationship
+                      "yeojohnson": "yeojohnson(data[variable])"}  # like boxcox but no need to be > 0
+        if transformation:
+            assert transformation in trans_dict.keys(), f"Please use one of the following transformation: {trans_dict.keys()}"
+
+            variable_col = f"{transformation}_{variable}"
+            if transformation == "boxcox" or transformation == "yeojohnson":
+                data[variable_col], fitted_lambda = eval(trans_dict[transformation])
+                print(f"Fitted lambda for {variable}: {fitted_lambda}")
+            else:
+                data[variable_col] = eval(trans_dict[transformation])
+            norm_pval_trans = normality_check(data[variable_col], title=variable_col, plot=qq_show)
+            test_norm = test_norm + f"/{norm_pval_trans:.3f} (after {transformation} transform)"
+            normality = norm_pval_trans > 0.05
+
+    if consider_normality: normality = True
+
+    # Testing the homogeneity of variance between the groups
+    if nb_groups > 1:
+        homogen_pval = levene(*[data.loc[data[between] == gp, variable_col] for gp in groups_names]).pvalue
+        homogeneity = True if (homogen_pval > 0.05 or consider_homogeneity) else False
+        test_homogen = f"Levene ➜ {homogen_pval:.3f}"
+    # Testing sphericity for each group, use Greenhouse–Geisser correction if not met
+    sphericity_rows = []
+    for group in groups_names:
+        gp_data = data[data[between] == group]
+        sphericity = pg.sphericity(gp_data, dv=variable_col, within=within, subject="ID")
+        sphericity_rows.append({"Group": group, "sphericity": sphericity.spher, "spher_pval": sphericity.pval})
+    sphericity_df = pd.DataFrame(sphericity_rows)
+    sphericity = sphericity_df["sphericity"].all()
+    print(sphericity_df)
+
+    # --- Performing the appropriate tests ---
+    post_hoc_dict = {}
+    if nb_groups > 1:
+        if normality and homogeneity:
+            # Performing the mixed ANOVA
+            test_results = pg.mixed_anova(data=data, dv=variable_col, between=between, within=within, subject="ID")
+            p_val_between = test_results[test_results["Source"] == between]["p-unc"].iloc[0].astype(float)
+            p_val_within = test_results[test_results["Source"] == within]["p-unc" if sphericity else "p-GG-corr"].iloc[0].astype(float)
+            p_val_inter = test_results[test_results["Source"] == "Interaction"]["p-unc" if sphericity else "p-GG-corr"].iloc[0].astype(float)
+            test_stats = f"Mixed ANOVA ➜ between: {p_val_between:.3f} - within: {p_val_within:.3f}{"[GG corrected]" if not sphericity else ""} - interaction: {p_val_inter:.3f}{"[GG corrected]" if not sphericity else ""}"
+        else:
+            variable_col = variable
+            # TODO: implement the case of non-normality
+            # If need to use non-parametric: use separate tests for the between and within effects
+            test_results = {}
+            test_stats = "[Non param] "
+            if nb_groups == 2:
+                # First, performing a Mann-Whitney test between the 2 groups (1 value per ID) to assess any difference
+                group_1 = data[data[between] == groups_names[0]].groupby("ID")[variable].mean()
+                group_2 = data[data[between] == groups_names[1]].groupby("ID")[variable].mean()
+                test_results["mwu_stat"], test_results["mwu_p_val"] = mannwhitneyu(group_1, group_2, alternative="two-sided")
+                p_val_between = test_results["mwu_p_val"]
+                test_stats += f"Mann-Whitney U (between) ➜ {p_val_between:.3f} - Friedman (within) ➜ "
+                # Using Friedman test to assess if there is a difference between the different measurements
+                for group in groups_names:
+                    if nb_subjetcs < 10 or len(measurements) < 6:
+                        test_results[f"friedman_{group}"] = pg.friedman(data=data[data[between] == group], dv=variable, within=within, subject="ID", method="f")
+                        p_val_within = test_results[f"friedman_{group}"]["p-unc"].iloc[0].astype(float)
+                        test_stats += f"{group}(F): {p_val_within:.3f} "
+                    else:
+                        test_results[f"friedman_{group}"] = pg.friedman(data=data[data[between] == group], dv=variable, within=within, subject="ID", method="chisq")
+                        p_val_within = test_results[f"friedman_{group}"]["p-unc"].iloc[0].astype(float)
+                        test_stats += f"{group}(χ²): {p_val_within:.3f} "
+                    test_stats += "/ " if group != groups_names[-1] else ""
+            else:
+                test_stats += "Implement this case"
+                pass
+
+
+        # Between which groups there is a difference, between which measurements in general and interaction of the 2 (T-tests / Mann-Whitney-U) TODO: Check for homogeneity as well
+        post_hoc_dict["between"] = pg.pairwise_tests(data=data, dv=variable_col, between=between, within=within, subject="ID", padjust="bonf", parametric=normality)
+        # For each group, test between which measurement there is a significant difference (Paired T-tests / Wilcoxon)
+        for group in groups_names:
+            post_hoc_dict[group] = pg.pairwise_tests(data=data[data[between] == group], dv=variable_col, within=within, subject="ID", padjust="bonf", parametric=normality) #OK, all assumptions checked
+    else:
+        if normality:
+            # Performing the RM ANOVA
+            test_results = pg.rm_anova(data=data, dv=variable_col, within=within, subject="ID")
+            p_val_within = test_results["p-unc" if sphericity else "p-GG-corr"].iloc[0].astype(float)
+            test_stats = f"RM ANOVA ➜ within: {p_val_within:.3f}{"[GG corrected]" if not sphericity else ""}"
+        else:
+            # Performing a Friedman Test
+            if nb_subjetcs < 10 or len(measurements) < 6:
+                test_results = pg.friedman(data=data, dv=variable_col, within=within, subject="ID", method="f")
+                p_val_within = test_results["p-unc"].iloc[0].astype(float)
+                test_stats = f"Friedman F Test ➜ within: {p_val_within:.3f}"
+            else:
+                test_results = pg.friedman(data=data, dv=variable_col, within=within, subject="ID", method="chisq")
+                p_val_within = test_results["p-unc"].iloc[0].astype(float)
+                test_stats = f"Friedman χ² Test ➜ within: {p_val_within:.3f}"
+        # Posthocs tests (Paired T-tests / Wilcoxon)
+        post_hoc_dict[groups_names[0]] = pg.pairwise_tests(data=data, dv=variable_col, within=within, subject="ID", padjust="bonf", parametric=normality)
+
+    # Adding test results on the graph
+    ax.text(x=0.01, y=0.97, s=test_stats, fontsize=8, transform=ax.transAxes, fontstyle="italic", color="gray", alpha=0.75)
+    ax.text(x=0.01, y=0.95, s=test_norm, fontsize=8, transform=ax.transAxes, fontstyle="italic", color="green" if norm_pval > 0.05 else ("teal" if transformation and norm_pval_trans > 0.05 else ("red" if normality else "orange")), alpha=0.5)
+    if nb_groups > 1: ax.text(x=0.01, y=0.93, s=test_homogen, fontsize=8, transform=ax.transAxes, fontstyle="italic", color="green" if homogen_pval > 0.05 else ("red" if homogeneity else "orange"), alpha=0.5)
+    return test_results, post_hoc_dict
+
+
+def normality_check(data, title="variable", plot=True):
+    """
+    Test whether the provided data follows a normal distribution or not. Perform a Shapiro-Wilk test, plot a histogram
+    of the distribution and compare QQ-plot to 24 random generated datasets of the same size.
+
+    Parameters
+    ----------
+    data : list/np.array of float
+        The data for which the normality will be tested
+    title : str
+        A brief description of what is the data
+    plot : bool
+        Whether to display the plots or not
+
+    Returns
+    -------
+    float
+        The p_value resulting from the Shapiro-Wilk test
+    """
+    # Perform Shapiro-Wilk normality test
+    data = np.array(data)
+    stat, p_value = shapiro(data)
+    if plot:
+        sample_size = len(data)
+        # Create a single figure with a GridSpec layout
+        norm_fig = plt.figure(figsize=(14, 10), constrained_layout=True)
+        spec = norm_fig.add_gridspec(nrows=5, ncols=8)
+        # --- Histogram (Top Left) ---
+        ax_hist = norm_fig.add_subplot(spec[0:2, 0:3])
+        ax_hist.hist(data, bins=15)
+        ax_hist.set_ylabel("Frequency")
+        ax_hist.set_xlabel("Variable value")
+        ax_hist.set_title("Gaussian distribution?")
+        # --- Single QQ-Plot (Bottom Left) ---
+        ax_qq = norm_fig.add_subplot(spec[2:5, 0:3])
+        sm.qqplot(data, line="s", ax=ax_qq)
+        ax_qq.text(0.05, 0.9, f"n = {sample_size}", transform=ax_qq.transAxes)
+        ax_qq.set_title("Points aligned on the line?")
+        # --- 5×5 Grid of QQ-Plots (Right) ---
+        random_datasets = [np.random.normal(loc=0, scale=1, size=sample_size) for _ in range(24)]
+        random_datasets.insert(12, data)  # Insert real data in center
+        axes_grid = []
+        for row in range(5):
+            for col in range(3, 8):
+                ax_rnd = norm_fig.add_subplot(spec[row, col])
+                sm.qqplot(random_datasets.pop(0), line="s", ax=ax_rnd)
+                ax_rnd.set_xticks([])
+                ax_rnd.set_yticks([])
+                ax_rnd.set_frame_on(False)
+                # Add labels ('a' to 'x', 'Real' for actual data)
+                index = row * 5 + (col - 2)
+                label = chr(97 + index - 1) if index != 13 else "Real"
+                ax_rnd.text(0.05, 0.9, label, transform=ax_rnd.transAxes, fontsize=12)
+                axes_grid.append(ax_rnd)
+        norm_fig.suptitle(f"Normality check for {title} \nShapiro-Wilk p-value = {p_value:.3f}")
+        norm_fig.canvas.manager.set_window_title(f"Normality Check - {title}")
+    return p_value
 
 
 if __name__ == "__main__":

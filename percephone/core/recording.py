@@ -70,7 +70,7 @@ class Recording:
         # Initialization of the instance attributes by reading the ROIs file
         folder_name = os.path.basename(os.path.normpath(input_path)) + "/"
         rois = pd.read_excel(rois_path)
-        self.filename, inhibitory_ids, self.sf, self.genotype, self.threshold = read_info(folder_name, rois)
+        self.filename, inhibitory_ids, self.sf, self.genotype, self.threshold, self.iti1_only, self.hit_rates = read_info(folder_name, rois)
         self.input_path = input_path
         self.matrices = {"EXC": {}, "INH": {}}
 
@@ -346,9 +346,9 @@ class RecordingAmplDet(Recording):
         bpod file stored as a pandas DataFrame.
     stim_time : numpy.ndarray of int
         A 1D numpy.ndarray of the stimulation times in frames.
-    stim_ampl : numpy.ndarray of float #TODO: why not int
+    stim_ampl : numpy.ndarray of float TODO: why not int
         A 1D numpy.ndarray of the stimulation amplitudes.
-    stim_durations : numpy.ndarray of float #TODO: why not int
+    stim_durations : numpy.ndarray of float TODO: why not int
         A 1D numpy.ndarray of the stimulation's durations
     reward_time : numpy.ndarray of int
         A 1D numpy.ndarray of the reward times in frames.
@@ -359,9 +359,9 @@ class RecordingAmplDet(Recording):
     detected_stim : numpy.ndarray of bool
         A 1D numpy.ndarray of if the mouse responded to a stimulation.
     mlr_labels_exc :
-        #TODO: to fill
+        TODO: to fill
     mlr_labels_inh :
-        #TODO: to fill
+        TODO: to fill
     json : list[dict]
         Read of the file params_trials.json
     zscore_exc : numpy.ndarray of float
@@ -404,9 +404,10 @@ class RecordingAmplDet(Recording):
         self.mlr_labels_inh = {}
 
         with open(input_path + 'params_trial.json', "r") as read_file:
+            # a list of dictionaries, 1 per trial (nb, freq, amp, trial_type)
             self.json = json.load(read_file)
         if os.path.exists(input_path + 'behavior_events.json') and cache:
-            print('Behavioural information already incorporated in the analog.')
+            print(f"{self.filename}: Behavioural information already incorporated in the analog.")
             with open(input_path + 'behavior_events.json', "r") as events_file:
                 events = json.load(events_file)
             self.stim_time = np.array(events["stim_time"])
@@ -423,7 +424,7 @@ class RecordingAmplDet(Recording):
                     extract_analog_from_mesc(input_path + mesc_file, tuple_mesc, self.sf, savepath=input_path)
 
                 else:
-                    print("No analog.txt either mesc file in the folder!")
+                    print(f"{self.filename}: No analog.txt either mesc file in the folder!")
                     return
             self.analog = pd.read_csv(input_path + 'analog.txt', sep="\t", header=None)
             if (len(self.analog[0])/10000) > 600:
@@ -432,6 +433,8 @@ class RecordingAmplDet(Recording):
             else:
                 self.analog[0] = (self.analog[0]).astype(int)
                 analog_sf = 1000
+            iti = "ITI1" if self.iti1_only else "ITI2"
+            print(f"{self.filename}: {iti}")
             self.synchronization_with_iti(starting_trial, analog_sf, correction, iti, habituation)
 
         self.zscore_exc = self.zscore(self.df_f_exc)
@@ -483,7 +486,7 @@ class RecordingAmplDet(Recording):
         ------
         Updated analog file (csv) with the stimulus, timeout, reward time
         """
-        print('Synchronization method with ITI.')
+        print(f"{self.filename}: Synchronization method with ITI.")
 
         # get the ITI2, reward, timeout and stimulus from the xls
         if iti == "ITI2":
@@ -781,3 +784,13 @@ if __name__ == '__main__':
     folder = "20250103_7553_00_synchro"
     rec = RecordingAmplDet(directory + folder + "/", 0, roi_info, cache=False, correction=True, iti="ITI2", habituation=True)
     hm.interactive_heatmap(rec, rec.zscore_exc)
+
+    #Test old recording
+    # directory = "C:/Users/cvandromme/Desktop/Data/"
+    # roi_info = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
+    # folder = "20220710_4445_00_synchro"
+    # rec = RecordingAmplDet(directory + folder + "/", 0, roi_info, cache=False, correction=True, iti="ITI2",
+    #                        habituation=False)
+    # hm.interactive_heatmap(rec, rec.zscore_exc)
+
+

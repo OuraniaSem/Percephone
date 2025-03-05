@@ -105,7 +105,6 @@ def resp_matrice(rec, df_data):
     #04-04-2024
     pre_boundary = int(3 * rec.sf)  # index
     baseline_timings = [list(range(t - pre_boundary, t)) for t in rec.stim_time]
-    # random_timing = rnd.sample(list(np.concatenate(baseline_timings)), k=1999)
     random_timing = rnd.sample(list(np.concatenate(baseline_timings)), k=1999)
 
 

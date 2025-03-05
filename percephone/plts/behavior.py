@@ -5,6 +5,7 @@ Different plots link to behavior
 import mplcursors
 from scipy.stats import stats
 from sklearn.linear_model import MultiTaskLasso
+import statsmodels.api as sm
 
 import percephone.core.recording as pc
 import percephone.analysis.utils as pu
@@ -16,6 +17,8 @@ import scipy.stats as ss
 from multiprocessing import Pool, cpu_count, pool
 import os
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
+from matplotlib.transforms import blended_transform_factory
 from scipy.optimize import curve_fit
 from sklearn.cluster import KMeans
 from sklearn.ensemble import RandomForestRegressor
@@ -104,7 +107,7 @@ def correlation_beh_neur(rec, roi_info, n_type="EXC", detected_trials=True, unde
     return coef_cor, p_value
 
 
-def zscore_by_amp(rec, neuron_zscore):
+def zscore_by_amp(rec, neuron_zscore): # This function doesn't separate the neurons that are activated or inhibited, this leads to a cnacellation of the neuronal activity in WT
     """
     Computes the mean zscore during the trials of each amplitude for a single neuron.
 
@@ -123,6 +126,124 @@ def zscore_by_amp(rec, neuron_zscore):
         timings = rec.stim_time[rec.stim_ampl == amp]
         firing_curve.append(np.mean(neuron_zscore[np.linspace(timings, timings + 15, dtype=int)]))
     return firing_curve
+
+
+def zscore_by_amp_df(rec):
+    """
+    Computes the zscore by amplitude of stimulation for each neuron of the provided recording (splitting the neurons that are activated/inhibited)
+    TODO: The tricky part is to define how we consider a neuron as activated or inhibited, limiting the number of neurons in both case ?
+    Parameters
+    ----------
+    rec
+
+    Returns
+    -------
+
+    """
+    all_neurons = []
+    for zscore, n_type in zip([rec.zscore_exc, rec.zscore_inh], ["EXC", "INH"]):
+        resp_mat = rec.matrices[n_type]["Responsivity"]
+        for (neuron_id, neuron_zscore), neuron_resp in zip(enumerate(zscore), resp_mat):
+            max_act = max(neuron_zscore)
+            max_inh = min(neuron_zscore)
+            neuron = []
+            # neuron_act_amp = []
+            # neuron_inh_amp = []
+            for amp in range(0, 13, 2):
+                # For each neuron, getting the mean zscore during the trials of each amplitude
+                stim_start = rec.stim_time[rec.stim_ampl == amp]
+                resp_amp = neuron_resp[rec.stim_ampl == amp]
+                act_trials = stim_start[resp_amp == 1]
+                inh_trials = stim_start[resp_amp == -1]
+                nr_trials = stim_start[resp_amp == 0]
+                trials_amp = []
+                for pattern_start_list, pattern in zip([act_trials, inh_trials, nr_trials], ["act", "inh", "nr"]):
+                    for pattern_start in pattern_start_list:
+                        zscore_trial = np.mean(neuron_zscore[pattern_start: pattern_start + 15])
+                        norm_zscore_trial = zscore_trial * (max_act/max_inh) if pattern == "inh" else zscore_trial
+                        trials_amp.append(norm_zscore_trial)
+                neuron.append(np.nanmean(trials_amp))
+            all_neurons.append({"ID": neuron_id, "n_type": n_type, "zscore_by_amp": neuron})
+                # neuron_act_amp.append(np.mean(neuron_zscore[np.linspace(act_trials, act_trials + 15, dtype=int)]))
+                # neuron_inh_amp.append(np.mean(neuron_zscore[np.linspace(inh_trials, inh_trials + 15, dtype=int)]))
+
+                # === Trials grouping ===
+                # 1) Only one occurrence of act/inh
+                # amp_act = 1 in resp_amp
+                # amp_inh = -1 in resp_amp
+                # 2) at least 2 trials per amp
+                # amp_act = resp_amp.count(1) >= 2
+                # amp_inh = resp_amp.count(-1) >= 2
+                # 3) Use the majority
+                # amp_act = resp_amp.count(1) >= resp_amp.count(-1) if resp_amp.count(1) > 0 else False
+                # amp_inh = resp_amp.count(-1) >= resp_amp.count(1) if resp_amp.count(1) > 0 else False
+                # 4) Splitting into 2 mean values, the mean values in activated trials and the mean values in inhibited trials
+                # 5) Adding the normalized absolute zscore value of inhibited trials to the one of activated trials
+            # === Amplitude grouping ===
+            # neuron_act = sum(neuron_act_amp) >= sum(neuron_inh_amp) if sum(neuron_act_amp) > 0 else False
+            # neuron_inh = sum(neuron_inh_amp) >= sum(neuron_act_amp) if sum(neuron_inh_amp) > 0 else False
+            # activated = 1 in neuron_resp
+            # inhibited = -1 in neuron_resp
+            # activated = neuron_resp.count(1) >= 6
+            # inhibited = neuron_resp.count(-1) >= 6
+    return pd.DataFrame(all_neurons)
+
+
+def neuron_resp_consistency(rec):
+    rows = []
+    for n_type in ["EXC", "INH"]:
+        resp_mat = rec.matrices[n_type]["Responsivity"]
+        for neuron_id, neuron_resp in enumerate(resp_mat):
+            row = {"ID": neuron_id, "n_type": n_type}
+            for amp in range(0, 13, 2):
+                resp_amp = neuron_resp[rec.stim_ampl == amp]
+                row[f"nb_trials_{amp}"] = len(resp_amp)
+                nb_act = (resp_amp == 1).sum()
+                nb_inh = (resp_amp == -1).sum()
+                row[f"act_{amp}"] = nb_act
+                row[f"inh_{amp}"] = nb_inh
+                row[f"consistency_{amp}"] = max(nb_act, nb_inh) / (nb_act + nb_inh) if (nb_act + nb_inh) > 0 else np.nan
+                row[f"dom_resp_{amp}"] = [1, -1][np.argmax([nb_act, nb_inh])] if nb_act != nb_inh else 0 if max(nb_act, nb_inh) > 0 else np.nan
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def compute_consistency_features(recs, long_format=False):
+    rows = []
+    for rec in recs:
+        neuron_resp = neuron_resp_consistency(rec)
+        mean_resp = neuron_resp.groupby(["n_type"]).mean()
+        if long_format:
+            for amp in range(0, 13, 2):
+                for n_type in ["EXC", "INH"]:
+                    rows.append({"ID": rec.filename, "genotype": rec.genotype, "n_type": n_type, "amplitude": amp, "consistency": mean_resp[mean_resp.index == n_type][f"consistency_{amp}"].iloc[0]})
+        else:
+            consistency_EXC = []
+            consistency_INH = []
+            for amp in range(0, 13, 2):
+                consistency_EXC.append(mean_resp[mean_resp.index == "EXC"][f"consistency_{amp}"].iloc[0])
+                consistency_INH.append(mean_resp[mean_resp.index == "INH"][f"consistency_{amp}"].iloc[0])
+            row = {"ID": rec.filename, "genotype": rec.genotype, "consistency_EXC": consistency_EXC, "consistency_INH": consistency_INH}
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def plot_consistency(consistency_df, transformation=None):
+    fig, ax = plt.subplots(nrows=2, ncols=1, sharex=True, figsize=(15, 20), constrained_layout=True)
+    data_exc = consistency_df[consistency_df["n_type"] == "EXC"]
+    test_exc, post_exc = ppt.curveplot(ax[0], data_exc, between="genotype", within="amplitude", variable="consistency",
+                               title=None, ylabel=None, xlabel=None, ylim=None,
+                               colors=[ppt.hypo_color, ppt.wt_color],
+                               id_display=True, qq_show=True, transformation=transformation,
+                               consider_normality=False, consider_homogeneity=False)
+    data_inh = consistency_df[consistency_df["n_type"] == "INH"]
+    test_inh, post_inh = ppt.curveplot(ax[1], data_inh, between="genotype", within="amplitude", variable="consistency",
+                               title=None, ylabel=None, xlabel=None, ylim=None,
+                               colors=[ppt.hypo_color, ppt.wt_color],
+                               id_display=True, qq_show=True, transformation=transformation,
+                               consider_normality=False, consider_homogeneity=False)
+    plt.show()
+    return test_exc, post_exc, test_inh, post_inh
 
 
 def activation_proportion(rec, neur_id):
@@ -182,7 +303,7 @@ def ei_ratio_per_amp(rec):
     return np.array(ei_ratios)/max(ei_ratios)
 
 
-def compute_neurons_tuning(rec, sigm_on_norm=True):
+def compute_neurons_tuning(rec, sigm_on_norm=True):# TODO: adapt to take as entry a df
     rows = []
     for type, zscore in zip(["EXC", "INH"], [rec.zscore_exc, rec.zscore_inh]):
         for neuron_id, neuron_zscore in enumerate(zscore):
@@ -204,7 +325,25 @@ def compute_neurons_tuning(rec, sigm_on_norm=True):
     return pd.DataFrame(rows)
 
 
-def cluster_neurons(neurons_df, method="kmeans"):
+def compute_sigmoid_df(data, columns=[], norm_by_max=True):
+    df = data.copy()
+    for col in columns:
+        nb_x_val = len(df[col].iloc[0])
+        if norm_by_max:
+            df[f"{col}_norm"] = df[col].apply(lambda lst: [val / (max(lst) if max(lst)!=0 else 1) for val in lst])
+        def try_sigmoid(data, len_x):
+            # Trying to fit a sigmoid curve on each neuron
+            try:
+                x, y, x0, k = sigmoid_fit(np.array(np.linspace(0, 1, len_x)), data)
+                return x, y, x0, k
+            except:
+                return np.nan, np.nan, np.nan, np.nan
+        df[[f"{col}_x_sigmoid", f"{col}_y_sigmoid", f"{col}_x0", f"{col}_k"]] = df[f"{col}_norm" if norm_by_max else col].apply(lambda lst: pd.Series(try_sigmoid(lst, nb_x_val)))
+        df[f"{col}_abs_k"] = abs(df[f"{col}_k"])
+    return df
+
+
+def cluster_neurons(neurons_df, method="manual"):
     if method == "manual":
         delta_x = 2/12
         tolerance = 0.025
@@ -254,7 +393,9 @@ def get_general_cluster_parameters(recs, normalized_by_max=True, clustering_meth
     rows = []
     for rec in recs:
         # Getting the number of neurons per recording
-        neurons_df = compute_neurons_tuning(rec, sigm_on_norm=normalized_by_max)
+        # neurons_df = compute_neurons_tuning(rec, sigm_on_norm=normalized_by_max)
+        neuron_zsc_by_amp_df = zscore_by_amp_df(rec)
+        neurons_df = compute_sigmoid_df(neuron_zsc_by_amp_df, columns=["zscore_by_amp"], norm_by_max=normalized_by_max)
         nb_neurons_df = neurons_df["type"].value_counts()
         nb_exc = nb_neurons_df["EXC"]
         nb_inh = nb_neurons_df["INH"]
@@ -265,7 +406,10 @@ def get_general_cluster_parameters(recs, normalized_by_max=True, clustering_meth
         cluster_df = cluster_neurons(neurons_df, method=clustering_method)
         row = {"ID": rec.filename, "genotype": rec.genotype,
                "x": x_psy, "x0_psy": x0_psy, "k_psy": k_psy,
-               "nb_exc": nb_exc, "nb_inh": nb_inh, "nb_neurons": nb_neurons}
+               "nb_exc": nb_exc, "nb_inh": nb_inh, "nb_neurons": nb_neurons,
+               "mean_x0_EXC": neurons_df[neurons_df["type"] == "EXC"]["x0"].mean(), "mean_x0_INH": neurons_df[neurons_df["type"] == "INH"]["x0"].mean(),
+               "mean_abs_k_EXC": neurons_df[neurons_df["type"] == "EXC"]["abs_k"].mean(), "mean_abs_k_INH": neurons_df[neurons_df["type"] == "INH"]["abs_k"].mean(),
+               "mean_log_k_EXC": np.log(neurons_df[neurons_df["type"] == "EXC"]["abs_k"]).mean(), "mean_log_k_INH": np.log(neurons_df[neurons_df["type"] == "INH"]["abs_k"]).mean()}
         for cluster in [1, 2]:
             for n_type in ["EXC", "INH"]:
                 # Count of neurons in the given cluster and type
@@ -278,6 +422,9 @@ def get_general_cluster_parameters(recs, normalized_by_max=True, clustering_meth
                             if estimator == "mean":
                                 value = cluster_df[condition][param].mean()
                             elif estimator == "std":
+                                # if len(cluster_df[condition]) == 1:
+                                #     value = 0.0
+                                # else:
                                 value = cluster_df[condition][param].std()
                         else:
                             value = np.nan
@@ -376,20 +523,31 @@ def features_selection(features_df, single_split=True, genotype="both", model_na
     fig.canvas.manager.set_window_title(f"Features importance [{genotype}]_{title_cv}[{model_name}]")
     plt.show()
 
+
 def features_behavior_corr(features_df, genotype="all"):
     if genotype in ["WT", "KO", "KO-Hypo"]:
         features_df = features_df[features_df["genotype"] == genotype]
+    elif genotype == "WT/KO":
+        features_df = features_df[features_df["genotype"].isin(["WT", "KO"])]
     colors = {"WT": ppt.wt_color, "KO": ppt.ko_color, "KO-Hypo": ppt.hypo_color, "all": "blueviolet"}
     signif_dfs = []
     for target in ["k_psy", "x0_psy"]:
-        fig, axes = plt.subplots(nrows=4, ncols=7, figsize=(25, 15), constrained_layout=True)
+        fig, axes = plt.subplots(nrows=4, ncols=9, figsize=(25, 15), constrained_layout=True)
         ax = axes.flatten()
         # Getting the column names containing the features to correlate with the targets
-        exclude_columns = ["ID", "genotype", "x", "x0_psy", "k_psy", "nb_exc", "nb_inh", "nb_neurons"]
+        # exclude_columns = ["ID", "genotype", "x", "x0_psy", "k_psy", "nb_exc", "nb_inh", "nb_neurons"]
+        exclude_columns = ["ID", "genotype", "x_psy", "y_psy", "x0_psy", "k_psy",
+                           "perc_act_EXC", "perc_inh_EXC", "perc_act_INH", "perc_inh_INH",
+                           "perc_act_EXC_x_sigmoid", "perc_act_EXC_y_sigmoid",
+                           "perc_inh_EXC_x_sigmoid", "perc_inh_EXC_y_sigmoid",
+                           "perc_act_INH_x_sigmoid", "perc_act_INH_y_sigmoid",
+                           "perc_inh_INH_x_sigmoid", "perc_inh_INH_y_sigmoid"]
+        # exclude_columns = ["ID", "genotype", "x", "x0_psy", "k_psy", "nb_exc", "nb_inh", "nb_neurons", "mean_abs_k_1_EXC", "std_abs_k_1_EXC", "mean_x0_1_EXC", "std_x0_1_EXC", "mean_log_k_1_EXC", "std_log_k_1_EXC", "n_1_INH", "mean_abs_k_1_INH", "std_abs_k_1_INH", "mean_x0_1_INH", "std_x0_1_INH", "mean_log_k_1_INH", "std_log_k_1_INH", "n_1_EXC"]
         features_columns_list = [col for col in features_df.columns if col not in exclude_columns]
         # For each feature, compute and plot the correlation with the target
         signif_rows = []
         for ax_id, feature_col in enumerate(features_columns_list):
+            print(feature_col)
             feat_na_df = features_df.dropna(subset=[feature_col])
             # Compute linear regression for the best fit line
             slope, intercept, r_value, p_value, std_err = stats.linregress(feat_na_df[feature_col], feat_na_df[target])
@@ -421,7 +579,33 @@ def features_behavior_corr(features_df, genotype="all"):
     return k_psy_df, x0_psy_df
 
 
-def plot_neuron_clustering(recs, method, type="EXC"):
+def mlr_behavior_corr(features_df, genotype="all", target="x0_psy", features=[], regul=False, intercept=True, verbose=True):
+    if genotype in ["WT", "KO", "KO-Hypo"]:
+        features_df = features_df[features_df["genotype"] == genotype]
+    elif genotype == "WT/KO":
+        features_df = features_df[features_df["genotype"].isin(["WT", "KO"])]
+    target = features_df[target]
+    X = features_df[features]
+    if intercept:
+        # Add a constant term to include an intercept in the model
+        X = sm.add_constant(X)
+    model = sm.OLS(target, X)
+    results = model.fit()
+    if regul:
+        results = model.fit_regularized(method="elastic_net", alpha=1.0)
+        print(results.params) if verbose else None
+    else:
+        # Print the full summary which includes R-squared, coefficients, p-values, etc.
+        print(results.summary()) if verbose else None
+        # Alternatively, extract specific values:
+        # r_squared = results.rsquared
+        coefficients = results.params
+        # p_values = results.pvalues
+        # print(f"- r2: {r_squared:.3f} \n- pval: {p_values} \n- {coefficients}")
+        return coefficients
+
+
+def plot_neuron_clustering(recs, method, type="EXC", normalized_by_max=True):
     assert type in ["EXC", "INH", "EXC/INH"], "Please provide a valid neuron type (EXC, INH)"
     cluster_colors_EXC = {0: "pink", 1: "blueviolet", 2: "magenta"}
     cluster_colors_INH = {0: "#c0ffc3", 1: "#004200", 2: "lime"}
@@ -434,13 +618,14 @@ def plot_neuron_clustering(recs, method, type="EXC"):
         ax.plot(x_psy, y_psy, color="black", lw=2)
         # If the detection threshold lies between 0 and 12µm, it is plotted on the graph and x0 is displayed
         if x0_psy < 1:
-            ax.text(x0_psy, -0.125, f"{x0_psy * 11:.2f}µm", color="black", ha='center', fontsize=10)
+            ax.text(x0_psy, -0.125, f"{x0_psy * 12:.2f}µm", color="black", ha='center', fontsize=10)
             # Plot a vertical dashed line at x0_psy, from y=0 to f(x0_psy)
             y_at_x0 = np.interp(x0_psy, x_psy, y_psy)
             ax.vlines(x=x0_psy, ymin=0, ymax=y_at_x0, colors="black", linestyles='dashed', lw=1)
         # Plotting the individual neurons curves
-        all_neurons = compute_neurons_tuning(rec)
-        nb_neurons_df = all_neurons["type"].value_counts()
+        neuron_zsc_by_amp_df = zscore_by_amp_df(rec)
+        all_neurons = compute_sigmoid_df(neuron_zsc_by_amp_df, columns=["zscore_by_amp"], norm_by_max=normalized_by_max)
+        nb_neurons_df = all_neurons["n_type"].value_counts()
         nb_exc = nb_neurons_df["EXC"]
         nb_inh = nb_neurons_df["INH"]
         nb_neurons = nb_exc + nb_inh
@@ -449,18 +634,18 @@ def plot_neuron_clustering(recs, method, type="EXC"):
             neurons = all_neurons.copy()
             cluster_df = cluster_neurons(neurons, method=method)
             for idx, neuron in cluster_df.iterrows():
-                n_type = neuron["type"]
+                n_type = neuron["n_type"]
                 ax.plot(neuron["x_sigmoid"], neuron["y_sigmoid"], color=eval(f"cluster_colors_{n_type}[neuron['{method}_cluster']]"), lw=1, alpha=0.75)
             ax.set_title(f"{rec.filename} ({rec.genotype}) - {rec.threshold}", color=genotype_colors[rec.genotype], fontsize=12, fontweight="bold")
             # Plotting the generalization of the neuronal activity
-            mean_x0_exc = cluster_df[(cluster_df[f"{method}_cluster"] == 1) & (cluster_df["type"] == "EXC")]["x0"].mean()
-            mean_x0_inh = cluster_df[(cluster_df[f"{method}_cluster"] == 1) & (cluster_df["type"] == "INH")]["x0"].mean()
-            mean_k_exc = cluster_df[(cluster_df[f"{method}_cluster"].isin([1, 2])) & (cluster_df["type"] == "EXC")]["abs_k"].mean()
-            mean_k_inh = cluster_df[(cluster_df[f"{method}_cluster"].isin([1, 2])) & (cluster_df["type"] == "INH")]["abs_k"].mean()
+            mean_x0_exc = cluster_df[(cluster_df[f"{method}_cluster"] == 1) & (cluster_df["n_type"] == "EXC")]["x0"].mean()
+            mean_x0_inh = cluster_df[(cluster_df[f"{method}_cluster"] == 1) & (cluster_df["n_type"] == "INH")]["x0"].mean()
+            mean_k_exc = cluster_df[(cluster_df[f"{method}_cluster"].isin([1, 2])) & (cluster_df["n_type"] == "EXC")]["abs_k"].mean()
+            mean_k_inh = cluster_df[(cluster_df[f"{method}_cluster"].isin([1, 2])) & (cluster_df["n_type"] == "INH")]["abs_k"].mean()
             mean_x0 = mean_x0_exc * (nb_exc/nb_neurons) - mean_x0_inh * (nb_inh/nb_neurons)
             mean_k = mean_k_exc * (nb_exc/nb_neurons) - mean_k_inh * (nb_inh/nb_neurons)
         else:
-            neurons = all_neurons.loc[all_neurons["type"] == type].copy()
+            neurons = all_neurons.loc[all_neurons["n_type"] == type].copy()
             cluster_df = cluster_neurons(neurons, method=method)
             for idx, neuron in cluster_df.iterrows():
                 ax.plot(neuron["x_sigmoid"], neuron["y_sigmoid"], color=eval(f"cluster_colors_{type}[neuron['{method}_cluster']]"), lw=1, alpha=0.75)
@@ -472,6 +657,94 @@ def plot_neuron_clustering(recs, method, type="EXC"):
         ax.plot(x_psy, mean_y, lw=2, color="red")
     fig.suptitle(f"{type} neurons clustering - method: {method}", fontsize=14)
     fig.canvas.manager.set_window_title(f"{type} Neurons clustering[{method}]")
+    plt.show()
+
+
+def plot_model(features_df, genotype="all", verbose=False):
+    colors = {"WT": ppt.wt_color, "KO": ppt.ko_color, "KO-Hypo": ppt.hypo_color, "all": "blueviolet", "WT/KO": "blue"}
+    # Predicting the curve parameters from specific features
+    features_df["cst"] = 1
+    # x0_features = ["cst", "mean_abs_k_1_EXC", "mean_x0_2_EXC", "std_x0_2_EXC", "mean_abs_k_2_INH"]
+    x0_features = ["cst", "mean_x0_2_EXC", "std_x0_2_EXC"]
+    x0_coef = mlr_behavior_corr(features_df, genotype=genotype, target="x0_psy",
+                                features=x0_features,
+                                regul=False, intercept=True, verbose=verbose)
+    k_features = ["cst", "std_abs_k_1_EXC", "std_abs_k_2_EXC"]
+    k_coef = mlr_behavior_corr(features_df, genotype=genotype, target="k_psy",
+                               features=k_features,
+                               regul=False, intercept=True, verbose=verbose)
+    features_df["x0_neurons"] = features_df[x0_features].dot(x0_coef)
+    features_df["k_neurons"] = features_df[k_features].dot(k_coef)
+    # Defining the structure of the figure
+    fig = plt.figure(figsize=(24, 20), constrained_layout=True)
+    outer_spec = fig.add_gridspec(nrows=5, ncols=8)
+    left_spec = gridspec.GridSpecFromSubplotSpec(nrows=5, ncols=2, subplot_spec=outer_spec[:, 0:2])
+    axes_left = {"x0": [], "k": []}
+    for col_idx, param in enumerate(["x0", "k"]):
+        ax_all = fig.add_subplot(left_spec[0:2, col_idx])
+        ax_WT = fig.add_subplot(left_spec[2, col_idx])
+        ax_KO_Hypo = fig.add_subplot(left_spec[3, col_idx])
+        ax_KO = fig.add_subplot(left_spec[4, col_idx])
+        axes_left[param] = [ax_all, ax_WT, ax_KO_Hypo, ax_KO]
+    geno_labels = ["all", "WT", "KO-Hypo", "KO"]
+    for param in ["x0", "k"]:
+        for ax_corr, geno in zip(axes_left[param], geno_labels):
+            # Select data subset
+            if geno == "all":
+                feat_df = features_df
+            else:
+                feat_df = features_df[features_df["genotype"] == geno]
+            # === Plotting the correlation between the real and predicted threshold ===
+            # Compute linear regression for the best fit line
+            slope, intercept, r_value, p_value, std_err = stats.linregress(feat_df[f"{param}_psy"], feat_df[f"{param}_neurons"])
+            r2 = r_value ** 2
+            line = slope * feat_df[f"{param}_psy"] + intercept
+            # Plot the data points and regression line
+            ax_corr.plot(feat_df[f"{param}_psy"], line, color=colors[geno], lw=2)
+            for g in features_df["genotype"].unique():
+                group = features_df[features_df["genotype"] == g]
+                sc = ax_corr.scatter(group[f"{param}_psy"], group[f"{param}_neurons"], color=colors[g], alpha=0.7, label=g, s=10, marker="+")
+                # Save the IDs for this group so that they can be accessed in the callback.
+                ids = group["ID"].values
+                mplcursors.cursor(sc, hover=True).connect("add", lambda sel, ids=ids: (sel.annotation.set_text(f"ID: {ids[sel.index]}"), sel.annotation.set_fontsize(8)))
+            # Annotate the plot with R² and p-value
+            ax_corr.text(0.05, 0.95, f"$r^2 = {r2:.3f}$\np-value = {p_value:.3f}", transform=ax_corr.transAxes, fontsize=10, verticalalignment='top', color=colors[geno])
+            ax_corr.set_title(f"Computed {param} vs. actual {param} [{geno}]", fontsize=10)
+            ax_corr.set_xticklabels(ax_corr.get_xticklabels(), fontsize=8)
+            ax_corr.set_yticklabels(ax_corr.get_yticklabels(), fontsize=8)
+    # === For each animal, plotting the psychometric curve and the curve computed from neural activity ===
+    right_spec = gridspec.GridSpecFromSubplotSpec(nrows=5, ncols=6, subplot_spec=outer_spec[:, 2:])
+    ax_recs = []
+    # right_spec has 5 rows x 6 columns = 30 cells; we only need 26.
+    for i in range(5):
+        for j in range(6):
+            if len(ax_recs) < 26:
+                ax = fig.add_subplot(right_spec[i, j])
+                ax_recs.append(ax)
+            else:
+                break
+    for ax, (index, row) in zip(ax_recs, features_df.iterrows()):
+        for origin, color, y_lab in zip(["psy", "neurons"], ["black", "red"], [-0.125, -0.185]):
+            # Plotting the curve
+            y = 1 / (1 + np.exp(-row[f"k_{origin}"] * (row["x"] - row[f"x0_{origin}"])))
+            ax.plot(row["x"], y, color=color, lw=2)
+            # If the detection threshold lies between 0 and 12µm, it is plotted on the graph and x0 is displayed
+            if 0 < row[f"x0_{origin}"] < 1:
+                ax.text(row[f"x0_{origin}"], y_lab, f"{row[f"x0_{origin}"] * 12:.2f}µm", color=color, ha='center', fontsize=8, transform=ax.transAxes)
+                # Plot a vertical dashed line at x0, from y=0 to f(x0)
+                y_at_x0 = np.interp(row[f"x0_{origin}"], row["x"], y)
+                ax.vlines(x=row[f"x0_{origin}"], ymin=0, ymax=y_at_x0, colors=color, linestyles='dashed', lw=1)
+            else:
+                ax.text(1 if row[f"x0_{origin}"] > 1 else 0, y_lab, f"{row[f"x0_{origin}"] * 12:.2f}µm", color=color, ha='center', fontsize=8)
+        ax.text(0.05, 0.95, f"k = {row[f"k_psy"]:.2f}", transform=ax.transAxes, fontsize=8, verticalalignment='top', color="black")
+        ax.text(0.05, 0.90, f"k = {row[f"k_neurons"]:.2f}", transform=ax.transAxes, fontsize=8, verticalalignment='top', color="red")
+        ax.set_title(f"{row["ID"]} ({row["genotype"]})", color=colors[row["genotype"]], fontsize=12, fontweight="bold")
+        ax.set_xticklabels(ax.get_xticklabels(), fontsize=8)
+        ax.set_yticklabels(ax.get_yticklabels(), fontsize=8)
+    fig.suptitle(f"Predicting psychometric curve from neuronal activity (model trained on {genotype} mice)", fontsize=12)
+                 # f"\nx0 predicted from [{x0_coef}]\n"
+                 # f"k predicted from [{k_coef}]", fontsize=12)
+    fig.canvas.manager.set_window_title(f"Behavior_pred_from_neur_{genotype}")
     plt.show()
 
 
@@ -623,6 +896,7 @@ def sigmoid_fit(xdata, ydata):
     y = sigmoid(x, *popt)
     return x, y, popt[0], popt[1]
 
+
 def group_tuning_comp(recs, normalize=False):
     dtype = [("ID", "str"), ("Genotype", "str"),
              ("0_nb", "int"), ("0_mean_x0", "float"), ("0_std_x0", "float"), ("0_mean_k", "float"), ("0_std_k", "float"),
@@ -631,6 +905,86 @@ def group_tuning_comp(recs, normalize=False):
     array = np.empty(0, dtype=dtype)
 
 
+def plot_sigm_act_inh(recs, normalized_by_max=True):
+    color_dict = {"EXC": ["darkblue", "skyblue"], "INH": ["red", "orange"]}
+    fig, axes = plt.subplots(nrows=5, ncols=6, sharex=True, sharey=True, figsize=(24, 20), constrained_layout=True)
+    axes_flat = axes.flatten()
+    for rec, ax in zip(recs, axes_flat):
+        # Computing the sigmoid curve for each neuron
+        neuron_df = zscore_by_amp_df(rec)
+        sigm_df = compute_sigmoid_df(neuron_df, columns=["zscore_by_amp"], norm_by_max=normalized_by_max)
+        for idx, neuron in sigm_df.iterrows():
+            ax.plot(neuron["x"], neuron["y"], color=color_dict[neuron["type"]][0], lw=1, alpha=0.75)
+            # ax.plot(neuron["x_act"], neuron["y_act"], color=color_dict[neuron["type"]][0], lw=1, alpha=0.75)
+            # ax.plot(neuron["x_inh"], neuron["y_inh"], color=color_dict[neuron["type"]][1], lw=1, alpha=0.75)
+        ax.set_title(f"{rec.filename} ({rec.genotype})")
+    plt.show()
+
+
+def compute_perc_act_inh_df(recs):
+    rows = []
+    for rec in recs:
+        x_psy, y_psy, x0_psy, k_psy = sigmoid_fit(np.array(np.linspace(0, 1, 7)), rec.hit_rates)
+        row = {"ID": rec.filename, "genotype": rec.genotype, "x_psy": x_psy, "y_psy": y_psy, "x0_psy": x0_psy, "k_psy": k_psy}
+        for n_type in ["EXC", "INH"]:
+            resp_mat = np.array(rec.matrices[n_type]["Responsivity"])
+            nb_neurons = resp_mat.shape[0]
+            act_perc = []
+            inh_perc = []
+            # Getting the percentage of activated and inhibited neurons per amplitude
+            for amp in range(0, 13, 2):
+                resp_amp = resp_mat[:, rec.stim_ampl == amp]
+                mean_act = np.mean(np.sum(resp_amp == 1, axis=0)) / nb_neurons
+                mean_inh = np.mean(np.sum(resp_amp == -1, axis=0)) / nb_neurons
+                act_perc.append(mean_act)
+                inh_perc.append(mean_inh)
+            row[f"perc_act_{n_type}"] = act_perc
+            row[f"perc_inh_{n_type}"] = inh_perc
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def plot_perc_act_inh(act_inh_sigm_df):
+    fig, axes = plt.subplots(nrows=5, ncols=6, figsize=(24, 20), constrained_layout=True)
+    axes_flat = axes.flatten()
+    for (id, row), ax in zip(act_inh_sigm_df.iterrows(), axes_flat):
+        ax.plot(row.x_psy, row.y_psy, color="black", lw=2)
+        ax.plot(row.x_psy, row.perc_act_EXC_y_sigmoid, color="darkblue", lw=1)
+        ax.plot(row.x_psy, row.perc_inh_EXC_y_sigmoid, color="skyblue", lw=1)
+        ax.plot(row.x_psy, row.perc_act_INH_y_sigmoid, color="red", lw=1)
+        ax.plot(row.x_psy, row.perc_inh_INH_y_sigmoid, color="orange", lw=1)
+        ax.set_title(f"{row.ID} - {row.genotype}")
+    fig.suptitle(f"Percentage of responsive neurons across amplitudes")
+    fig.canvas.manager.set_window_title("Perc resp amp")
+    plt.show()
+
+
+def plot_act_inh_behavior_corr(act_inh_sigm_df, genotype=["KO", "KO-Hypo", "WT"]):
+    colors = {"WT": ppt.wt_color, "KO": ppt.ko_color, "KO-Hypo": ppt.hypo_color}
+    data = act_inh_sigm_df[act_inh_sigm_df.genotype.isin(genotype)]
+    fig, ax = plt.subplots(nrows=2, ncols=4, figsize=(16, 10), constrained_layout=True)
+    for i, target_str in enumerate(["x0", "k"]):
+        for j, variable_str in enumerate(["perc_act_EXC", "perc_inh_EXC", "perc_act_INH", "perc_inh_INH"]):
+            target = f"{target_str}_psy"
+            variable = f"{variable_str}_{target_str}"
+            # Computing the correlation
+            slope, intercept, r_value, p_value, std_err = stats.linregress(data[variable], data[target])
+            r2 = r_value ** 2
+            line = slope * data[variable] + intercept
+            # Plot the data points and regression line
+            ax[i, j].plot(data[variable], line, color="black", lw=1)
+            for g in data["genotype"].unique():
+                group = data[data["genotype"] == g]
+                sc = ax[i, j].scatter(group[variable], group[target], color=colors[g], alpha=0.7, label=g, s=10, marker="+")
+                # Save the IDs for this group so that they can be accessed in the callback.
+                ids = group["ID"].values
+                mplcursors.cursor(sc, hover=True).connect("add", lambda sel, ids=ids: (sel.annotation.set_text(f"ID: {ids[sel.index]}"), sel.annotation.set_fontsize(8)))
+            ax[i, j].set_xlabel(variable)
+            ax[i, j].set_ylabel(target)
+            ax[i, j].text(0.05, 0.95, f"$r^2 = {r2:.3f}$\np-value = {p_value:.3f}", transform=ax[i, j].transAxes, fontsize=10, verticalalignment='top')
+    fig.suptitle(f"Correlation of the percentage of x0 and k of the percentage of responsive neurons with behavior for {genotype}")
+    fig.canvas.manager.set_window_title(f"Corr x0 and k resp behavior {genotype}")
+    plt.show()
 
 
 if __name__ == '__main__':
@@ -657,12 +1011,44 @@ if __name__ == '__main__':
     # test_neurons = compute_neurons_tuning(recs[5886])
     # exc_neurons = test_neurons.loc[test_neurons["type"] == "EXC"].copy()
     # test_cluster_5886 = cluster_neurons(exc_neurons, method="manual")
-    plot_neuron_clustering(recs.values(), method="manual", type="EXC/INH")
-    features_df = get_general_cluster_parameters(recs.values(), normalized_by_max=True, clustering_method="manual")
+
+    # plot_neuron_clustering(recs.values(), method="manual", type="EXC/INH", normalized_by_max=True)
+    # features_df = get_general_cluster_parameters(recs.values(), normalized_by_max=False, clustering_method="manual")
     # features_selection(features_df, single_split=False, genotype="all", model_name="forest")
-    k_psy_df, x0_psy_df = features_behavior_corr(features_df, genotype="all")
-    k_psy_df_wt, x0_psy_df_wt = features_behavior_corr(features_df, genotype="WT")
-    k_psy_df_ko, x0_psy_df_ko = features_behavior_corr(features_df, genotype="KO-Hypo")
+
+    # k_psy_df, x0_psy_df = features_behavior_corr(features_df, genotype="all")
+    # k_psy_df_wt, x0_psy_df_wt = features_behavior_corr(features_df, genotype="WT")
+    # k_psy_df_hypo, x0_psy_df_hypo = features_behavior_corr(features_df, genotype="KO-Hypo")
+    # k_psy_df_ko, x0_psy_df_ko = features_behavior_corr(features_df, genotype="KO")
+
+    # coef = mlr_behavior_corr(features_df, genotype="KO-Hypo", target="x0_psy",
+    #                          features=["mean_x0_1_EXC", "n_1_EXC", "mean_abs_k_EXC",
+    #                                    "mean_x0_2_EXC"],
+    #                          regul=False, intercept=True)
+    #
+    # plot_model(features_df, genotype="KO-Hypo", verbose=True)
+    #
+    # plot_sigm_act_inh(recs.values(), normalize=True)
+
+    all_consistency_long = compute_consistency_features(recs.values(), long_format=True)
+    no_ko_consistency = all_consistency_long.copy()[all_consistency_long["genotype"] != "KO"]
+    test_exc, post_exc, test_inh, post_inh = plot_consistency(no_ko_consistency, transformation=None)
+
+    act_inh_df = compute_perc_act_inh_df(recs.values())
+    act_inh_sigm = compute_sigmoid_df(act_inh_df, columns=["perc_act_EXC", "perc_act_INH", "perc_inh_EXC", "perc_inh_INH"], norm_by_max=True)
+    k_psy_df, x0_psy_df = features_behavior_corr(act_inh_sigm, genotype="WT")
+    plot_perc_act_inh(act_inh_sigm)
+    plot_act_inh_behavior_corr(act_inh_sigm, genotype=["WT"])
+
+
+    # Checking the proportions of neurons activated/inhibited
+    # rows = []
+    # for rec in recs.values():
+    #     neurons_df = zscore_by_amp_df(rec)
+    #     rows.append({"ID": rec.filename, "activated": neurons_df["activated"].sum(),
+    #                  "inhibited": neurons_df["inhibited"].sum(),
+    #                  "both": neurons_df[(neurons_df["activated"]) & (neurons_df["inhibited"])].shape[0]})
+    # rows = pd.DataFrame(rows)
 
 
     # neural tuning curves for individuals neurons
