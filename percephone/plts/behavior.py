@@ -872,30 +872,6 @@ def decrease_activity(neur_act):
         return False
 
 
-def sigmoid_fit(xdata, ydata):
-    def sigmoid(x, x0, k):
-        y = 1 / (1 + np.exp(-k * (x - x0)))
-        return y
-
-    def sigmoid_Hill(x, n, k):
-        y = (x ** n) / (x ** n + k ** n)
-        # y = 1/(1+(k/x)**n)
-        return y
-
-    popt, pcov = curve_fit(sigmoid, xdata, ydata, maxfev=100000)
-    fix_value = xdata[-1]  # + 1
-    # slope, intercept = np.polyfit(x, y, 1)
-    # slope = float("{:.2f}".format(slope))
-    # Get r2 score
-    xdata = xdata.astype(float)
-    # y_pred = sigmoid(xdata, *popt)
-    # r2 = r2_score(ydata, y_pred)
-    # liste_r2.append(r2)
-
-    x = np.linspace(0, fix_value, 50)
-    y = sigmoid(x, *popt)
-    return x, y, popt[0], popt[1]
-
 
 def group_tuning_comp(recs, normalize=False):
     dtype = [("ID", "str"), ("Genotype", "str"),

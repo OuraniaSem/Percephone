@@ -12,12 +12,13 @@ import warnings
 
 import mplcursors
 import numpy as np
-from scipy.stats import levene, shapiro
+from scipy.stats import levene, shapiro, mannwhitneyu, yeojohnson, boxcox
 import pingouin as pg
 import statsmodels.api as sm
 
 from percephone.plts.style import *
 from percephone.plts.utils import *
+from percephone.utils.math_formulas import inv_transform, arcsin_transform
 
 mpl.rcParams["axes.grid"] = False
 # mpl.rcParams['font.size'] = 35
@@ -540,7 +541,7 @@ def boxplot_3_conditions(group1_data, group2_data, cond_labels=["A", "B", "C"],
 
 
 def curveplot(ax, data, between="Genotype", within="Trial", variable=None,
-              title=None, ylabel=None, xlabel=None, ylim=None, colors=None, id_display=True, qq_show=True,
+              title=None, ylabel=None, xlabel=None, ylim=None, colors=None, id_display=True, legend_display=True, qq_show=True,
               transformation=None, consider_normality=False, consider_homogeneity=False):
     """
     Plot the evolution of a variable across different measurements for different groups, and perform the
@@ -581,10 +582,11 @@ def curveplot(ax, data, between="Genotype", within="Trial", variable=None,
     -------
 
     """
+    global norm_pval_trans
     groups_names = sorted(data[between].unique())
     nb_groups = len(groups_names)
     measurements = sorted(data[within].unique())
-    nb_subjetcs = len(data["ID"].unique())
+    nb_subjects = len(data["ID"].unique())
     assert len(measurements) > 1, "Please provide a dataset with at least 2 measurements."
     # Defining colors if not provided
     if colors:
@@ -623,13 +625,15 @@ def curveplot(ax, data, between="Genotype", within="Trial", variable=None,
     for group, color in zip(groups_names, colors):
         mean_group = [np.nanmean(data[(data[between] == group) & (data[within] == measure)][variable].values) for measure in measurements]
         ax.plot(measurements, mean_group, color=color, label=f"Mean {group}")
-    cursor = mplcursors.cursor(ax.lines, hover=True)
-    cursor.connect("add", lambda sel: sel.annotation.set_text(sel.artist.get_label()))
+    if legend_display:
+        ax.legend()
+    else:
+        cursor = mplcursors.cursor(ax.lines, hover=True)
+        cursor.connect("add", lambda sel: sel.annotation.set_text(sel.artist.get_label()))
     # Setting the title, axis labels
     ax.set_title(title)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
-    ax.legend()
     # Setting the ylim
     min_data = np.nanmin(data[variable])
     max_data = np.nanmax(data[variable])
@@ -643,49 +647,67 @@ def curveplot(ax, data, between="Genotype", within="Trial", variable=None,
     # --- Checking if the assumptions are met ---
     # Testing the normality of the whole dataset
     variable_col = variable
-    norm_pval = normality_check(data[variable_col], title=variable_col, plot=qq_show)
-    test_norm = f"Shapiro-Wilk ➜ {norm_pval:.3f}"
-    normality = norm_pval > 0.05
+    # if only one group, its normality is assessed
+    if nb_groups == 1:
+        norm_pval = normality_check(data[variable_col], title=variable_col, plot=qq_show)
+        test_norm = f"Shapiro-Wilk ➜ {norm_pval:.3f}"
+        normality = norm_pval > 0.05
+    # if several groups, the normality and homocedasticity of the residuals is assessed
+    else:
+        data["predicted"] = data.groupby([between, within])[variable_col].transform("mean")
+        data["residuals"] = data[variable_col] - data["predicted"]
+        norm_pval = normality_check(data["residuals"], title=f"{variable_col}_residuals", plot=qq_show)
+        test_norm = f"Shapiro-Wilk (residuals) ➜ {norm_pval:.3f}"
+        normality = norm_pval > 0.05
+        homogen_pval = levene(*[data[data[between] == group]["residuals"] for group in groups_names]).pvalue
+        homogeneity = True if (homogen_pval > 0.05 or consider_homogeneity) else False
+        test_homogen = f"Levene (residuals) ➜ {homogen_pval:.3f}"
+
     # First solution would be to explore the transformation of the data, because it's always better to use
     # parametric tests whenever it's doable (don't stick to strict statistical tests to assess whether
     # the data is normal or not)
-    if not normality or transformation:
-        trans_dict = {"log": "np.log(data[variable])",  # Compressing scale for high values (right skewness)
-                      "log1p": "np.log1p(data[variable])",  # Shifted log(1+x) to handle 0 values
-                      "sqrt": "np.sqrt(data[variable])",  # For count data or moderately skewed data
-                      "inv": "1 / data[variable]",  # Good for high skewness but exaggerate != for small values
-                      "arcsin": "np.arcsin(np.sqrt(np.divide(data[variable], 100) if np.nanmax(data[variable]) > 1 else data[variable]))",  # Percentage/proportion data, reduces variance
-                      "boxcox": "boxcox(data[variable])",  # data > 0, often achieve normality if the data follow a power-law type relationship
-                      "yeojohnson": "yeojohnson(data[variable])"}  # like boxcox but no need to be > 0
-        if transformation:
-            assert transformation in trans_dict.keys(), f"Please use one of the following transformation: {trans_dict.keys()}"
-
-            variable_col = f"{transformation}_{variable}"
-            if transformation == "boxcox" or transformation == "yeojohnson":
-                data[variable_col], fitted_lambda = eval(trans_dict[transformation])
-                print(f"Fitted lambda for {variable}: {fitted_lambda}")
-            else:
-                data[variable_col] = eval(trans_dict[transformation])
+    if transformation:
+        trans_functions = {
+            "log": np.log,  # Compressing scale for high values (right skewness)
+            "log1p": np.log1p,  # Shifted log(1+x) to handle 0 values
+            "sqrt": np.sqrt,  # For count data or moderately skewed data
+            "inv": inv_transform,  # Good for high skewness but exaggerate != for small values
+            "arcsin": arcsin_transform,  # Percentage/proportion data, reduces variance
+        }
+        valid_transforms = list(trans_functions.keys()) + ["boxcox", "yeojohnson"]
+        assert transformation in valid_transforms, f"Please use one of the following transformation: {valid_transforms}"
+        variable_col = f"{transformation}_{variable}"
+        # Applying the transformation
+        if transformation in ["boxcox", "yeojohnson"]:
+            if transformation == "boxcox": # data > 0, often achieve normality if the data follow a power-law type relationship
+                transformed, fitted_lambda = boxcox(data[variable])
+            else:  # yeojohnson, like boxcox but no need to be > 0
+                transformed, fitted_lambda = yeojohnson(data[variable])
+            data[variable_col] = transformed
+            print(f"Fitted lambda for {variable}: {fitted_lambda}")
+        else:
+            data[variable_col] = trans_functions[transformation](data[variable])
+        # Assessing the normality and homocedasticity after transformation
+        if nb_groups == 1:
             norm_pval_trans = normality_check(data[variable_col], title=variable_col, plot=qq_show)
-            test_norm = test_norm + f"/{norm_pval_trans:.3f} (after {transformation} transform)"
-            normality = norm_pval_trans > 0.05
+        else:
+            data["predicted_trans"] = data.groupby([between, within])[variable_col].transform("mean")
+            data["residuals_trans"] = data[variable_col] - data["predicted_trans"]
+            norm_pval_trans = normality_check(data["residuals_trans"], title=f"{variable_col}_residuals", plot=qq_show)
+            homogen_pval_trans = levene(*[data[data[between] == group]["residuals_trans"] for group in groups_names]).pvalue
+            homogeneity = True if (homogen_pval_trans > 0.05 or consider_homogeneity) else False
+            test_homogen += f"/{homogen_pval_trans:.3f} (after {transformation} transform)"
+        test_norm = test_norm + f"/{norm_pval_trans:.3f} (after {transformation} transform)"
+        normality = norm_pval_trans > 0.05
 
+    # Option to overwrite the normality assumption
     if consider_normality: normality = True
 
-    # Testing the homogeneity of variance between the groups
-    if nb_groups > 1:
-        homogen_pval = levene(*[data.loc[data[between] == gp, variable_col] for gp in groups_names]).pvalue
-        homogeneity = True if (homogen_pval > 0.05 or consider_homogeneity) else False
-        test_homogen = f"Levene ➜ {homogen_pval:.3f}"
-    # Testing sphericity for each group, use Greenhouse–Geisser correction if not met
-    sphericity_rows = []
-    for group in groups_names:
-        gp_data = data[data[between] == group]
-        sphericity = pg.sphericity(gp_data, dv=variable_col, within=within, subject="ID")
-        sphericity_rows.append({"Group": group, "sphericity": sphericity.spher, "spher_pval": sphericity.pval})
-    sphericity_df = pd.DataFrame(sphericity_rows)
-    sphericity = sphericity_df["sphericity"].all()
-    print(sphericity_df)
+    # Testing sphericity, use Greenhouse–Geisser correction if not met
+    sphericity_pval = pg.sphericity(data, dv="residuals" if not transformation else "residuals_trans", within=within, subject="ID").pval
+    sphericity = sphericity_pval > 0.05
+    GG_col = "p-unc" if sphericity else "p-GG-corr"
+    GG_note = "" if sphericity else "[GG corrected]"
 
     # --- Performing the appropriate tests ---
     post_hoc_dict = {}
@@ -694,9 +716,9 @@ def curveplot(ax, data, between="Genotype", within="Trial", variable=None,
             # Performing the mixed ANOVA
             test_results = pg.mixed_anova(data=data, dv=variable_col, between=between, within=within, subject="ID")
             p_val_between = test_results[test_results["Source"] == between]["p-unc"].iloc[0].astype(float)
-            p_val_within = test_results[test_results["Source"] == within]["p-unc" if sphericity else "p-GG-corr"].iloc[0].astype(float)
-            p_val_inter = test_results[test_results["Source"] == "Interaction"]["p-unc" if sphericity else "p-GG-corr"].iloc[0].astype(float)
-            test_stats = f"Mixed ANOVA ➜ between: {p_val_between:.3f} - within: {p_val_within:.3f}{"[GG corrected]" if not sphericity else ""} - interaction: {p_val_inter:.3f}{"[GG corrected]" if not sphericity else ""}"
+            p_val_within = test_results[test_results["Source"] == within][GG_col].iloc[0].astype(float)
+            p_val_inter = test_results[test_results["Source"] == "Interaction"][GG_col].iloc[0].astype(float)
+            test_stats = f"Mixed ANOVA ➜ between: {p_val_between:.3f} - within: {p_val_within:.3f}{GG_note} - interaction: {p_val_inter:.3f}{GG_note}"
         else:
             variable_col = variable
             # TODO: implement the case of non-normality
@@ -712,7 +734,7 @@ def curveplot(ax, data, between="Genotype", within="Trial", variable=None,
                 test_stats += f"Mann-Whitney U (between) ➜ {p_val_between:.3f} - Friedman (within) ➜ "
                 # Using Friedman test to assess if there is a difference between the different measurements
                 for group in groups_names:
-                    if nb_subjetcs < 10 or len(measurements) < 6:
+                    if nb_subjects < 10 or len(measurements) < 6:
                         test_results[f"friedman_{group}"] = pg.friedman(data=data[data[between] == group], dv=variable, within=within, subject="ID", method="f")
                         p_val_within = test_results[f"friedman_{group}"]["p-unc"].iloc[0].astype(float)
                         test_stats += f"{group}(F): {p_val_within:.3f} "
@@ -724,7 +746,6 @@ def curveplot(ax, data, between="Genotype", within="Trial", variable=None,
             else:
                 test_stats += "Implement this case"
                 pass
-
 
         # Between which groups there is a difference, between which measurements in general and interaction of the 2 (T-tests / Mann-Whitney-U) TODO: Check for homogeneity as well
         post_hoc_dict["between"] = pg.pairwise_tests(data=data, dv=variable_col, between=between, within=within, subject="ID", padjust="bonf", parametric=normality)
@@ -739,7 +760,7 @@ def curveplot(ax, data, between="Genotype", within="Trial", variable=None,
             test_stats = f"RM ANOVA ➜ within: {p_val_within:.3f}{"[GG corrected]" if not sphericity else ""}"
         else:
             # Performing a Friedman Test
-            if nb_subjetcs < 10 or len(measurements) < 6:
+            if nb_subjects < 10 or len(measurements) < 6:
                 test_results = pg.friedman(data=data, dv=variable_col, within=within, subject="ID", method="f")
                 p_val_within = test_results["p-unc"].iloc[0].astype(float)
                 test_stats = f"Friedman F Test ➜ within: {p_val_within:.3f}"
@@ -752,8 +773,9 @@ def curveplot(ax, data, between="Genotype", within="Trial", variable=None,
 
     # Adding test results on the graph
     ax.text(x=0.01, y=0.97, s=test_stats, fontsize=8, transform=ax.transAxes, fontstyle="italic", color="gray", alpha=0.75)
-    ax.text(x=0.01, y=0.95, s=test_norm, fontsize=8, transform=ax.transAxes, fontstyle="italic", color="green" if norm_pval > 0.05 else ("teal" if transformation and norm_pval_trans > 0.05 else ("red" if normality else "orange")), alpha=0.5)
-    if nb_groups > 1: ax.text(x=0.01, y=0.93, s=test_homogen, fontsize=8, transform=ax.transAxes, fontstyle="italic", color="green" if homogen_pval > 0.05 else ("red" if homogeneity else "orange"), alpha=0.5)
+    ax.text(x=0.01, y=0.95, s=f"{test_norm}", fontsize=8, transform=ax.transAxes, fontstyle="italic", color="green" if norm_pval > 0.05 and not transformation else ("teal" if transformation and norm_pval_trans > 0.05 else ("red" if normality else "orange")), alpha=0.5)
+    if nb_groups > 1:
+        ax.text(x=0.01, y=0.93, s=f"{test_homogen}", fontsize=8, transform=ax.transAxes, fontstyle="italic", color="green" if homogen_pval > 0.05 and not transformation else ("teal" if transformation and homogen_pval_trans > 0.05 else ("red" if homogeneity else "orange")), alpha=0.5)
     return test_results, post_hoc_dict
 
 

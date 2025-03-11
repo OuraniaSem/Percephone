@@ -16,6 +16,8 @@ from percephone.utils.io import read_info, correction_drift_fluo, get_idx_frame_
 from percephone.analysis.response import resp_matrice, auc_matrice, delay_matrice, peak_matrices
 from percephone.analysis.mlr import mlr
 from percephone.analysis.mlr_models import classic_model
+from percephone.utils.math_formulas import sigmoid_fit
+
 matplotlib.use("Qt5Agg")
 plt.switch_backend("Qt5Agg")
 
@@ -71,6 +73,7 @@ class Recording:
         folder_name = os.path.basename(os.path.normpath(input_path)) + "/"
         rois = pd.read_excel(rois_path)
         self.filename, inhibitory_ids, self.sf, self.genotype, self.threshold, self.iti1_only, self.hit_rates = read_info(folder_name, rois)
+        _, _, self.session_threshold, self.slope = sigmoid_fit(np.arange(start=0, stop=13, step=2), self.hit_rates)
         self.input_path = input_path
         self.matrices = {"EXC": {}, "INH": {}}
 
