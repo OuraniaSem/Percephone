@@ -73,7 +73,9 @@ class Recording:
         folder_name = os.path.basename(os.path.normpath(input_path)) + "/"
         rois = pd.read_excel(rois_path)
         self.filename, inhibitory_ids, self.sf, self.genotype, self.threshold, self.iti1_only, self.hit_rates = read_info(folder_name, rois)
-        _, _, self.session_threshold, self.slope = sigmoid_fit(np.arange(start=0, stop=13, step=2), self.hit_rates)
+        _, _, self.x0_psy, self.k_psy = sigmoid_fit(np.arange(start=0, stop=13, step=2), self.hit_rates)
+        self.session_threshold = 2 * round(self.x0_psy / 2) if 0 < self.x0_psy < 12 else 12
+        self.session_threshold = 8 if self.filename == 6606 else self.session_threshold  # 0% hit rate at 6 (computed)
         self.input_path = input_path
         self.matrices = {"EXC": {}, "INH": {}}
 
@@ -695,6 +697,8 @@ class RecordingAmplDet(Recording):
 
         if stim_ampl == "threshold":
             amplitudes = self.threshold
+        if stim_ampl == "session_threshold":
+            amplitudes = self.session_threshold
         elif stim_ampl == "supra":
             amplitudes = all_ampl[all_ampl >= self.threshold]
         elif stim_ampl == "sub":
@@ -716,6 +720,24 @@ class RecordingAmplDet(Recording):
             pre_time = [time - (i + 1) for i in range(int(no_lick_period_duration * self.sf))]
             mask.append(not any(np.isin(pre_time, self.lick_time)))
         return mask
+
+    def get_perc_resp(self, pattern=1, n_type="EXC"):
+        assert n_type in ["EXC", "INH"], "Please provide a valid neuron type (EXC or INH)"
+        assert pattern in [-1, 0, 1], "Please provide a valid neuron type (-1, 0 or 1)"
+        resp_mat = np.array(self.matrices[n_type]["Responsivity"])
+        nb_neurons = self.zscore_exc.shape[0] if n_type == "EXC" else self.zscore_inh.shape[0]
+        count = np.sum(resp_mat == pattern, axis=0)
+        return count/nb_neurons * 100
+
+    def get_mean_param(self, pattern=1, n_type="EXC", parameter="Peak_amplitude"):
+        assert n_type in ["EXC", "INH"], "Please provide a valid neuron type (EXC or INH)"
+        assert pattern in [-1, 0, 1], "Please provide a valid neuron type (-1, 0 or 1)"
+        assert parameter in ["Peak_amplitude", "Peak_delay", "AUC"], "Please provide a valid parameter (Peak_amplitude or Peak_delay)"
+        resp_mat = np.array(self.matrices[n_type]["Responsivity"])
+        para_mat = np.array(self.matrices[n_type][parameter])
+        filtered_para_mat = np.where(resp_mat == pattern, para_mat, np.nan)
+        return np.nanmean(filtered_para_mat, axis=0)
+
 
 
 if __name__ == '__main__':

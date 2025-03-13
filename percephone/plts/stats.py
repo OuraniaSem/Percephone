@@ -15,18 +15,19 @@ import numpy as np
 from scipy.stats import levene, shapiro, mannwhitneyu, yeojohnson, boxcox
 import pingouin as pg
 import statsmodels.api as sm
+from statsmodels.nonparametric.smoothers_lowess import lowess
 
 from percephone.plts.style import *
 from percephone.plts.utils import *
 from percephone.utils.math_formulas import inv_transform, arcsin_transform
 
 mpl.rcParams["axes.grid"] = False
-# mpl.rcParams['font.size'] = 35
-# mpl.rcParams['axes.linewidth'] = 3
-# mpl.rcParams['lines.linewidth'] = 5
-mpl.rcParams['font.size'] = 10
-mpl.rcParams['axes.linewidth'] = 1
-mpl.rcParams['lines.linewidth'] = 1
+mpl.rcParams['font.size'] = 35
+mpl.rcParams['axes.linewidth'] = 3
+mpl.rcParams['lines.linewidth'] = 5
+# mpl.rcParams['font.size'] = 10
+# mpl.rcParams['axes.linewidth'] = 1
+# mpl.rcParams['lines.linewidth'] = 1
 font_signif = mpl.rcParams['font.size'] / 2
 
 mpl.rcParams["boxplot.whiskerprops.linewidth"] = 5
@@ -40,10 +41,10 @@ mpl.rcParams["boxplot.flierprops.linewidth"] = 5
 mpl.rcParams["xtick.labelsize"] = mpl.rcParams['font.size']
 mpl.rcParams["ytick.labelsize"] = mpl.rcParams['font.size']
 mpl.rcParams["axes.labelsize"] = mpl.rcParams['font.size']
-# mpl.rcParams["axes.titlesize"] = 20
-# mpl.rcParams["lines.markersize"] = 28
-mpl.rcParams["axes.titlesize"] = 12
-mpl.rcParams["lines.markersize"] = 8
+mpl.rcParams["axes.titlesize"] = 20
+mpl.rcParams["lines.markersize"] = 28
+# mpl.rcParams["axes.titlesize"] = 12
+# mpl.rcParams["lines.markersize"] = 8
 
 mpl.rcParams['svg.fonttype'] = 'none'
 
@@ -700,6 +701,11 @@ def curveplot(ax, data, between="Genotype", within="Trial", variable=None,
         test_norm = test_norm + f"/{norm_pval_trans:.3f} (after {transformation} transform)"
         normality = norm_pval_trans > 0.05
 
+    if nb_groups > 1:
+        resid_for_plot = data["residuals_trans"] if transformation and "residuals_trans" in data.columns else data["residuals"]
+        pred_for_plot = data["predicted_trans"] if transformation and "predicted_trans" in data.columns else data["predicted"]
+        homogeneity_check(predicted=pred_for_plot, residuals=resid_for_plot, title=variable_col)
+
     # Option to overwrite the normality assumption
     if consider_normality: normality = True
 
@@ -836,6 +842,22 @@ def normality_check(data, title="variable", plot=True):
         norm_fig.suptitle(f"Normality check for {title} \nShapiro-Wilk p-value = {p_value:.3f}")
         norm_fig.canvas.manager.set_window_title(f"Normality Check - {title}")
     return p_value
+
+
+def homogeneity_check(predicted, residuals, title="variable"):
+    standard_resid = (residuals - residuals.mean()) / residuals.std()
+    sqrt_standard_resid = np.sqrt(np.abs(standard_resid))
+    # Create a separate figure for the scale-location plot
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.scatter(predicted, sqrt_standard_resid, alpha=0.6)
+    # Compute the lowess smoothing line
+    smoothed = lowess(sqrt_standard_resid, predicted, frac=0.3)
+    ax.plot(smoothed[:, 0], smoothed[:, 1], color="red", linestyle="--", label="Lowess trend")
+    ax.set_xlabel("Fitted values")
+    ax.set_ylabel("$\sqrt{|Standardized\ Residuals|}$")
+    ax.set_title(f"Scale-Location Plot for {title}")
+    fig.canvas.manager.set_window_title(f"Homogeneity Check - {title}")
+    plt.show()
 
 
 if __name__ == "__main__":

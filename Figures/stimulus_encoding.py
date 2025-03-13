@@ -1,4 +1,4 @@
-### Imports ###
+# region ======================================== Imports ==============================================================
 import os
 import numpy as np
 import pandas as pd
@@ -10,11 +10,10 @@ from statsmodels.formula.api import ols
 
 import percephone.core.recording as pc
 import percephone.plts.stats as ppt
+# endregion ============================================================================================================
+# region ======================================== Response features ====================================================
 
 
-### Functions ###
-
-# ====== Response features ======
 def group_comp_param(recs, parameter, ko_hypo_only=False, stim_ampl="all", ylim=[]):
     """
     Compare a given parameter between WT and KO groups across neuron types and response types.
@@ -206,7 +205,31 @@ def det_comp_param(recs, parameter, stim_ampl="all", ylim=[]):
     plt.show()
 
 
-# ====== Responsivity ======
+# endregion ============================================================================================================
+# region ======================================== Responsivity =========================================================
+def nb_neurons(recs):
+    rows = []
+    for rec in recs:
+        n_EXC = rec.zscore_exc.shape[0]
+        n_INH = rec.zscore_inh.shape[0]
+        perc_EXC = n_EXC / (n_EXC + n_INH) * 100
+        perc_INH = n_INH / (n_EXC + n_INH) * 100
+        rows.append({"ID": rec.filename, "Genotype": rec.genotype, "n_EXC": n_EXC, "n_INH": n_INH, "perc_EXC": perc_EXC, "perc_INH": perc_INH})
+    data = pd.DataFrame(rows)
+    fig, ax = plt.subplots(nrows=2, ncols=2, figsize=(12, 16), constrained_layout=True)
+    for i, n_type in enumerate(["EXC", "INH"]):
+        for j, metric in enumerate(["n", "perc"]):
+            wt = data[data["Genotype"] == "WT"][f"{metric}_{n_type}"].values
+            ko = data[data["Genotype"].isin(["KO", "KO-Hypo"])][f"{metric}_{n_type}"].values
+            ylim = [0, 100] if metric == "perc" else [0, 150]
+            ppt.boxplot(ax[i, j], wt, ko, ylabel=f"{n_type} neurons ({metric})", paired=False, title="", ylim=ylim,
+                        colors=[ppt.wt_color, ppt.all_ko_color], det_marker=False, force_markers_identity=False)
+    fig.suptitle("Number and percentage of neurons in the field of view", fontsize=10)
+    fig.canvas.manager.set_window_title("Nb neurons FOV")
+    plt.show()
+    return data
+
+
 def fraction_resp(pattern, n_type, ko_hypo_only=True, stim_ampl="all", no_go_normalize=True):
     """
     Compute the fraction of responsive neurons based on a given response pattern.
@@ -529,15 +552,15 @@ def resp_contrast(pattern="recruited", stim_ampl="all", method="ratio", ylim=[])
     plt.show()
 
 
-def plot_neuron_perc_amp(recs, pattern="recruited", detected_trials=True, undetected_trials=True, ylim=[], sign_exc_inh=[[], []]):
+def plot_neuron_perc_amp(recs, pattern="recruited", detected_trials=True, undetected_trials=True, ylim=[], sign_exc_inh=[[], []],
+                         transformation=None, normality=[False, False], homogeneity=[False, False]):
     pat_dict = {"recruited": 0, "activated": 1, "inhibited": -1}
     assert pattern in pat_dict.keys()
     assert detected_trials or undetected_trials
     trials_name = "all" if (detected_trials and undetected_trials) else "detected" if detected_trials else "undetected" if undetected_trials else "none"
     fig, ax = plt.subplots(nrows=2, ncols=1, sharex=True, figsize=(9, 12), constrained_layout=True)
     amps = np.arange(start=2, stop=13, step=2)
-    tests = []
-    post_hocs = []
+    results = {}
     for i, n_type in enumerate(["EXC", "INH"]):
         rows = []
         for rec in recs:
@@ -571,21 +594,19 @@ def plot_neuron_perc_amp(recs, pattern="recruited", detected_trials=True, undete
         test, post_hoc = ppt.curveplot(ax[i], data_nan, between="Genotype", within="Amplitude", variable=f"perc_{n_type}",
                                        title=f"Percentage of {pattern} {n_type} neurons",
                                        ylabel=None, xlabel=None, ylim=None, colors=["#c57c9a", "firebrick", "#326993"],
-                                       id_display=True, legend_display=False, qq_show=True, transformation="yeojohnson", consider_normality=False,
-                                       consider_homogeneity=False)
-        tests.append(test)
-        post_hocs.append(post_hoc)
-        # if sign_exc_inh != [[], []]:
-        #     for (x, y, sign) in zip(amps, np.max(np.array(
-        #             [np.nanmean(wt, axis=0), np.nanmean(ko, axis=0), np.nanmean(ko_hypo, axis=0)]), axis=0),
-        #                             sign_exc_inh[i]):
-        #         if sign != "n.s":
-        #             axs[i].annotate(sign, xy=(x, y * 1.25), horizontalalignment="center", verticalalignment="center")
+                                       id_display=True, legend_display=True, qq_show=True, transformation=transformation, consider_normality=normality[i],
+                                       consider_homogeneity=homogeneity[i])
+        results[f"data_{n_type}"] = data_nan
+        results[f"test_{n_type}"] = test
+        results[f"post_{n_type}"] = post_hoc
     title = f"ampcurv_{pattern}_{trials_name}_trials"
     fig.suptitle(f"Percentage of {pattern} neurons for {trials_name} trials", fontsize=15)
-    fig.canvas.manager.set_window_title(f"new_{title}")
+    fig.canvas.manager.set_window_title(title)
     plt.show()
-    return data, tests[0], tests[1], post_hocs[0], post_hocs[1]
+    return results
+
+
+# endregion ============================================================================================================
 
 
 if __name__ == '__main__':
@@ -613,9 +634,17 @@ if __name__ == '__main__':
     # det_comp_param(recs, parameter="AUC", stim_ampl="all", ylim=[0, 1])
 
     # ====== Responsivity ======
+    neurons = nb_neurons(recs.values())
     # plot_neuron_frac_wt_ko(pattern=0, ko_hypo_only=True, stim_ampl="all", no_go_normalize=True, ylim=[0, 60])
-    # plot_neuron_frac_det_undet(pattern=1, ko_hypo_only=True, stim_ampl="all", no_go_normalize=True, ylim=[0, 60])
-    # resp_contrast(pattern="recruited", stim_ampl="all", method="delta", ylim=[-10, 40])
-    data, aov_exc, aov_inh, post_exc, post_inh = plot_neuron_perc_amp(recs.values(), pattern="activated",
-                                                                      detected_trials=True, undetected_trials=False,
-                                                                      ylim=[0, 30])
+    # plot_neuron_frac_det_undet(pattern=-1, ko_hypo_only=True, stim_ampl="session_threshold", no_go_normalize=True, ylim=[0, 60])
+    # resp_contrast(pattern="recruited", stim_ampl="session_threshold", method="delta", ylim=[-10, 30])
+    #
+    # results = plot_neuron_perc_amp(recs.values(), pattern="inhibited", detected_trials=True, undetected_trials=False, ylim=[0, 30],
+    #                                     transformation="yeojohnson", normality=[True, True], homogeneity=[True, False])
+    # post_EXC = results["post_EXC"]
+    # post_EXC_btw = post_EXC["between"]
+    # post_INH = results["post_INH"]
+    # post_INH_btw = post_INH["between"]
+
+
+
