@@ -314,7 +314,7 @@ def compute_neurons_tuning(rec, sigm_on_norm=True):# TODO: adapt to take as entr
             normalised_mean_zscore_by_amp = np.array(mean_zscore_by_amp) / max_abs_value
             # Trying to fit a sigmoid curve on each neuron
             try:
-                x, y, x0, k = sigmoid_fit(np.array(np.linspace(0, 1, 7)), normalised_mean_zscore_by_amp if sigm_on_norm else mean_zscore_by_amp)
+                x, y, x0, k = mf.sigmoid_fit(np.array(np.linspace(0, 1, 7)), normalised_mean_zscore_by_amp if sigm_on_norm else mean_zscore_by_amp)
             except:
                 x, y, x0, k = np.nan, np.nan, np.nan, np.nan
                 continue
@@ -334,7 +334,7 @@ def compute_sigmoid_df(data, columns=[], norm_by_max=True):
         def try_sigmoid(data, len_x):
             # Trying to fit a sigmoid curve on each neuron
             try:
-                x, y, x0, k = sigmoid_fit(np.array(np.linspace(0, 1, len_x)), data)
+                x, y, x0, k = mf.sigmoid_fit(np.array(np.linspace(0, 1, len_x)), data)
                 return x, y, x0, k
             except:
                 return np.nan, np.nan, np.nan, np.nan
@@ -350,10 +350,10 @@ def cluster_neurons(neurons_df, method="manual"):
         delta_y = 0.25
         min_k_bin = mf.minimal_k_bin(tolerance, delta_x)
         min_k_amp = mf.minimal_k_amp(delta_y)
-        neurons_df.loc[neurons_df["abs_k"] < min_k_amp, "manual_cluster"] = 0
+        neurons_df.loc[neurons_df["zscore_by_amp_abs_k"] < min_k_amp, "manual_cluster"] = 0
         # k=110 approximately corresponds to the value of k for which y=0 to y=1 is achieved within 2µm (1% tolerance)
-        neurons_df.loc[neurons_df["abs_k"] > min_k_bin, "manual_cluster"] = 1
-        neurons_df.loc[(neurons_df["abs_k"] >= min_k_amp) & (neurons_df["k"].abs() <= min_k_bin), "manual_cluster"] = 2
+        neurons_df.loc[neurons_df["zscore_by_amp_abs_k"] > min_k_bin, "manual_cluster"] = 1
+        neurons_df.loc[(neurons_df["zscore_by_amp_abs_k"] >= min_k_amp) & (neurons_df["zscore_by_amp_k"].abs() <= min_k_bin), "manual_cluster"] = 2
     elif method in ["kmeans", "k_kmeans", "x0_kmeans"]:
         features_dict = {"kmeans": ["abs_k", "x0"], "k_kmeans": ["abs_k"], "x0_kmeans": ["x0"]}
         features = neurons_df[features_dict[method]]
@@ -401,7 +401,7 @@ def get_general_cluster_parameters(recs, normalized_by_max=True, clustering_meth
         nb_inh = nb_neurons_df["INH"]
         nb_neurons = nb_exc + nb_inh
         # Getting the psychometric data
-        x_psy, y_psy, x0_psy, k_psy = sigmoid_fit(np.array(np.linspace(0, 1, 7)), rec.hit_rates)
+        x_psy, y_psy, x0_psy, k_psy = mf.sigmoid_fit(np.array(np.linspace(0, 1, 7)), rec.hit_rates)
         # Clustering the neurons, pay attention to EXC/INH common or parallel clustering
         cluster_df = cluster_neurons(neurons_df, method=clustering_method)
         row = {"ID": rec.filename, "genotype": rec.genotype,
@@ -614,7 +614,7 @@ def plot_neuron_clustering(recs, method, type="EXC", normalized_by_max=True):
     axes_flat = axes.flatten()
     for ax, rec in zip(axes_flat, recs):
         # Plotting the psychometric curve
-        x_psy, y_psy, x0_psy, k_psy = sigmoid_fit(np.array(np.linspace(0, 1, 7)), rec.hit_rates)
+        x_psy, y_psy, x0_psy, k_psy = mf.sigmoid_fit(np.array(np.linspace(0, 1, 7)), rec.hit_rates)
         ax.plot(x_psy, y_psy, color="black", lw=2)
         # If the detection threshold lies between 0 and 12µm, it is plotted on the graph and x0 is displayed
         if x0_psy < 1:
@@ -648,13 +648,13 @@ def plot_neuron_clustering(recs, method, type="EXC", normalized_by_max=True):
             neurons = all_neurons.loc[all_neurons["n_type"] == type].copy()
             cluster_df = cluster_neurons(neurons, method=method)
             for idx, neuron in cluster_df.iterrows():
-                ax.plot(neuron["x_sigmoid"], neuron["y_sigmoid"], color=eval(f"cluster_colors_{type}[neuron['{method}_cluster']]"), lw=1, alpha=0.75)
+                ax.plot(neuron["zscore_by_amp_x_sigmoid"], neuron["zscore_by_amp_y_sigmoid"], color=eval(f"cluster_colors_{type}[neuron['{method}_cluster']]"), lw=1, alpha=0.75)
             ax.set_title(f"{rec.filename} ({rec.genotype}) - {rec.threshold:.1f}", color=genotype_colors[rec.genotype], fontsize=12, fontweight="bold")
             # Plotting the generalization of the neuronal activity
-            mean_x0 = cluster_df[cluster_df[f"{method}_cluster"] == 1]["x0"].mean()
-            mean_k = cluster_df[cluster_df[f"{method}_cluster"].isin([1, 2])]["abs_k"].mean()
-        mean_y = 1 / (1 + np.exp(-mean_k * (x_psy - mean_x0)))
-        ax.plot(x_psy, mean_y, lw=2, color="red")
+        #     mean_x0 = cluster_df[cluster_df[f"{method}_cluster"] == 1]["x0"].mean()
+        #     mean_k = cluster_df[cluster_df[f"{method}_cluster"].isin([1, 2])]["abs_k"].mean()
+        # mean_y = 1 / (1 + np.exp(-mean_k * (x_psy - mean_x0)))
+        # ax.plot(x_psy, mean_y, lw=2, color="red")
     fig.suptitle(f"{type} neurons clustering - method: {method}", fontsize=14)
     fig.canvas.manager.set_window_title(f"{type} Neurons clustering[{method}]")
     plt.show()
@@ -759,7 +759,7 @@ def individuals_neurons_tuning(rec, roi_info, normalize=False):
     converted_list = [float(x) for x in seq[0].split(',')]
     fig, ax = plt.subplots(4, 1, figsize=(8, 20), sharex=True)
     # Fitting a sigmoid curve on the data (psychometric curve)
-    x_psy, y_psy, x0_psy, k_psy = sigmoid_fit(np.array(np.linspace(0, 1, 7)), converted_list)
+    x_psy, y_psy, x0_psy, k_psy = mf.sigmoid_fit(np.array(np.linspace(0, 1, 7)), converted_list)
     ax[0].plot(x_psy, y_psy, color=color_behavior)  # the fitted curve
     ax[0].plot(np.array(np.linspace(0, 1, 7)), converted_list, ".", color=color_behavior)  # the data points
     # If the detection threshold lies between 0 and 12µm, it is plotted on the graph and x0 is displayed
@@ -805,7 +805,7 @@ def individuals_neurons_tuning(rec, roi_info, normalize=False):
         # zsc_normalised = zsc_normalised * -1 if decrease_activity(zsc_normalised) else zsc_normalised
         # Discard neurons activity that are not fitting sigmoid fit
         try:
-            x, y, x0, k = sigmoid_fit(np.array(np.linspace(0, 1, 7)), zsc_normalised)
+            x, y, x0, k = mf.sigmoid_fit(np.array(np.linspace(0, 1, 7)), zsc_normalised)
         except:
             skipped_neurons += 1
             continue
@@ -900,7 +900,7 @@ def plot_sigm_act_inh(recs, normalized_by_max=True):
 def compute_perc_act_inh_df(recs):
     rows = []
     for rec in recs:
-        x_psy, y_psy, x0_psy, k_psy = sigmoid_fit(np.array(np.linspace(0, 1, 7)), rec.hit_rates)
+        x_psy, y_psy, x0_psy, k_psy = mf.sigmoid_fit(np.array(np.linspace(0, 1, 7)), rec.hit_rates)
         row = {"ID": rec.filename, "genotype": rec.genotype, "x_psy": x_psy, "y_psy": y_psy, "x0_psy": x0_psy, "k_psy": k_psy}
         for n_type in ["EXC", "INH"]:
             resp_mat = np.array(rec.matrices[n_type]["Responsivity"])
@@ -988,7 +988,7 @@ if __name__ == '__main__':
     # exc_neurons = test_neurons.loc[test_neurons["type"] == "EXC"].copy()
     # test_cluster_5886 = cluster_neurons(exc_neurons, method="manual")
 
-    # plot_neuron_clustering(recs.values(), method="manual", type="EXC/INH", normalized_by_max=True)
+    plot_neuron_clustering(recs.values(), method="manual", type="EXC", normalized_by_max=True)
     # features_df = get_general_cluster_parameters(recs.values(), normalized_by_max=False, clustering_method="manual")
     # features_selection(features_df, single_split=False, genotype="all", model_name="forest")
 
@@ -1006,15 +1006,15 @@ if __name__ == '__main__':
     #
     # plot_sigm_act_inh(recs.values(), normalize=True)
 
-    all_consistency_long = compute_consistency_features(recs.values(), long_format=True)
-    no_ko_consistency = all_consistency_long.copy()[all_consistency_long["genotype"] != "KO"]
-    test_exc, post_exc, test_inh, post_inh = plot_consistency(no_ko_consistency, transformation=None)
-
-    act_inh_df = compute_perc_act_inh_df(recs.values())
-    act_inh_sigm = compute_sigmoid_df(act_inh_df, columns=["perc_act_EXC", "perc_act_INH", "perc_inh_EXC", "perc_inh_INH"], norm_by_max=True)
-    k_psy_df, x0_psy_df = features_behavior_corr(act_inh_sigm, genotype="WT")
-    plot_perc_act_inh(act_inh_sigm)
-    plot_act_inh_behavior_corr(act_inh_sigm, genotype=["WT"])
+    # all_consistency_long = compute_consistency_features(recs.values(), long_format=True)
+    # no_ko_consistency = all_consistency_long.copy()[all_consistency_long["genotype"] != "KO"]
+    # test_exc, post_exc, test_inh, post_inh = plot_consistency(no_ko_consistency, transformation=None)
+    #
+    # act_inh_df = compute_perc_act_inh_df(recs.values())
+    # act_inh_sigm = compute_sigmoid_df(act_inh_df, columns=["perc_act_EXC", "perc_act_INH", "perc_inh_EXC", "perc_inh_INH"], norm_by_max=True)
+    # k_psy_df, x0_psy_df = features_behavior_corr(act_inh_sigm, genotype="WT")
+    # plot_perc_act_inh(act_inh_sigm)
+    # plot_act_inh_behavior_corr(act_inh_sigm, genotype=["WT"])
 
 
     # Checking the proportions of neurons activated/inhibited

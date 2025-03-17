@@ -2,6 +2,8 @@
 import os
 import numpy as np
 import pandas as pd
+import statsmodels.formula.api as smf
+import statsmodels.api as sm
 from matplotlib import pyplot as plt
 from multiprocessing import cpu_count, pool
 from scipy.stats import pointbiserialr
@@ -90,9 +92,24 @@ def model_behavior(recs):
                 row[feature] = vector[trial_id]
             rows.append(row)
     data = pd.DataFrame(rows)
+    data["Genotype"] = pd.Categorical(data["Genotype"], categories=["WT", "KO", "KO-Hypo"], ordered=True)
+    # data["behavior"] = pd.Categorical(data["behavior"], categories=["False", "True"], ordered=True)
+    # data["behavior"] = data["behavior"].astype(int)
     # === === Fitting the model === ===
-
-
+    # --- GEE ---
+    formula = ("behavior ~ amplitude*Genotype + amplitude:act_EXC_perc*Genotype + amplitude:inh_EXC_perc*Genotype + "
+               "amplitude:act_INH_perc*Genotype + amplitude:inh_INH_perc*Genotype")# + "
+    #            # "act_EXC_amp + inh_EXC_amp + act_INH_amp + inh_INH_amp + "
+    #            # "act_EXC_delay + inh_EXC_delay + act_INH_delay + inh_INH_delay + "
+    #            # "Genotype + amplitude:Genotype")
+    # gee_model = smf.gee(formula, groups="ID", data=data[data["Genotype"] == "WT"], family=sm.families.Binomial())
+    # gee_result = gee_model.fit()
+    # print(gee_result.summary())
+    # --- GLMM ---
+    vc_formulas = {"ID": "0 + C(ID)"}
+    model = sm.genmod.BinomialBayesMixedGLM.from_formula(formula, vc_formulas, data=data)#, family=sm.families.Binomial())
+    result = model.fit_vb()
+    print(result.summary())
     return data
 
 

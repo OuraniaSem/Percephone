@@ -72,6 +72,7 @@ hypo_color = "firebrick"
 hypo_light_color = "#e18282"
 
 ko_color = "#c57c9a"
+ko_light_color = "#fda7ca"  # I defined this one
 
 
 

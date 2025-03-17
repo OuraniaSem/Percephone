@@ -13,6 +13,117 @@ import percephone.plts.stats as ppt
 # endregion ============================================================================================================
 # region ======================================== Response features ====================================================
 
+def get_features(recs):
+    """
+    Get the neuronal percentage of recruited neurons for both neuron type for all trials for all recordings and build a
+    DataFrame.
+
+    Parameters
+    ----------
+    recs
+
+    Returns
+    -------
+    pd.DataFrame
+    """
+    # === === Building the DataFrame === ===
+    rows = []
+    for rec in recs:
+        feature_vectors = {
+            # --- Retrieving the target and covariate ---
+            "behavior": rec.detected_stim,
+            "amplitude": rec.stim_ampl,
+            # --- Retrieving the different predictors ---
+            # Percentage of recruited neurons
+            "act_EXC_perc": rec.get_perc_resp(pattern=1, n_type="EXC"),
+            "inh_EXC_perc": rec.get_perc_resp(pattern=-1, n_type="EXC"),
+            "act_INH_perc": rec.get_perc_resp(pattern=1, n_type="INH"),
+            "inh_INH_perc": rec.get_perc_resp(pattern=-1, n_type="INH"),
+            # Mean peak amplitude for responsive neurons
+            "act_EXC_amp": rec.get_mean_param(pattern=1, n_type="EXC", parameter="Peak_amplitude"),
+            "inh_EXC_amp": rec.get_mean_param(pattern=-1, n_type="EXC", parameter="Peak_amplitude"),
+            "act_INH_amp": rec.get_mean_param(pattern=1, n_type="INH", parameter="Peak_amplitude"),
+            "inh_INH_amp": rec.get_mean_param(pattern=-1, n_type="INH", parameter="Peak_amplitude"),
+            # Mean peak delay for responsive neurons
+            "act_EXC_delay": rec.get_mean_param(pattern=1, n_type="EXC", parameter="Peak_delay"),
+            "inh_EXC_delay": rec.get_mean_param(pattern=-1, n_type="EXC", parameter="Peak_delay"),
+            "act_INH_delay": rec.get_mean_param(pattern=1, n_type="INH", parameter="Peak_delay"),
+            "inh_INH_delay": rec.get_mean_param(pattern=-1, n_type="INH", parameter="Peak_delay"),
+        }
+        nb_trials = len(feature_vectors["behavior"])
+        for trial_id in range(nb_trials):
+            row = {"ID": rec.filename, "Genotype": rec.genotype, "threshold": rec.session_threshold}
+            for feature, vector in feature_vectors.items():
+                row[feature] = vector[trial_id]
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def get_sub_supra_threshold(data, behavior_filter=None, genotype="WT", comparison="sub"):
+    # Filtering the genotype
+    data = data[data["Genotype"] == genotype]
+    # Filtering the behavior
+    if behavior_filter == None:
+        data.drop(columns=["behavior"])
+        grouping_cols = ["Genotype", "ID"]
+    else:
+        data = data[data["behavior"] == behavior_filter]
+        grouping_cols = ["Genotype", "ID", "behavior"]
+    # Filtering the amplitude
+    threshold_trials = data[data["amplitude"] == data["threshold"]].groupby(grouping_cols, as_index=False).mean()
+    if comparison == "sub":
+        non_threshold_trials = data[data["amplitude"] == data["threshold"] - 2].groupby(grouping_cols, as_index=False).mean()
+    elif comparison == "supra":
+        non_threshold_trials = data[data["amplitude"] == data["threshold"] + 2].groupby(grouping_cols, as_index=False).mean()
+    elif comparison == "all_sub":
+        non_threshold_trials = data[data["amplitude"] < data["threshold"]].groupby(grouping_cols, as_index=False).mean()
+    elif comparison == "all_supra":
+        non_threshold_trials = data[data["amplitude"] > data["threshold"]].groupby(grouping_cols, as_index=False).mean()
+    # Filtering out the no-go trials
+    non_threshold_trials = non_threshold_trials[non_threshold_trials["amplitude"] != 0]
+    return threshold_trials, non_threshold_trials
+
+
+def compare_sub_supra_within(data, behavior_filter=None, genotype="WT", comparison="sub"):
+    threshold_trials, non_threshold_trials = get_sub_supra_threshold(data, behavior_filter=behavior_filter, genotype=genotype, comparison=comparison)
+    colors_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color],
+                   "KO": [ppt.ko_color, ppt.ko_light_color]}
+    # Asserting that the match between threshold and non-threshold trials for each animal
+    common_IDs = set(threshold_trials["ID"]).intersection(non_threshold_trials["ID"])
+    threshold_trials = threshold_trials[threshold_trials["ID"].isin(common_IDs)]
+    non_threshold_trials = non_threshold_trials[non_threshold_trials["ID"].isin(common_IDs)]
+    threshold_trials = threshold_trials.sort_values("ID").reset_index(drop=True)
+    non_threshold_trials = non_threshold_trials.sort_values("ID").reset_index(drop=True)
+    # Plotting the comparisons
+    not_variables = ["ID", "Genotype", "behavior", "amplitude", "threshold"]
+    variables = [col for col in data.columns if col not in not_variables]
+    fig, axes = plt.subplots(nrows=3, ncols=4, figsize=(18, 12), constrained_layout=True)
+    axes_flat = axes.flatten()
+    for variable, ax in zip(variables, axes_flat):
+        ppt.boxplot(ax, threshold_trials[variable], non_threshold_trials[variable], ylabel=variable, paired=True, title="", ylim=[],
+                    colors=colors_dict[genotype], det_marker=False, force_markers_identity=False)
+    fig.suptitle(f"Comparison in {genotype} of threshold trials and {comparison} trials [behavior filter={behavior_filter}]", fontsize=20)
+    fig.canvas.manager.set_window_title(f"comp_{genotype}_threshold_{comparison}_{behavior_filter}")
+    plt.show()
+
+
+def compare_sub_supra_between(data, behavior_filter=None, wt_amps="sub", hypo_amps="sub"):
+    wt_threshold, wt_non_threshold = get_sub_supra_threshold(data, behavior_filter=behavior_filter, genotype="WT", comparison=wt_amps if wt_amps != "threshold" else "sub")
+    hypo_threshold, hypo_non_threshold = get_sub_supra_threshold(data, behavior_filter=behavior_filter, genotype="KO-Hypo", comparison=hypo_amps if hypo_amps != "threshold" else "sub")
+    # Plotting the comparisons
+    wt = wt_threshold if wt_amps == "threshold" else wt_non_threshold
+    hypo = hypo_threshold if hypo_amps == "threshold" else hypo_non_threshold
+    not_variables = ["ID", "Genotype", "behavior", "amplitude", "threshold"]
+    variables = [col for col in data.columns if col not in not_variables]
+    fig, axes = plt.subplots(nrows=3, ncols=4, figsize=(18, 12), constrained_layout=True)
+    axes_flat = axes.flatten()
+    for variable, ax in zip(variables, axes_flat):
+        ppt.boxplot(ax, wt[variable], hypo[variable], ylabel=variable, paired=False, title="", ylim=[],
+                    colors=[ppt.wt_color, ppt.hypo_color], det_marker=False, force_markers_identity=False)
+    fig.suptitle(f"Comparison between {wt_amps} trials of WT & {hypo_amps} trials of KO-Hypo [behavior filter={behavior_filter}]", fontsize=20)
+    fig.canvas.manager.set_window_title(f"comp_{wt_amps}(WT)_{hypo_amps}(hypo)_{behavior_filter}")
+    plt.show()
+
 
 def group_comp_param(recs, parameter, ko_hypo_only=False, stim_ampl="all", ylim=[]):
     """
@@ -626,21 +737,24 @@ if __name__ == '__main__':
     recs = {ar.get().filename: ar.get() for ar in async_results}
 
     # ====== Response features ======
-    # for rec in recs.values():
-    #     rec.peak_delay_amp()
-    #     rec.auc()
-    #
+    for rec in recs.values():
+        rec.peak_delay_amp()
+        rec.auc()
+    data = get_features(recs.values())
+    compare_sub_supra_within(data, behavior_filter=None, genotype="KO", comparison="all_sub")
+    compare_sub_supra_between(data, behavior_filter=False, wt_amps="all_supra", hypo_amps="all_supra")
+
     # group_comp_param(recs, parameter="AUC", ko_hypo_only=True, stim_ampl="all", ylim=[0, 1])
     # det_comp_param(recs, parameter="AUC", stim_ampl="all", ylim=[0, 1])
 
     # ====== Responsivity ======
-    neurons = nb_neurons(recs.values())
+    # neurons = nb_neurons(recs.values())
     # plot_neuron_frac_wt_ko(pattern=0, ko_hypo_only=True, stim_ampl="all", no_go_normalize=True, ylim=[0, 60])
     # plot_neuron_frac_det_undet(pattern=-1, ko_hypo_only=True, stim_ampl="session_threshold", no_go_normalize=True, ylim=[0, 60])
     # resp_contrast(pattern="recruited", stim_ampl="session_threshold", method="delta", ylim=[-10, 30])
     #
-    # results = plot_neuron_perc_amp(recs.values(), pattern="inhibited", detected_trials=True, undetected_trials=False, ylim=[0, 30],
-    #                                     transformation="yeojohnson", normality=[True, True], homogeneity=[True, False])
+    # results = plot_neuron_perc_amp(recs.values(), pattern="inhibited", detected_trials=False, undetected_trials=True, ylim=[0, 30],
+    #                                transformation="yeojohnson", normality=[False, False], homogeneity=[False, False])
     # post_EXC = results["post_EXC"]
     # post_EXC_btw = post_EXC["between"]
     # post_INH = results["post_INH"]

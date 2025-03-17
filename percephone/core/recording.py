@@ -672,7 +672,7 @@ class RecordingAmplDet(Recording):
             with open(self.input_path + name_model + ".json", "w") as jsn:
                 json.dump(to_save_list, jsn)
 
-    def stim_ampl_filter(self, stim_ampl="all", include_no_go=False):
+    def stim_ampl_filter(self, stim_ampl="all", include_no_go=False, return_amps=False):
         """
         Returns a vector of booleans to select the stimulations of desired amplitude.
 
@@ -697,8 +697,12 @@ class RecordingAmplDet(Recording):
 
         if stim_ampl == "threshold":
             amplitudes = self.threshold
-        if stim_ampl == "session_threshold":
+        elif stim_ampl == "session_threshold":
             amplitudes = self.session_threshold
+        elif stim_ampl == "sub_amp":
+            amplitudes = self.session_threshold - 2 if self.session_threshold != 2 else None
+        elif stim_ampl == "supra_amp":
+            amplitudes = self.session_threshold + 2 if self.session_threshold != 12 else None
         elif stim_ampl == "supra":
             amplitudes = all_ampl[all_ampl >= self.threshold]
         elif stim_ampl == "sub":
@@ -712,7 +716,7 @@ class RecordingAmplDet(Recording):
         else:
             amplitudes = np.array(stim_ampl)
         selected_stim = np.isin(self.stim_ampl, amplitudes)
-        return selected_stim
+        return amplitudes if return_amps else selected_stim
 
     def timeout_filter(self, no_lick_period_duration):
         mask = []
