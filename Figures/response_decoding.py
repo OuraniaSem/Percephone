@@ -4,9 +4,14 @@ import numpy as np
 import pandas as pd
 import statsmodels.formula.api as smf
 import statsmodels.api as sm
+from imblearn.under_sampling import RandomUnderSampler
 from matplotlib import pyplot as plt
 from multiprocessing import cpu_count, pool
 from scipy.stats import pointbiserialr
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import confusion_matrix, classification_report
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.pipeline import Pipeline
 
 import percephone.core.recording as pc
 from Figures.stimulus_encoding import get_features
@@ -46,7 +51,7 @@ def perceptual_magnitude_behavior_corr(recs):
     return pd.DataFrame(rows)
 
 
-def get_zscore_by_frame_df(recs):
+def get_activity_by_frame_df(recs, zscore=True):
     """
     Generates a pd.DataFrame, each containing the neuronal data for a single neuron 30 frames preceding and following for a single trial.
     Frame 30 = stim_time.
@@ -61,9 +66,10 @@ def get_zscore_by_frame_df(recs):
     """
     rows = []
     for rec in recs:
-        for n_type, zscore in zip(["EXC", "INH"], [rec.zscore_exc, rec.zscore_inh]):
+        activity_vector = [rec.zscore_exc, rec.zscore_inh] if zscore else [rec.df_f_exc, rec.df_f_inh]
+        for n_type, activity in zip(["EXC", "INH"], activity_vector):
             resp = np.array(rec.matrices[n_type]["Responsivity"])
-            for neuron_id, neuron in enumerate(np.array(zscore)):
+            for neuron_id, neuron in enumerate(np.array(activity)):
                 for (trial_id, trial_time), trial_duration, trial_amp, trial_label in zip(enumerate(rec.stim_time),
                                                                                           rec.stim_durations,
                                                                                           rec.stim_ampl, rec.detected_stim):
@@ -77,6 +83,18 @@ def get_zscore_by_frame_df(recs):
 
 
 def correlate_mean_zscore_behavior_frame(frame_data):
+    """
+    Builds a DataFrame, each row being a neuron type for a specific animal, and the values of correlation (r and pval)
+    of the vector of zscore at each frame and the vector of behavior.
+
+    Parameters
+    ----------
+    frame_data
+
+    Returns
+    -------
+
+    """
     # Computing the mean zscore per trial
     header_columns = ["Genotype", "ID", "Threshold", "Trial", "Amplitude", "Duration", "Behavior", "n_type", "resp", "n_ID"]
     mean_accross = ["n_ID"]
@@ -127,11 +145,10 @@ def plot_frame_correlation(corr_data):
     plt.show()
 
 
-
 # endregion ============================================================================================================
 # region ======================================== Modelling ============================================================
 
-def model_behavior(data):
+def glmm_behavior(data):
     """
     Aims to model the behavioral outcome using a list of predictors defined as important for stimulus encoding (GLMM).
 
@@ -163,6 +180,70 @@ def model_behavior(data):
     print(result.summary())
 
 
+def frame_model(frame_data):
+    """
+    Return the hit versus miss classification graph.
+    A logistic regression model is trained on for each frame for each animal. CV is used to assess the hit accuracy
+    (True positive) and  miss accuracy (True negative). Under sampling was performed to avoid biases linked to the class
+    unbalance
+
+    Parameters
+    ----------
+    frame_data
+
+    Returns
+    -------
+
+    """
+    # Grouping the different neurons
+    header_columns = ["Genotype", "ID", "Threshold", "Trial", "Amplitude", "Duration", "Behavior", "n_type", "resp",
+                      "n_ID"]
+    mean_accross = ["n_ID"]
+    grouping_columns = [col for col in header_columns if col not in mean_accross]
+    data = frame_data.groupby(grouping_columns, as_index=False).mean().drop(columns=mean_accross)
+    # Creating a pivot DataFrame to obtain a dataframe per frame, each column being a neuron type/resp combinaison
+    index_columns = [col for col in grouping_columns if col not in ["n_type", "resp"]]
+    numeric_columns = [c for c in data.columns if c not in header_columns]
+    rows = []
+    for frame in numeric_columns:
+        frame_data = data.pivot(index=index_columns, columns=["n_type", "resp"], values=frame).reset_index()
+        # Training a model for each recording and storing the evaluation metrics in a new DataFrame
+        for rec_id in frame_data["ID"].unique():
+            filtered_data = frame_data[frame_data["ID"] == rec_id]
+            X = filtered_data.drop(columns=index_columns)
+            y = filtered_data["Behavior"]
+            # Split your data into training and test sets (using stratification to preserve class distribution)
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+            # Create a pipeline that first undersamples then fits a logistic regression model
+            undersampler = RandomUnderSampler(random_state=42)
+            X_train_res, y_train_res = undersampler.fit_resample(X_train, y_train)
+            lr = LogisticRegression(solver='lbfgs', max_iter=5000)
+            # Set up a grid of hyperparameters to tune
+            param_grid = {"C": [0.0001, 0.001, 0.01, 0.1, 1, 10], "penalty": ['l2']}
+            # Use cross-validation (here, 5-fold) to search for the best hyperparameters
+            grid_search = GridSearchCV(lr, param_grid, cv=5, scoring='accuracy')
+            grid_search.fit(X_train_res, y_train_res)
+            print("Best parameters found:", grid_search.best_params_)
+            # Evaluate on the test set
+            y_pred = grid_search.predict(X_test)
+            cm = confusion_matrix(y_test, y_pred)
+            print("Confusion Matrix:")
+            print(cm)
+            # Calculate true positive and true negative rates
+            tn, fp, fn, tp = cm.ravel()
+            tpr = tp / (tp + fn)  # Sensitivity / Recall
+            tnr = tn / (tn + fp)  # Specificity
+            print(f"True Positive Rate (Sensitivity): {tpr:.3f}")
+            print(f"True Negative Rate (Specificity): {tnr:.3f}")
+            # Optionally, print a full classification report
+            print(classification_report(y_test, y_pred))
+            row = {"Genotype": filtered_data["Genotype"].values[0], "ID": filtered_data["ID"].values[0],
+                   "Threshold": filtered_data["Threshold"].values[0], "Frame": frame, "TPR": tpr, "TNR": tnr}
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
+
 # endregion ============================================================================================================
 
 
@@ -187,9 +268,12 @@ if __name__ == '__main__':
     # endregion
     # test = perceptual_magnitude_behavior_corr(recs.values())
     # mean_corr = test.groupby("Genotype").mean()
-    # model_behavior(data)
+    # glmm_behavior(data)
 
     data = get_features(recs.values())
-    frame_data = get_zscore_by_frame_df(recs.values())
+    frame_data = get_activity_by_frame_df(recs.values(), zscore=True)
     corr_data = correlate_mean_zscore_behavior_frame(frame_data[frame_data["Amplitude"] == 12])
     plot_frame_correlation(corr_data)
+
+    frame_dff = get_activity_by_frame_df(recs.values(), zscore=False)
+    frame_model_df = frame_model(frame_dff[frame_data["ID"] == 4445])

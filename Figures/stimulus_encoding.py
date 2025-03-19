@@ -71,6 +71,7 @@ def get_sub_supra_threshold(data, behavior_filter=None, genotype="WT", compariso
         grouping_cols = ["Genotype", "ID", "behavior"]
     # Filtering the amplitude
     threshold_trials = data[data["amplitude"] == data["threshold"]].groupby(grouping_cols, as_index=False).mean()
+    genotype_threshold_average = 2 * round(threshold_trials["threshold"].mean() / 2) if 0 < threshold_trials["threshold"].mean() < 12 else 12
     if comparison == "sub":
         non_threshold_trials = data[data["amplitude"] == data["threshold"] - 2].groupby(grouping_cols, as_index=False).mean()
     elif comparison == "supra":
@@ -79,6 +80,10 @@ def get_sub_supra_threshold(data, behavior_filter=None, genotype="WT", compariso
         non_threshold_trials = data[data["amplitude"] < data["threshold"]].groupby(grouping_cols, as_index=False).mean()
     elif comparison == "all_supra":
         non_threshold_trials = data[data["amplitude"] > data["threshold"]].groupby(grouping_cols, as_index=False).mean()
+    elif comparison == "mean_genotype":
+        non_threshold_trials = data[data["amplitude"] == genotype_threshold_average].groupby(grouping_cols, as_index=False).mean()
+    elif isinstance(comparison, list):
+        non_threshold_trials = data[data["amplitude"].isin(comparison)].groupby(grouping_cols, as_index=False).mean()
     # Filtering out the no-go trials
     non_threshold_trials = non_threshold_trials[non_threshold_trials["amplitude"] != 0]
     return threshold_trials, non_threshold_trials
@@ -102,27 +107,33 @@ def compare_sub_supra_within(data, behavior_filter=None, genotype="WT", comparis
     for variable, ax in zip(variables, axes_flat):
         ppt.boxplot(ax, threshold_trials[variable], non_threshold_trials[variable], ylabel=variable, paired=True, title="", ylim=[],
                     colors=colors_dict[genotype], det_marker=False, force_markers_identity=False)
-    fig.suptitle(f"Comparison in {genotype} of threshold trials and {comparison} trials [behavior filter={behavior_filter}]", fontsize=20)
+    fig.suptitle(f"Comparison in {genotype} of threshold trials and {comparison} trials"
+                 f"\n[behavior filter={behavior_filter}] n={len(non_threshold_trials)}", fontsize=20)
     fig.canvas.manager.set_window_title(f"comp_{genotype}_threshold_{comparison}_{behavior_filter}")
     plt.show()
 
 
-def compare_sub_supra_between(data, behavior_filter=None, wt_amps="sub", hypo_amps="sub"):
-    wt_threshold, wt_non_threshold = get_sub_supra_threshold(data, behavior_filter=behavior_filter, genotype="WT", comparison=wt_amps if wt_amps != "threshold" else "sub")
-    hypo_threshold, hypo_non_threshold = get_sub_supra_threshold(data, behavior_filter=behavior_filter, genotype="KO-Hypo", comparison=hypo_amps if hypo_amps != "threshold" else "sub")
+def compare_sub_supra_between(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo", gp1_amps="sub", gp2_amps="sub",
+                              colors=[ppt.wt_color, ppt.hypo_color]):
+    gp1_threshold, gp1_non_threshold = get_sub_supra_threshold(data, behavior_filter=behavior_filter, genotype=gp1, comparison=gp1_amps if gp1_amps != "threshold" else "sub")
+    if gp1_amps == "mean_genotype" and gp2_amps == "gp1_threshold":
+        gp2_amps = [gp1_non_threshold["amplitude"].values[0]]
+    gp2_threshold, gp2_non_threshold = get_sub_supra_threshold(data, behavior_filter=behavior_filter, genotype=gp2, comparison=gp2_amps if gp2_amps != "threshold" else "sub")
     # Plotting the comparisons
-    wt = wt_threshold if wt_amps == "threshold" else wt_non_threshold
-    hypo = hypo_threshold if hypo_amps == "threshold" else hypo_non_threshold
+    data_gp1 = gp1_threshold if gp1_amps == "threshold" else gp1_non_threshold
+    data_gp2 = gp2_threshold if gp2_amps == "threshold" else gp2_non_threshold
     not_variables = ["ID", "Genotype", "behavior", "amplitude", "threshold"]
     variables = [col for col in data.columns if col not in not_variables]
     fig, axes = plt.subplots(nrows=3, ncols=4, figsize=(18, 12), constrained_layout=True)
     axes_flat = axes.flatten()
     for variable, ax in zip(variables, axes_flat):
-        ppt.boxplot(ax, wt[variable], hypo[variable], ylabel=variable, paired=False, title="", ylim=[],
-                    colors=[ppt.wt_color, ppt.hypo_color], det_marker=False, force_markers_identity=False)
-    fig.suptitle(f"Comparison between {wt_amps} trials of WT & {hypo_amps} trials of KO-Hypo [behavior filter={behavior_filter}]", fontsize=20)
-    fig.canvas.manager.set_window_title(f"comp_{wt_amps}(WT)_{hypo_amps}(hypo)_{behavior_filter}")
+        ppt.boxplot(ax, data_gp1[variable], data_gp2[variable], ylabel=variable, paired=False, title="", ylim=[],
+                    colors=colors, det_marker=False, force_markers_identity=False)
+    fig.suptitle(f"Comparison between {gp1_amps} trials of {gp1} & {gp2_amps} trials of {gp2}"
+                 f"\n[behavior filter={behavior_filter}] n={len(data_gp1)}{gp1}/{len(data_gp2)}{gp2}", fontsize=20)
+    fig.canvas.manager.set_window_title(f"comp_{gp1_amps}({gp1})_{gp2_amps}({gp2})_{behavior_filter}")
     plt.show()
+
 
 
 def group_comp_param(recs, parameter, ko_hypo_only=False, stim_ampl="all", ylim=[]):
@@ -740,9 +751,10 @@ if __name__ == '__main__':
     for rec in recs.values():
         rec.peak_delay_amp()
         rec.auc()
-    data = get_features(recs.values())
-    compare_sub_supra_within(data, behavior_filter=None, genotype="KO", comparison="all_sub")
-    compare_sub_supra_between(data, behavior_filter=False, wt_amps="all_supra", hypo_amps="all_supra")
+    full_data = get_features(recs.values())
+    data = full_data[full_data["ID"] != 5886]
+    compare_sub_supra_within(data, behavior_filter=None, genotype="WT", comparison="all_supra")
+    compare_sub_supra_between(data, behavior_filter=False, gp1="KO", gp2="KO-Hypo", gp1_amps="mean", gp2_amps="threshold", colors=[ppt.ko_color, ppt.hypo_color])
 
     # group_comp_param(recs, parameter="AUC", ko_hypo_only=True, stim_ampl="all", ylim=[0, 1])
     # det_comp_param(recs, parameter="AUC", stim_ampl="all", ylim=[0, 1])
