@@ -59,6 +59,27 @@ def get_features(recs):
     return pd.DataFrame(rows)
 
 
+def filter_amplitude(data, amplitude="all", no_go=False):
+    if amplitude == "all":
+        filt_data = data
+    elif amplitude == "threshold":
+        filt_data = data[data["amplitude"] == data["threshold"]]
+    elif amplitude == "sub":
+        filt_data = data[data["amplitude"] == data["threshold"] - 2]
+    elif amplitude == "supra":
+        filt_data = data[data["amplitude"] == data["threshold"] + 2]
+    elif amplitude == "all_sub":
+        filt_data = data[data["amplitude"] < data["threshold"]]
+    elif amplitude == "all_supra":
+        filt_data = data[data["amplitude"] > data["threshold"]]
+    elif isinstance(amplitude, list):
+        filt_data = data[data["amplitude"].isin(amplitude)]
+    else:
+        filt_data = None
+    if not no_go:
+        filt_data = filt_data[filt_data["amplitude"] != 0]
+    return filt_data
+
 def get_sub_supra_threshold(data, behavior_filter=None, genotype="WT", comparison="sub"):
     # Filtering the genotype
     data = data[data["Genotype"] == genotype]
@@ -70,20 +91,10 @@ def get_sub_supra_threshold(data, behavior_filter=None, genotype="WT", compariso
         data = data[data["behavior"] == behavior_filter]
         grouping_cols = ["Genotype", "ID", "behavior"]
     # Filtering the amplitude
-    threshold_trials = data[data["amplitude"] == data["threshold"]].groupby(grouping_cols, as_index=False).mean()
+    threshold_trials = filter_amplitude(data, amplitude="threshold").groupby(grouping_cols, as_index=False).mean()
     genotype_threshold_average = 2 * round(threshold_trials["threshold"].mean() / 2) if 0 < threshold_trials["threshold"].mean() < 12 else 12
-    if comparison == "sub":
-        non_threshold_trials = data[data["amplitude"] == data["threshold"] - 2].groupby(grouping_cols, as_index=False).mean()
-    elif comparison == "supra":
-        non_threshold_trials = data[data["amplitude"] == data["threshold"] + 2].groupby(grouping_cols, as_index=False).mean()
-    elif comparison == "all_sub":
-        non_threshold_trials = data[data["amplitude"] < data["threshold"]].groupby(grouping_cols, as_index=False).mean()
-    elif comparison == "all_supra":
-        non_threshold_trials = data[data["amplitude"] > data["threshold"]].groupby(grouping_cols, as_index=False).mean()
-    elif comparison == "mean_genotype":
-        non_threshold_trials = data[data["amplitude"] == genotype_threshold_average].groupby(grouping_cols, as_index=False).mean()
-    elif isinstance(comparison, list):
-        non_threshold_trials = data[data["amplitude"].isin(comparison)].groupby(grouping_cols, as_index=False).mean()
+    amplitude = comparison if comparison != "mean_genotype" else genotype_threshold_average
+    non_threshold_trials = filter_amplitude(data, amplitude=amplitude).groupby(grouping_cols, as_index=False).mean()
     # Filtering out the no-go trials
     non_threshold_trials = non_threshold_trials[non_threshold_trials["amplitude"] != 0]
     return threshold_trials, non_threshold_trials
@@ -133,6 +144,30 @@ def compare_sub_supra_between(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo
                  f"\n[behavior filter={behavior_filter}] n={len(data_gp1)}{gp1}/{len(data_gp2)}{gp2}", fontsize=20)
     fig.canvas.manager.set_window_title(f"comp_{gp1_amps}({gp1})_{gp2_amps}({gp2})_{behavior_filter}")
     plt.show()
+
+
+def compare_det_undet(data, genotype="WT", amplitude="all"):
+    colors_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color],
+                   "KO": [ppt.ko_color, ppt.ko_light_color]}
+    grouping_cols = ["Genotype", "ID", "behavior"]
+    # Filtering the amplitude
+    genotype_data = data[data["Genotype"] == genotype]
+    ampl_data = filter_amplitude(genotype_data, amplitude=amplitude, no_go=False).groupby(grouping_cols, as_index=False).mean()
+    det_data = ampl_data[ampl_data["behavior"] == True]
+    undet_data = ampl_data[ampl_data["behavior"] == False]
+    # Plotting the comparisons
+    not_variables = ["ID", "Genotype", "behavior", "amplitude", "threshold"]
+    variables = [col for col in data.columns if col not in not_variables]
+    fig, axes = plt.subplots(nrows=3, ncols=4, figsize=(18, 12), constrained_layout=True)
+    axes_flat = axes.flatten()
+    for variable, ax in zip(variables, axes_flat):
+        ppt.boxplot(ax, det_data[variable], undet_data[variable], ylabel=variable, paired=False, title="", ylim=[],
+                    colors=colors_dict[genotype], det_marker=True, force_markers_identity=False)
+    fig.suptitle(f"Comparison in {genotype} of detected trials and undetected trials"
+                 f"\n[amplitude filter={amplitude}]", fontsize=20)
+    fig.canvas.manager.set_window_title(f"comp_{genotype}_det_undet_{amplitude}")
+    plt.show()
+    return det_data, undet_data
 
 
 
@@ -746,6 +781,12 @@ if __name__ == '__main__':
     pool = pool.ThreadPool(processes=workers)
     async_results = [pool.apply_async(opening_rec, args=(file, i)) for i, file in enumerate(files_)]
     recs = {ar.get().filename: ar.get() for ar in async_results}
+    # ====== Building a summary table ======
+    summary = []
+    for rec in recs.values():
+        summary.append({"Genotype": rec.genotype, "ID": rec.filename, "Threshold": rec.session_threshold,
+                        "n_trials": len(rec.detected_stim), "n_EXC": len(rec.zscore_exc), "n_INH": len(rec.zscore_inh)})
+    summary = pd.DataFrame(summary)
 
     # ====== Response features ======
     for rec in recs.values():
@@ -755,6 +796,9 @@ if __name__ == '__main__':
     data = full_data[full_data["ID"] != 5886]
     compare_sub_supra_within(data, behavior_filter=None, genotype="WT", comparison="all_supra")
     compare_sub_supra_between(data, behavior_filter=False, gp1="KO", gp2="KO-Hypo", gp1_amps="mean", gp2_amps="threshold", colors=[ppt.ko_color, ppt.hypo_color])
+    det, undet = compare_det_undet(data, genotype="WT", amplitude="all")
+    mean_det = np.mean(det.drop(columns="Genotype"), axis=0)
+    mean_undet = np.mean(undet.drop(columns="Genotype"), axis=0)
 
     # group_comp_param(recs, parameter="AUC", ko_hypo_only=True, stim_ampl="all", ylim=[0, 1])
     # det_comp_param(recs, parameter="AUC", stim_ampl="all", ylim=[0, 1])

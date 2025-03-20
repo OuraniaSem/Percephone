@@ -18,38 +18,6 @@ from Figures.stimulus_encoding import get_features
 
 
 # endregion
-# region ======================================== Correlation ==========================================================
-
-def perceptual_magnitude_behavior_corr(recs):
-    """
-    Correlates a single parameter witht he behavioral outcome for threshold trials using point biserial corrrelation.
-    Can not be used to correlate all trials because need to include the amplitude as a covariate.
-
-    Parameters
-    ----------
-    recs
-
-    Returns
-    -------
-
-    """
-    rows = []
-    for rec in recs:
-        # Keeping only the stimulation at threshold amplitude to limit bias
-        threshold_trials_mask = rec.stim_ampl_filter(stim_ampl="all")
-        # Getting the vector of the parameter to correlate with the behavior
-        act_exc_vector = rec.get_perc_resp(pattern=1, n_type="EXC")[threshold_trials_mask]
-        # Getting the vector of behavioral outcome
-        behavior_vector = rec.detected_stim[threshold_trials_mask]
-        if len(behavior_vector) > 2:
-            # Point biserial correlation of the vectors
-            r, p_val = pointbiserialr(act_exc_vector, behavior_vector)
-            rows.append({"ID": rec.filename, "Genotype": rec.genotype, "session_threshold": rec.session_threshold,
-                         "nb_threshold_trials": len(behavior_vector), "R2": r**2, "p_val": p_val})
-        else:
-            print(f"{rec.filename} {rec.genotype} excluded → only {len(behavior_vector)} threshold trial(s)")
-    return pd.DataFrame(rows)
-
 
 def get_activity_by_frame_df(recs, zscore=True):
     """
@@ -79,6 +47,39 @@ def get_activity_by_frame_df(recs, zscore=True):
                     for frame_id, frame in enumerate(range(trial_time - 30, trial_time + 30)):
                         row[frame_id] = neuron[frame]
                     rows.append(row)
+    return pd.DataFrame(rows)
+
+# region ======================================== Correlation ==========================================================
+
+
+def perceptual_magnitude_behavior_corr(recs):
+    """
+    Correlates a single parameter witht he behavioral outcome for threshold trials using point biserial corrrelation.
+    Can not be used to correlate all trials because need to include the amplitude as a covariate.
+
+    Parameters
+    ----------
+    recs
+
+    Returns
+    -------
+
+    """
+    rows = []
+    for rec in recs:
+        # Keeping only the stimulation at threshold amplitude to limit bias
+        threshold_trials_mask = rec.stim_ampl_filter(stim_ampl="all")
+        # Getting the vector of the parameter to correlate with the behavior
+        act_exc_vector = rec.get_perc_resp(pattern=1, n_type="EXC")[threshold_trials_mask]
+        # Getting the vector of behavioral outcome
+        behavior_vector = rec.detected_stim[threshold_trials_mask]
+        if len(behavior_vector) > 2:
+            # Point biserial correlation of the vectors
+            r, p_val = pointbiserialr(act_exc_vector, behavior_vector)
+            rows.append({"ID": rec.filename, "Genotype": rec.genotype, "session_threshold": rec.session_threshold,
+                         "nb_threshold_trials": len(behavior_vector), "R2": r**2, "p_val": p_val})
+        else:
+            print(f"{rec.filename} {rec.genotype} excluded → only {len(behavior_vector)} threshold trial(s)")
     return pd.DataFrame(rows)
 
 
@@ -207,13 +208,22 @@ def frame_model(frame_data):
     rows = []
     for frame in numeric_columns:
         frame_data = data.pivot(index=index_columns, columns=["n_type", "resp"], values=frame).reset_index()
+        # Dropping no go trials and the inhibited INH neurons because they are too few and induce NaN values
+        frame_data = frame_data.drop(columns=("INH", -1))
+        frame_data = frame_data[frame_data["Amplitude"] != 0]
+        # Imputing the NaN by the mean value per animal per amplitude
+        for col in [("EXC", 0), ("EXC", 1), ("EXC", -1), ("INH", 0), ("INH", 1)]:
+            frame_data[col] = frame_data.groupby(["Genotype", "ID", "Threshold", "Amplitude"], as_index=False)[[col]].transform(lambda x: x.fillna(x.mean()))
         # Training a model for each recording and storing the evaluation metrics in a new DataFrame
         for rec_id in frame_data["ID"].unique():
             filtered_data = frame_data[frame_data["ID"] == rec_id]
             X = filtered_data.drop(columns=index_columns)
             y = filtered_data["Behavior"]
-            # Split your data into training and test sets (using stratification to preserve class distribution)
+            # Splitting the data into training and test sets (using stratification to preserve class distribution)
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+            # 1) Use CV to find best C value for L2 regularization of LR, undersample each fold
+            # 2) Train the LR with the best parameters on the global undersampled X_train
+            # 3) Assess model performance on test set
             # Create a pipeline that first undersamples then fits a logistic regression model
             undersampler = RandomUnderSampler(random_state=42)
             X_train_res, y_train_res = undersampler.fit_resample(X_train, y_train)
@@ -221,7 +231,7 @@ def frame_model(frame_data):
             # Set up a grid of hyperparameters to tune
             param_grid = {"C": [0.0001, 0.001, 0.01, 0.1, 1, 10], "penalty": ['l2']}
             # Use cross-validation (here, 5-fold) to search for the best hyperparameters
-            grid_search = GridSearchCV(lr, param_grid, cv=5, scoring='accuracy')
+            grid_search = GridSearchCV(lr, param_grid, cv=4, scoring='accuracy')
             grid_search.fit(X_train_res, y_train_res)
             print("Best parameters found:", grid_search.best_params_)
             # Evaluate on the test set
@@ -236,12 +246,12 @@ def frame_model(frame_data):
             print(f"True Positive Rate (Sensitivity): {tpr:.3f}")
             print(f"True Negative Rate (Specificity): {tnr:.3f}")
             # Optionally, print a full classification report
-            print(classification_report(y_test, y_pred))
+            # print(classification_report(y_test, y_pred))
             row = {"Genotype": filtered_data["Genotype"].values[0], "ID": filtered_data["ID"].values[0],
-                   "Threshold": filtered_data["Threshold"].values[0], "Frame": frame, "TPR": tpr, "TNR": tnr}
+                   "Threshold": filtered_data["Threshold"].values[0], "Frame": frame, "C":grid_search.best_params_["C"], "TPR": tpr, "TNR": tnr}
             rows.append(row)
     return pd.DataFrame(rows)
-
+    # return frame_data
 
 
 # endregion ============================================================================================================
@@ -265,15 +275,15 @@ if __name__ == '__main__':
     recs = {ar.get().filename: ar.get() for ar in async_results}
     for rec in recs.values():
         rec.peak_delay_amp()
-    # endregion
+    # endregion ============
     # test = perceptual_magnitude_behavior_corr(recs.values())
     # mean_corr = test.groupby("Genotype").mean()
     # glmm_behavior(data)
 
-    data = get_features(recs.values())
-    frame_data = get_activity_by_frame_df(recs.values(), zscore=True)
-    corr_data = correlate_mean_zscore_behavior_frame(frame_data[frame_data["Amplitude"] == 12])
-    plot_frame_correlation(corr_data)
+    # frame_data = get_activity_by_frame_df(recs.values(), zscore=True)
+    # corr_data = correlate_mean_zscore_behavior_frame(frame_data[frame_data["Amplitude"] == 12])
+    # plot_frame_correlation(corr_data)
 
     frame_dff = get_activity_by_frame_df(recs.values(), zscore=False)
-    frame_model_df = frame_model(frame_dff[frame_data["ID"] == 4445])
+    frame_model_df = frame_model(frame_dff)#[frame_dff["ID"] == 4445])
+    frame_model_df_amp_gp = frame_model_df.groupby(["Genotype", "ID", "Threshold", "Amplitude"], as_index=False).mean().drop(columns=["Trial", "Duration", "Behavior"])
