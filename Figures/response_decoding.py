@@ -11,9 +11,10 @@ from scipy.stats import pointbiserialr
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import confusion_matrix, classification_report
 from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.pipeline import Pipeline
+from imblearn.pipeline import Pipeline
 
 import percephone.core.recording as pc
+import percephone.plts.stats as ppt
 from Figures.stimulus_encoding import get_features
 
 
@@ -181,7 +182,7 @@ def glmm_behavior(data):
     print(result.summary())
 
 
-def frame_model(frame_data):
+def frame_model_n_type_avg(frame_data):
     """
     Return the hit versus miss classification graph.
     A logistic regression model is trained on for each frame for each animal. CV is used to assess the hit accuracy
@@ -207,6 +208,7 @@ def frame_model(frame_data):
     numeric_columns = [c for c in data.columns if c not in header_columns]
     rows = []
     for frame in numeric_columns:
+        print(f"Frame n°{frame}")
         frame_data = data.pivot(index=index_columns, columns=["n_type", "resp"], values=frame).reset_index()
         # Dropping no go trials and the inhibited INH neurons because they are too few and induce NaN values
         frame_data = frame_data.drop(columns=("INH", -1))
@@ -220,38 +222,141 @@ def frame_model(frame_data):
             X = filtered_data.drop(columns=index_columns)
             y = filtered_data["Behavior"]
             # Splitting the data into training and test sets (using stratification to preserve class distribution)
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.4, random_state=42, stratify=y)
+            # 1) Use CV to find best C value for L2 regularization of LR, undersample each fold
+            # pipeline = Pipeline(steps=[('under', RandomUnderSampler(random_state=42)),
+            #                            ('clf', LogisticRegression(solver='lbfgs', max_iter=1000))])
+            # 2) Train the LR with the best parameters on the global undersampled X_train
+            # 3) Assess model performance on test set
+            # Create a pipeline that first undersamples then fits a logistic regression model
+            undersampler = RandomUnderSampler(random_state=42)
+            X_train_res, y_train_res = undersampler.fit_resample(X_train, y_train)
+            lr = LogisticRegression(solver='lbfgs', C=1, max_iter=5000)
+            # Set up a grid of hyperparameters to tune
+            # param_grid = {"clf__C": [0.00001, 0.0001, 0.001, 0.01, 0.1, 1, 10]}
+            # Use cross-validation (here, 5-fold) to search for the best hyperparameters
+            # grid_search = GridSearchCV(pipeline, param_grid, cv=4, scoring='accuracy')
+            # grid_search.fit(X_train, y_train)
+            # Evaluate on the test set
+            # y_pred = grid_search.predict(X_test)
+            lr.fit(X_train_res, y_train_res)
+            y_pred = lr.predict(X_test)
+            cm = confusion_matrix(y_test, y_pred)
+            # Calculate true positive and true negative rates
+            tn, fp, fn, tp = cm.ravel()
+            tpr = tp / (tp + fn)  # Sensitivity / Recall
+            fpr = fp / (tn + fp)
+            accuracy = (tp + tn) / (tp + tn + fp + fn)
+            # Optionally, print a full classification report
+            # print(classification_report(y_test, y_pred))
+            row = {"Genotype": filtered_data["Genotype"].values[0], "ID": filtered_data["ID"].values[0],
+                   "Threshold": filtered_data["Threshold"].values[0], "Frame": frame, "TPR": tpr, "FPR": fpr, "Accuracy": accuracy}
+            rows.append(row)
+    return pd.DataFrame(rows)
+    # return frame_data
+
+
+def frame_model(frame_data):
+    """
+    Return the hit versus miss classification graph.
+    A logistic regression model is trained on for each frame for each animal. CV is used to assess the hit accuracy
+    (True positive) and  miss accuracy (True negative). Under sampling was performed to avoid biases linked to the class
+    unbalance
+
+    Parameters
+    ----------
+    frame_data
+
+    Returns
+    -------
+
+    """
+    header_columns = ["Genotype", "ID", "Threshold", "Trial", "Amplitude", "Duration", "Behavior", "n_type", "resp", "n_ID"]
+    # Filtering the neuron types and activity
+    data = frame_data[frame_data["n_type"].isin(["EXC", "INH"])]
+    data = data[data["resp"].isin([0, 1, -1])]
+    data = data.drop(columns=["Threshold", "Amplitude", "Duration", "n_type", "resp"])
+    index_columns = ["Genotype", "ID", "Trial", "Behavior"]
+    numeric_columns = [c for c in data.columns if c not in header_columns]
+    rows = []
+    # Creating a pivot DataFrame to obtain a dataframe per frame, each column being a neuron
+    for frame in numeric_columns:
+        print(f"Frame n°{frame}")
+        # frame_data = frame_data[frame_data["Amplitude"] != 0]
+        # Training a model for each recording and storing the evaluation metrics in a new DataFrame
+        for rec_id in data["ID"].unique():
+            frame_data = data[data["ID"] == rec_id].pivot(index=index_columns, columns=["n_ID"], values=frame).reset_index()
+            filtered_data = frame_data[frame_data["ID"] == rec_id]
+            X = filtered_data.drop(columns=index_columns)
+            y = filtered_data["Behavior"]
+            # Splitting the data into training and test sets (using stratification to preserve class distribution)
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.4, random_state=42, stratify=y)
             # 1) Use CV to find best C value for L2 regularization of LR, undersample each fold
             # 2) Train the LR with the best parameters on the global undersampled X_train
             # 3) Assess model performance on test set
             # Create a pipeline that first undersamples then fits a logistic regression model
             undersampler = RandomUnderSampler(random_state=42)
             X_train_res, y_train_res = undersampler.fit_resample(X_train, y_train)
-            lr = LogisticRegression(solver='lbfgs', max_iter=5000)
+            lr = LogisticRegression(solver='lbfgs', C=1, max_iter=5000)
             # Set up a grid of hyperparameters to tune
-            param_grid = {"C": [0.0001, 0.001, 0.01, 0.1, 1, 10], "penalty": ['l2']}
+            # param_grid = {"clf__C": [0.00001, 0.0001, 0.001, 0.01, 0.1, 1, 10]}
             # Use cross-validation (here, 5-fold) to search for the best hyperparameters
-            grid_search = GridSearchCV(lr, param_grid, cv=4, scoring='accuracy')
-            grid_search.fit(X_train_res, y_train_res)
-            print("Best parameters found:", grid_search.best_params_)
+            # grid_search = GridSearchCV(pipeline, param_grid, cv=4, scoring='accuracy')
+            # grid_search.fit(X_train, y_train)
             # Evaluate on the test set
-            y_pred = grid_search.predict(X_test)
+            # y_pred = grid_search.predict(X_test)
+            lr.fit(X_train_res, y_train_res)
+            y_pred = lr.predict(X_test)
             cm = confusion_matrix(y_test, y_pred)
-            print("Confusion Matrix:")
-            print(cm)
             # Calculate true positive and true negative rates
             tn, fp, fn, tp = cm.ravel()
             tpr = tp / (tp + fn)  # Sensitivity / Recall
-            tnr = tn / (tn + fp)  # Specificity
-            print(f"True Positive Rate (Sensitivity): {tpr:.3f}")
-            print(f"True Negative Rate (Specificity): {tnr:.3f}")
+            fpr = fp / (tn + fp)
+            accuracy = (tp + tn) / (tp + tn + fp + fn)
             # Optionally, print a full classification report
             # print(classification_report(y_test, y_pred))
             row = {"Genotype": filtered_data["Genotype"].values[0], "ID": filtered_data["ID"].values[0],
-                   "Threshold": filtered_data["Threshold"].values[0], "Frame": frame, "C":grid_search.best_params_["C"], "TPR": tpr, "TNR": tnr}
+                   "Frame": frame, "TPR": tpr, "FPR": fpr, "Accuracy": accuracy}
             rows.append(row)
     return pd.DataFrame(rows)
     # return frame_data
+
+def plot_hit_miss_classif(frame_model_df):
+    """
+    Plot the hit vs miss classification graph from a Dataframe with each line containing infos about TPR and TNR for 1
+    frame for one animal.
+
+    Parameters
+    ----------
+    frame_model_df
+
+    Returns
+    -------
+
+    """
+    color_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color], "KO": [ppt.ko_color, ppt.ko_light_color]}
+    fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(20, 8), constrained_layout=True)
+    for i, genotype in enumerate(frame_model_df["Genotype"].unique()):
+        data = frame_model_df[frame_model_df["Genotype"] == genotype].drop(columns=["Genotype", "Threshold", "ID"])
+        tpr_mean = data.groupby("Frame")["TPR"].mean().values
+        tpr_sem = data.groupby("Frame")["TPR"].sem().values
+        fpr_mean = data.groupby("Frame")["FPR"].mean().values
+        fpr_sem = data.groupby("Frame")["FPR"].sem().values
+        x = np.arange(len(tpr_mean))
+        ax[i].plot(x, tpr_mean, label="Hit accuracy", color=color_dict[genotype][0], lw=2)
+        ax[i].fill_between(x, tpr_mean - tpr_sem, tpr_mean + tpr_sem, color=color_dict[genotype][0], alpha=0.3)
+        ax[i].plot(x, fpr_mean, label="Miss accuracy", color=color_dict[genotype][1], lw=2)
+        ax[i].fill_between(x, fpr_mean - fpr_sem, fpr_mean + fpr_sem, color=color_dict[genotype][1], alpha=0.3)
+        ax[i].axvline(x=30, ls="--", lw=1, color="red")
+        ax[i].axvline(x=45, ls="--", lw=1, color="black")
+        ax[i].axhline(y=0.5, ls="--", lw=1, color="gray")
+        ax[i].set_title(genotype, color=color_dict[genotype][0], fontsize=20)
+        ax[i].set_ylim(0, 1)
+    fig.suptitle("Hit versus Miss classification graph using the mean ΔF/F of EXC(0/1/-1) and INH(0/1)", fontsize=20)
+    fig.canvas.manager.set_window_title("Hit_Miss_classif_EXC(0_1_-1) and INH(0_1)")
+    plt.show()
+    return data
+
 
 
 # endregion ============================================================================================================
@@ -285,5 +390,6 @@ if __name__ == '__main__':
     # plot_frame_correlation(corr_data)
 
     frame_dff = get_activity_by_frame_df(recs.values(), zscore=False)
-    frame_model_df = frame_model(frame_dff)#[frame_dff["ID"] == 4445])
-    frame_model_df_amp_gp = frame_model_df.groupby(["Genotype", "ID", "Threshold", "Amplitude"], as_index=False).mean().drop(columns=["Trial", "Duration", "Behavior"])
+    frame_model_df = frame_model(frame_dff)
+    # frame_model_df_amp_gp = frame_model_df.groupby(["Genotype", "ID", "Threshold", "Amplitude"], as_index=False).mean().drop(columns=["Trial", "Duration", "Behavior"])
+    plot_hit_miss_classif(frame_model_df)
