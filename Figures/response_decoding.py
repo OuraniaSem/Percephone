@@ -256,7 +256,7 @@ def frame_model_n_type_avg(frame_data):
     # return frame_data
 
 
-def frame_model(frame_data):
+def frame_model(frame_data, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], test_size=0.3, l2_C=1):
     """
     Return the hit versus miss classification graph.
     A logistic regression model is trained on for each frame for each animal. CV is used to assess the hit accuracy
@@ -273,10 +273,10 @@ def frame_model(frame_data):
     """
     header_columns = ["Genotype", "ID", "Threshold", "Trial", "Amplitude", "Duration", "Behavior", "n_type", "resp", "n_ID"]
     # Filtering the neuron types and activity
-    data = frame_data[frame_data["n_type"].isin(["EXC", "INH"])]
-    data = data[data["resp"].isin([0, 1, -1])]
-    data = data.drop(columns=["Threshold", "Amplitude", "Duration", "n_type", "resp"])
-    index_columns = ["Genotype", "ID", "Trial", "Behavior"]
+    data = frame_data[frame_data["n_type"].isin(neuron_type)]
+    data = data[data["resp"].isin(resp_type)]
+    data = data.drop(columns=["Threshold", "Amplitude", "Duration", "resp"])
+    index_columns = ["Genotype", "ID", "Trial", "Behavior", "n_type", "n_ID"]
     numeric_columns = [c for c in data.columns if c not in header_columns]
     rows = []
     # Creating a pivot DataFrame to obtain a dataframe per frame, each column being a neuron
@@ -285,19 +285,20 @@ def frame_model(frame_data):
         # frame_data = frame_data[frame_data["Amplitude"] != 0]
         # Training a model for each recording and storing the evaluation metrics in a new DataFrame
         for rec_id in data["ID"].unique():
-            frame_data = data[data["ID"] == rec_id].pivot(index=index_columns, columns=["n_ID"], values=frame).reset_index()
-            filtered_data = frame_data[frame_data["ID"] == rec_id]
-            X = filtered_data.drop(columns=index_columns)
-            y = filtered_data["Behavior"]
+            rec_data = data[data["ID"] == rec_id]
+            rec_data["Neuron"] = f"{rec_data["n_ID"]}_{rec_data["n_type"]}"
+            final_data = rec_data.pivot(index=index_columns, columns=["Neuron"], values=frame).reset_index()
+            X = final_data.drop(columns=index_columns)
+            y = final_data["Behavior"]
             # Splitting the data into training and test sets (using stratification to preserve class distribution)
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.4, random_state=42, stratify=y)
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42, stratify=y)
             # 1) Use CV to find best C value for L2 regularization of LR, undersample each fold
             # 2) Train the LR with the best parameters on the global undersampled X_train
             # 3) Assess model performance on test set
             # Create a pipeline that first undersamples then fits a logistic regression model
             undersampler = RandomUnderSampler(random_state=42)
             X_train_res, y_train_res = undersampler.fit_resample(X_train, y_train)
-            lr = LogisticRegression(solver='lbfgs', C=1, max_iter=5000)
+            lr = LogisticRegression(solver='lbfgs', C=l2_C, max_iter=5000)
             # Set up a grid of hyperparameters to tune
             # param_grid = {"clf__C": [0.00001, 0.0001, 0.001, 0.01, 0.1, 1, 10]}
             # Use cross-validation (here, 5-fold) to search for the best hyperparameters
@@ -315,13 +316,16 @@ def frame_model(frame_data):
             accuracy = (tp + tn) / (tp + tn + fp + fn)
             # Optionally, print a full classification report
             # print(classification_report(y_test, y_pred))
-            row = {"Genotype": filtered_data["Genotype"].values[0], "ID": filtered_data["ID"].values[0],
+            row = {"Genotype": final_data["Genotype"].values[0], "ID": final_data["ID"].values[0],
                    "Frame": frame, "TPR": tpr, "FPR": fpr, "Accuracy": accuracy}
             rows.append(row)
-    return pd.DataFrame(rows)
-    # return frame_data
+    frame_model_df = pd.DataFrame(rows)
+    frame_mean_sem = plot_hit_miss_classif(frame_model_df, title_precision=f"{neuron_type}{resp_type} - C={l2_C} - Test={test_size}")
+    frame_comp = plot_hit_miss_classif_comp(frame_model_df, gp1="WT", gp2="KO-Hypo", title_precision=f"{neuron_type}{resp_type} - C={l2_C} - Test={test_size}")
+    return frame_model_df, frame_mean_sem, frame_comp
 
-def plot_hit_miss_classif(frame_model_df):
+
+def plot_hit_miss_classif(frame_model_df, title_precision=""):
     """
     Plot the hit vs miss classification graph from a Dataframe with each line containing infos about TPR and TNR for 1
     frame for one animal.
@@ -337,7 +341,7 @@ def plot_hit_miss_classif(frame_model_df):
     color_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color], "KO": [ppt.ko_color, ppt.ko_light_color]}
     fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(20, 8), constrained_layout=True)
     for i, genotype in enumerate(frame_model_df["Genotype"].unique()):
-        data = frame_model_df[frame_model_df["Genotype"] == genotype].drop(columns=["Genotype", "Threshold", "ID"])
+        data = frame_model_df[frame_model_df["Genotype"] == genotype].drop(columns=["Genotype", "ID"])
         tpr_mean = data.groupby("Frame")["TPR"].mean().values
         tpr_sem = data.groupby("Frame")["TPR"].sem().values
         fpr_mean = data.groupby("Frame")["FPR"].mean().values
@@ -352,8 +356,30 @@ def plot_hit_miss_classif(frame_model_df):
         ax[i].axhline(y=0.5, ls="--", lw=1, color="gray")
         ax[i].set_title(genotype, color=color_dict[genotype][0], fontsize=20)
         ax[i].set_ylim(0, 1)
-    fig.suptitle("Hit versus Miss classification graph using the mean ΔF/F of EXC(0/1/-1) and INH(0/1)", fontsize=20)
-    fig.canvas.manager.set_window_title("Hit_Miss_classif_EXC(0_1_-1) and INH(0_1)")
+        ax[i].set_xlabel("Time (s)")
+        ax[i].set_xticks([0, 15, 30, 45, 60])
+        ax[i].set_xticklabels([-1, -0.5, 0, 0.5, 1])
+    fig.suptitle(f"Hit versus Miss classification graph using the mean ΔF/F\n{title_precision}", fontsize=20)
+    fig.canvas.manager.set_window_title(f"Hit_Miss_classif_{title_precision}")
+    plt.show()
+    return data
+
+
+def plot_hit_miss_classif_comp(frame_model_df, gp1="WT", gp2="KO-Hypo", title_precision=""):
+    color_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color],
+                  "KO": [ppt.ko_color, ppt.ko_light_color]}
+    period_dict = {"stim": [30, 45], "start_stim": [30, 37], "end_stim": [37, 45], "pre_stim": [24, 30]}
+    fig, ax = plt.subplots(nrows=2, ncols=4, figsize=(20, 12), constrained_layout=True)
+    for col, period in enumerate(period_dict.keys()):
+        start, end = period_dict[period]
+        data = frame_model_df[frame_model_df["Frame"].isin(range(start, end))].groupby(["Genotype", "ID"], as_index=False).mean().drop(columns="Frame")
+        # Plotting the comparison of accuracy between genotypes
+        ppt.boxplot(ax[0, col], data[data["Genotype"] == gp1]["TPR"], data[data["Genotype"] == gp2]["TPR"], ylabel="Hit accuracy",
+                    paired=False, title=period, ylim=[0, 1], colors=[color_dict[gp1][0], color_dict[gp2][0]], det_marker=False, force_markers_identity=False)
+        ppt.boxplot(ax[1, col], data[data["Genotype"] == gp1]["FPR"], data[data["Genotype"] == gp2]["FPR"], ylabel="Miss error",
+                    paired=False, title=period, ylim=[0, 1], colors=[color_dict[gp1][1], color_dict[gp2][1]], det_marker=False, force_markers_identity=False)
+    fig.suptitle(f"Hit accuracy miss error comparison\n{title_precision}", fontsize=20)
+    fig.canvas.manager.set_window_title(f"Hit_Miss_classif_comp_{title_precision}")
     plt.show()
     return data
 
@@ -390,6 +416,11 @@ if __name__ == '__main__':
     # plot_frame_correlation(corr_data)
 
     frame_dff = get_activity_by_frame_df(recs.values(), zscore=False)
-    frame_model_df = frame_model(frame_dff)
+    frame_model_df, frame_mean_sem, frame_comp = frame_model(frame_dff)
     # frame_model_df_amp_gp = frame_model_df.groupby(["Genotype", "ID", "Threshold", "Amplitude"], as_index=False).mean().drop(columns=["Trial", "Duration", "Behavior"])
     plot_hit_miss_classif(frame_model_df)
+    data = plot_hit_miss_classif_comp(frame_model_df, gp1="WT", gp2="KO-Hypo", title_precision="")
+
+    for C in [0.0001, 0.001, 0.01, 0.1, 1]:
+        for test_ratio in [0.2, 0.3, 0.4]:
+            frame_model_df = frame_model(frame_dff, l2_C=C, test_size=test_ratio)
