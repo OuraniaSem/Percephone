@@ -794,14 +794,12 @@ if __name__ == '__main__':
         rec.auc()
     full_data = get_features(recs.values())
     data = full_data[full_data["ID"] != 5886]
-    compare_sub_supra_within(data, behavior_filter=None, genotype="WT", comparison="all_supra")
+    compare_sub_supra_within(data, behavior_filter=None, genotype="WT", comparison="all")
     compare_sub_supra_between(data, behavior_filter=False, gp1="KO", gp2="KO-Hypo", gp1_amps="mean", gp2_amps="threshold", colors=[ppt.ko_color, ppt.hypo_color])
-    det, undet = compare_det_undet(data, genotype="WT", amplitude="all")
+    det, undet = compare_det_undet(data, genotype="KO-Hypo", amplitude="all")
     mean_det = np.mean(det.drop(columns="Genotype"), axis=0)
     mean_undet = np.mean(undet.drop(columns="Genotype"), axis=0)
 
-    # group_comp_param(recs, parameter="AUC", ko_hypo_only=True, stim_ampl="all", ylim=[0, 1])
-    # det_comp_param(recs, parameter="AUC", stim_ampl="all", ylim=[0, 1])
 
     # ====== Responsivity ======
     # neurons = nb_neurons(recs.values())

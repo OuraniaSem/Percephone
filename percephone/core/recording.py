@@ -742,6 +742,10 @@ class RecordingAmplDet(Recording):
         filtered_para_mat = np.where(resp_mat == pattern, para_mat, np.nan)
         return np.nanmean(filtered_para_mat, axis=0)
 
+    def get_mean_activity(self, zscore=True, n_type="EXC"):
+        assert n_type in ["EXC", "INH"], "Please provide a valid neuron type (EXC or INH)"
+
+
 
 
 if __name__ == '__main__':

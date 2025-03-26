@@ -71,6 +71,22 @@ def classification_graph(hit_accuracy, miss_accuracy, title, colors):
 
 
 def split_data(rec, frame, train_ratio=0.8, stratify=False, seed=None, neurons="all"):
+    """
+    Create a dictionnary containing the different trial groups (train, test...etc)
+
+    Parameters
+    ----------
+    rec
+    frame
+    train_ratio
+    stratify
+    seed
+    neurons
+
+    Returns
+    -------
+
+    """
     id_exc_act, id_exc_inh = idx_resp_neur(rec, n_type="EXC")
     id_inh_act, id_inh_inh = idx_resp_neur(rec, n_type="INH")
     full_exc_id = np.arange(rec.zscore_exc.shape[0])
@@ -111,6 +127,18 @@ def split_data(rec, frame, train_ratio=0.8, stratify=False, seed=None, neurons="
 
 
 def random_over_under(X_train, y_train):
+    """
+    Perform a mix of over and under sammpling 1/2 ratio on the provied X_train and y_train
+
+    Parameters
+    ----------
+    X_train
+    y_train
+
+    Returns
+    -------
+
+    """
     n_class_1 = sum(y_train)
     n_class_2 = len(y_train) - sum(y_train)
     if n_class_1 == n_class_2:
@@ -132,6 +160,18 @@ def random_over_under(X_train, y_train):
 
 
 def resample(record_dict, resampler):
+    """
+    Resample the data provided as a record dictionnary
+
+    Parameters
+    ----------
+    record_dict
+    resampler
+
+    Returns
+    -------
+
+    """
     if resampler == "ROS-RUS":
         record_dict["X_bal"], record_dict["y_bal"] = random_over_under(record_dict["X_train"], record_dict["y_train"])
     record_dict["X_bal"], record_dict["y_bal"] = resampler.fit_resample(record_dict["X_train"], record_dict["y_train"])
@@ -139,6 +179,17 @@ def resample(record_dict, resampler):
 
 
 def get_sen_spe_acc(conf_matrix):
+    """
+    Return the sensitivity specificity and accuracy from a provided confsion matrix
+
+    Parameters
+    ----------
+    conf_matrix
+
+    Returns
+    -------
+
+    """
     TP = conf_matrix[1, 1]
     TN = conf_matrix[0, 0]
     FP = conf_matrix[0, 1]
@@ -151,6 +202,7 @@ def get_sen_spe_acc(conf_matrix):
 
 
 def crossval_sen_spe_acc(model, X, y, kfold=5, stratify=True, shuffle=True, resampler=None, verbose=0):
+
     sensitivities = []
     specificities = []
     accuracies = []
@@ -187,6 +239,21 @@ def crossval_sen_spe_acc(model, X, y, kfold=5, stratify=True, shuffle=True, resa
 
 
 def frame_model(rec, frame, resampler, cv=False, neurons="all"):
+    """
+    Takes the neuronal data for 1 frame, fits a LR model and returns the metrics of the model
+
+    Parameters
+    ----------
+    rec
+    frame
+    resampler
+    cv
+    neurons
+
+    Returns
+    -------
+
+    """
     model = LogisticRegression(penalty='l2', max_iter=5000)
     if cv:
         r_dict = split_data(rec, frame, train_ratio=1, stratify=True, seed=None, neurons=neurons)
@@ -211,6 +278,7 @@ def frame_model(rec, frame, resampler, cv=False, neurons="all"):
 
 
 if __name__ == '__main__':
+    # region ======= Frame Model ======
     import numpy as np
 
     condition = None
@@ -247,7 +315,7 @@ if __name__ == '__main__':
 
 
     np.random.seed(42)
-    user = "Théo"
+    user = "Célien"
     if user == "Célien":
         directory = "C:/Users/cvandromme/Desktop/Data/"
         roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
@@ -334,8 +402,9 @@ if __name__ == '__main__':
     fig.savefig(server_address + f"{save_folder}/modelling/model_accuracy_{condition}({stim_period_to_correlate}_stim).pdf")
     plt.show()
     print("Done")
+    # endregion ======
 
-    # Correlation of frame model accuracy with cosine similarity of zscore (Trial-by-trial variability)
+    # region ====== Correlation of frame model accuracy with cosine similarity of zscore (Trial-by-trial variability) ======
     if condition is None:
         cosine_file = np.load(server_address + f"{save_folder}/cosine_similarity/cosine_sim.npy", allow_pickle=True)
         wt_cosine = cosine_file[0]  # first array should be wt
@@ -366,8 +435,9 @@ if __name__ == '__main__':
     ax.spines[["right", "top"]].set_visible(False)
     fig1.tight_layout()
     fig1.savefig(server_address + f"{save_folder}/modelling/correlation_model_accuracy_and_cosine_sim_{condition}({stim_period_to_correlate}_stim).pdf")
+    # endregion
 
-    # Correlation of frame model accuracy with number of driver cells
+    # region ====== Correlation of frame model accuracy with number of driver cells
     from percephone.analysis.utils import idx_resp_neur
     drivers_len_wt, drivers_len_ko = [], []
     for rec in recs.values():
@@ -400,8 +470,9 @@ if __name__ == '__main__':
     ax.spines[["right", "top"]].set_visible(False)
     fig1.tight_layout()
     fig1.savefig(server_address + f"{save_folder}/modelling/correlation_model_accuracy_and_n_drivers_neurons_{condition}({stim_period_to_correlate}_stim).pdf")
+    # endregion ======
 
-    # Correlation of frame model accuracy with number of responsive cells
+    # region ====== Correlation of frame model accuracy with number of responsive cells
     resp_wt, resp_ko = [], []
     for rec in recs.values():
         responsivity_exc = rec.matrices["EXC"]["Responsivity"][:, rec.detected_stim]
@@ -436,5 +507,5 @@ if __name__ == '__main__':
     ax.spines[["right", "top"]].set_visible(False)
     fig1.tight_layout()
     fig1.savefig(server_address + f"{save_folder}/modelling/correlation_model_accuracy_and_resp_nueronss_neurons_{condition}({stim_period_to_correlate}_stim).pdf")
-
+    # endregion
 

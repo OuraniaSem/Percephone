@@ -10,8 +10,10 @@ from multiprocessing import cpu_count, pool
 from scipy.stats import pointbiserialr
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import confusion_matrix, classification_report
-from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.model_selection import train_test_split, GridSearchCV, StratifiedKFold
 from imblearn.pipeline import Pipeline
+from itertools import product
+from tqdm import tqdm
 
 import percephone.core.recording as pc
 import percephone.plts.stats as ppt
@@ -256,7 +258,7 @@ def frame_model_n_type_avg(frame_data):
     # return frame_data
 
 
-def frame_model(frame_data, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], test_size=0.3, l2_C=1):
+def frame_model(frame_data, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db_cv=True):
     """
     Return the hit versus miss classification graph.
     A logistic regression model is trained on for each frame for each animal. CV is used to assess the hit accuracy
@@ -280,49 +282,115 @@ def frame_model(frame_data, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], te
     numeric_columns = [c for c in data.columns if c not in header_columns]
     rows = []
     # Creating a pivot DataFrame to obtain a dataframe per frame, each column being a neuron
-    for frame in numeric_columns:
-        print(f"Frame n°{frame}")
+    for frame in tqdm(numeric_columns):
         # frame_data = frame_data[frame_data["Amplitude"] != 0]
         # Training a model for each recording and storing the evaluation metrics in a new DataFrame
         for rec_id in data["ID"].unique():
-            rec_data = data[data["ID"] == rec_id]
-            rec_data["Neuron"] = f"{rec_data["n_ID"]}_{rec_data["n_type"]}"
-            final_data = rec_data.pivot(index=index_columns, columns=["Neuron"], values=frame).reset_index()
-            X = final_data.drop(columns=index_columns)
+            rec_data = data[data["ID"] == rec_id].copy()
+            rec_data["Neuron"] = rec_data["n_ID"].astype(str) + "_" + rec_data["n_type"].astype(str)
+            final_data = rec_data.pivot(index=["Trial", "Behavior"], columns="Neuron", values=frame).reset_index()
             y = final_data["Behavior"]
-            # Splitting the data into training and test sets (using stratification to preserve class distribution)
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42, stratify=y)
-            # 1) Use CV to find best C value for L2 regularization of LR, undersample each fold
-            # 2) Train the LR with the best parameters on the global undersampled X_train
-            # 3) Assess model performance on test set
-            # Create a pipeline that first undersamples then fits a logistic regression model
-            undersampler = RandomUnderSampler(random_state=42)
-            X_train_res, y_train_res = undersampler.fit_resample(X_train, y_train)
-            lr = LogisticRegression(solver='lbfgs', C=l2_C, max_iter=5000)
-            # Set up a grid of hyperparameters to tune
-            # param_grid = {"clf__C": [0.00001, 0.0001, 0.001, 0.01, 0.1, 1, 10]}
-            # Use cross-validation (here, 5-fold) to search for the best hyperparameters
-            # grid_search = GridSearchCV(pipeline, param_grid, cv=4, scoring='accuracy')
-            # grid_search.fit(X_train, y_train)
-            # Evaluate on the test set
-            # y_pred = grid_search.predict(X_test)
-            lr.fit(X_train_res, y_train_res)
-            y_pred = lr.predict(X_test)
-            cm = confusion_matrix(y_test, y_pred)
-            # Calculate true positive and true negative rates
-            tn, fp, fn, tp = cm.ravel()
-            tpr = tp / (tp + fn)  # Sensitivity / Recall
-            fpr = fp / (tn + fp)
-            accuracy = (tp + tn) / (tp + tn + fp + fn)
-            # Optionally, print a full classification report
-            # print(classification_report(y_test, y_pred))
-            row = {"Genotype": final_data["Genotype"].values[0], "ID": final_data["ID"].values[0],
-                   "Frame": frame, "TPR": tpr, "FPR": fpr, "Accuracy": accuracy}
+            X = final_data.drop(columns=["Trial", "Behavior"])
+            if db_cv:
+                metrics = double_cv(np.array(X), np.array(y), cv_out_fold=4, cv_in_fold=4,
+                                    param_grid={"C": [0.0001, 0.001, 0.01, 0.1, 1], "penalty": ["l2"]},
+                                    scoring_metric="Accuracy", resampler=RandomUnderSampler(random_state=42),
+                                    random_state=42, get_df=False)
+            else:
+                # Splitting the data into training and test sets (using stratification to preserve class distribution)
+                X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42, stratify=y)
+                undersampler = RandomUnderSampler(random_state=42)
+                X_train_res, y_train_res = undersampler.fit_resample(X_train, y_train)
+                lr = LogisticRegression(solver='lbfgs', C=1, max_iter=5000)
+                lr.fit(X_train_res, y_train_res)
+                y_pred = lr.predict(X_test)
+                metrics = get_metrics(y_test, y_pred)
+            row = {"Genotype": rec_data["Genotype"].values[0], "ID": rec_data["ID"].values[0],
+                   "Frame": frame, "TPR": metrics["TPR"], "FPR": metrics["FPR"], "Accuracy": metrics["Accuracy"]}
             rows.append(row)
     frame_model_df = pd.DataFrame(rows)
-    frame_mean_sem = plot_hit_miss_classif(frame_model_df, title_precision=f"{neuron_type}{resp_type} - C={l2_C} - Test={test_size}")
-    frame_comp = plot_hit_miss_classif_comp(frame_model_df, gp1="WT", gp2="KO-Hypo", title_precision=f"{neuron_type}{resp_type} - C={l2_C} - Test={test_size}")
+    frame_mean_sem = plot_hit_miss_classif(frame_model_df, title_precision=f"{neuron_type}{resp_type} - Double CV=={db_cv}")
+    frame_comp = plot_hit_miss_classif_comp(frame_model_df, gp1="WT", gp2="KO-Hypo", title_precision=f"{neuron_type}{resp_type} - db_cv={db_cv}")
     return frame_model_df, frame_mean_sem, frame_comp
+
+
+def get_metrics(y_test, y_pred):
+    metrics = {}
+    cm = confusion_matrix(y_test, y_pred, labels=[False, True])
+    TP = cm[1, 1]
+    TN = cm[0, 0]
+    FP = cm[0, 1]
+    FN = cm[1, 0]
+    metrics["TPR"] = TP / (TP + FN)  # Sensitivity / Recall
+    metrics["FPR"] = FP / (TN + FP)
+    metrics["Accuracy"] = (TP + TN) / (TP + TN + FP + FN)
+    return metrics
+
+
+def double_cv(X, y, cv_out_fold=5, cv_in_fold=5, param_grid={"C": [0.0001, 0.001, 0.01, 0.1, 1], "penalty": ["l2"]},
+              scoring_metric="Accuracy", resampler=RandomUnderSampler(random_state=42), random_state=42, get_df=False):
+    """
+    Perform double cross validation
+    Parameters
+    ----------
+    X
+    y
+    cv_out_fold
+    cv_in_fold
+    param_grid
+    scoring_metric
+    resampler
+    random_state
+    get_df
+
+    Returns
+    -------
+
+    """
+    cv_out = StratifiedKFold(n_splits=cv_out_fold, random_state=random_state, shuffle=True)
+    rows = []
+    # Splitting the data into training and validation sets
+    for fold_out, (train_index, val_index) in enumerate(cv_out.split(X, y)):
+        row = {"Fold": fold_out}
+        X_train, X_val, y_train, y_val = X[train_index], X[val_index], y[train_index], y[val_index]
+        # Splitting the train data into tuning and tuning assessment group
+        cv_in = StratifiedKFold(n_splits=cv_in_fold, random_state=random_state, shuffle=True)
+        inner_scores = {}
+        param_names = list(param_grid.keys())
+        param_combinations = list(product(*[param_grid[p] for p in param_names]))
+        for params in param_combinations:
+            params_dict = dict(zip(param_names, params))
+            # Performing CV to find the best hyperparameters
+            fold_scores = []
+            for fold_in, (tuning_index, test_index) in enumerate(cv_in.split(X_train, y_train)):
+                X_tuning, X_test, y_tuning, y_test = X_train[tuning_index], X_train[test_index], y_train[tuning_index], y_train[test_index]
+                # Tuning hyper-parameters on the tuning data set
+                model = LogisticRegression(**params_dict, max_iter=5000, random_state=random_state)
+                model.fit(X_tuning, y_tuning)
+                # Predicting the test set and storing metrics
+                y_pred_in = model.predict(X_test)
+                metrics = get_metrics(y_test, y_pred_in)
+                fold_scores.append(metrics[scoring_metric])
+            inner_scores[tuple(params)] = np.mean(fold_scores)
+        # Choosing the best parameters from the inner loop
+        best_params_tuple = max(inner_scores, key=inner_scores.get)
+        best_params = dict(zip(param_names, best_params_tuple))
+        row["Best_param"] = best_params
+        # Resampling the training set and training the final model with this set
+        if resampler is not None:
+            X_train_res, y_train_res = resampler.fit_resample(X_train, y_train)
+        else:
+            X_train_res, y_train_res = X_train, y_train
+        final_model = LogisticRegression(**best_params, max_iter=5000, random_state=random_state)
+        final_model.fit(X_train_res, y_train_res)
+        # Assessing the final model's performance
+        y_val_pred = final_model.predict(X_val)
+        outer_metrics = get_metrics(y_val, y_val_pred)
+        row.update(outer_metrics)
+        rows.append(row)
+    results_df = pd.DataFrame(rows)
+    results_metrics = results_df.mean(numeric_only=True).to_dict()
+    return results_df if get_df else results_metrics
 
 
 def plot_hit_miss_classif(frame_model_df, title_precision=""):
@@ -368,7 +436,7 @@ def plot_hit_miss_classif(frame_model_df, title_precision=""):
 def plot_hit_miss_classif_comp(frame_model_df, gp1="WT", gp2="KO-Hypo", title_precision=""):
     color_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color],
                   "KO": [ppt.ko_color, ppt.ko_light_color]}
-    period_dict = {"stim": [30, 45], "start_stim": [30, 37], "end_stim": [37, 45], "pre_stim": [24, 30]}
+    period_dict = {"stim": [30, 45], "start_stim (250ms)": [30, 37], "end_stim (250ms)": [37, 45], "pre_stim (200ms)": [24, 30]}
     fig, ax = plt.subplots(nrows=2, ncols=4, figsize=(20, 12), constrained_layout=True)
     for col, period in enumerate(period_dict.keys()):
         start, end = period_dict[period]
@@ -417,10 +485,9 @@ if __name__ == '__main__':
 
     frame_dff = get_activity_by_frame_df(recs.values(), zscore=False)
     frame_model_df, frame_mean_sem, frame_comp = frame_model(frame_dff)
+
+    saved_framed_model_df = pd.read_csv("C:/Users/cvandromme/Desktop/frame_dff.csv")
     # frame_model_df_amp_gp = frame_model_df.groupby(["Genotype", "ID", "Threshold", "Amplitude"], as_index=False).mean().drop(columns=["Trial", "Duration", "Behavior"])
     plot_hit_miss_classif(frame_model_df)
     data = plot_hit_miss_classif_comp(frame_model_df, gp1="WT", gp2="KO-Hypo", title_precision="")
 
-    for C in [0.0001, 0.001, 0.01, 0.1, 1]:
-        for test_ratio in [0.2, 0.3, 0.4]:
-            frame_model_df = frame_model(frame_dff, l2_C=C, test_size=test_ratio)
