@@ -440,10 +440,10 @@ def ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
     # manually_arranged_idx = dn_exc['leaves'][18:] + dn_exc['leaves'][0:18][::-1]  #KO
     manually_arranged_idx = dn_exc['leaves'][0:14] + dn_exc['leaves'][37:] + dn_exc['leaves'][14:37][::-1]  #Hypo
     im = ax.imshow(data[manually_arranged_idx], cmap=cmap, interpolation='none', aspect='auto',
-                   # vmin=np.nanpercentile(np.ravel(data), 1),
-                   # vmax=np.nanpercentile(np.ravel(data), 99), extent=extent)
-                    vmin=-1,
-                   vmax=1.5, extent=extent)
+                   vmin=np.nanpercentile(np.ravel(data), 1),
+                   vmax=np.nanpercentile(np.ravel(data), 99), extent=extent)
+                   #  vmin=-1,
+                   # vmax=1.5, extent=extent)
 
     # plotting lines to separate stimulation
     if not avg_trials_amp and not threshold_only:
@@ -539,7 +539,7 @@ if __name__ == '__main__':
 
     user = "Célien"
     plot_all_records = False
-    plot_ordered_heatmap = False
+    plot_ordered_heatmap = True
     plot_responsivity_heatmap = False
     plot_normal_heatmap = True
     if user == "Célien":
@@ -568,10 +568,10 @@ if __name__ == '__main__':
                 interactive_heatmap(rec, rec.df_f_exc)
 
     else:
-        rec_directory = directory + "20220715_4456_00_synchro/"
+        rec_directory = directory + "20241203_7539_00_synchro/"
         rec = RecordingAmplDet(rec_directory, 0, roi_path, cache=True)
-        rec.peak_delay_amp()
-        rec.auc()
+        # rec.peak_delay_amp()
+        # rec.auc()
         if plot_ordered_heatmap:
             ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
                             time_span="stim", window=0.5, estimator=None,

@@ -75,6 +75,7 @@ class Recording:
         self.filename, inhibitory_ids, self.sf, self.genotype, self.threshold, self.iti1_only, self.hit_rates = read_info(folder_name, rois)
         _, _, self.x0_psy, self.k_psy = sigmoid_fit(np.arange(start=0, stop=13, step=2), self.hit_rates)
         self.session_threshold = 2 * round(self.x0_psy / 2) if 0 < self.x0_psy < 12 else 12
+        self.bounded_x0 = self.x0_psy if 0 < self.x0_psy < 12 else 12
         self.session_threshold = 8 if self.filename == 6606 else self.session_threshold  # 0% hit rate at 6 (computed)
         self.input_path = input_path
         self.matrices = {"EXC": {}, "INH": {}}

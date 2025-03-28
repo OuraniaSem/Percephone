@@ -2,6 +2,7 @@
 import os
 import numpy as np
 import pandas as pd
+import scipy.stats as ss
 from matplotlib import pyplot as plt
 from multiprocessing import cpu_count, pool
 from sklearn.decomposition import PCA
@@ -101,13 +102,43 @@ def get_ei_ratio_df(recs):
     for rec in recs:
         behavior_vector = rec.detected_stim
         amplitude_vector = rec.stim_ampl
-        act_exc_vector = rec.get_perc_resp(pattern=1, n_type="EXC")
-        act_inh_vector = rec.get_perc_resp(pattern=1, n_type="INH")
-        ei_ratio_vector = np.divide(act_exc_vector, act_inh_vector)
+        act_EXC_vector = rec.get_perc_resp(pattern=1, n_type="EXC")
+        act_INH_vector = rec.get_perc_resp(pattern=1, n_type="INH")
+        # === Computing E/I ratio
+        # 1) Basic E/I ratio
+        ei_ratio_vector = np.divide(act_EXC_vector, act_INH_vector)
+        # 2) E/I ratio + cste
+        epsilon = 0.0001
+        cst_ei_ratio_vector = np.divide(act_EXC_vector + epsilon, act_INH_vector + epsilon)
+        # 3) Normalized E/I ratio
+        norm_act_EXC_vector = (act_EXC_vector - np.mean(act_EXC_vector)) / np.std(act_EXC_vector)
+        norm_act_INH_vector = (act_INH_vector - np.mean(act_INH_vector)) / np.std(act_INH_vector)
+        norm_ei_ratio_vector = np.divide(norm_act_EXC_vector, norm_act_INH_vector)
+        # 4) Log E/I Ratio + cste
+        log_cst_ei_ratio_vector = np.log(cst_ei_ratio_vector)
+        # 5) Log normalized E/I Ratio
+        log_norm_ei_ratio_vector = np.log(norm_ei_ratio_vector)
         for trial_id in range(len(behavior_vector)):
             rows.append({"Genotype": rec.genotype, "ID": rec.filename, "Threshold": rec.session_threshold,
                          "Trial": trial_id, "Amplitude": amplitude_vector[trial_id],
-                         "Behavior": behavior_vector[trial_id], "EI_ratio": ei_ratio_vector[trial_id]})
+                         "Behavior": behavior_vector[trial_id],
+                         "EI_ratio": ei_ratio_vector[trial_id],
+                         "EI_ratio_cste": cst_ei_ratio_vector[trial_id],
+                         "EI_ratio_norm": norm_ei_ratio_vector[trial_id],
+                         "EI_ratio_log_cste": log_cst_ei_ratio_vector[trial_id],
+                         "EI_ratio_log_norm": log_norm_ei_ratio_vector[trial_id]})
+    return pd.DataFrame(rows)
+
+
+def correlate_behavior(data, column=None):
+    if column is None:
+        column = data.columns[-1]
+    rows = []
+    for rec_id in data["ID"].unique():
+        rec_data = data[data["ID"] == rec_id]
+        r, pval = ss.pointbiserialr(rec_data[column], rec_data["Behavior"])
+        rows.append({"ID": rec_data["ID"].values[0], "Genotype": rec_data["Genotype"].values[0],
+                     "Threshold": rec_data["Threshold"].values[0], "R2": r**2, "pval": pval})
     return pd.DataFrame(rows)
 
 # endregion ============================================================================================================
@@ -129,32 +160,30 @@ if __name__ == '__main__':
     async_results = [pool.apply_async(opening_rec, args=(file, i)) for i, file in enumerate(files_)]
     recs = {ar.get().filename: ar.get() for ar in async_results}
     # endregion
-
     # Dropping 5886 from the noise assessment analysis because its computed threshold is 3 (10% hit rate for 2µm and 90% for 4µm)
     excluded_rec = recs.pop(5886)
-
     # region ====== Comparison of threshold to session threshold ======
-    rows = []
-    for rec in recs.values():
-        rows.append({"ID": rec.filename, "Genotype": rec.genotype, "threshold": rec.threshold, "session_threshold": rec.session_threshold, "session_x0": rec.x0_psy})
-    session_threshold = pd.DataFrame(rows)
-
-    from percephone.utils.math_formulas import sigmoid_fit
-    fig, ax = plt.subplots(nrows=5, ncols=6, figsize=(20, 12), constrained_layout=True)
-    axs = ax.flatten()
-    for i, rec in enumerate(recs.values()):
-        axs[i].set_title(f"{rec.filename} - {rec.threshold}/{rec.session_threshold}({rec.x0_psy:.2f})")
-        axs[i].set_ylim(0, 1)
-        axs[i].scatter(np.arange(start=2, stop=13, step=2), rec.hit_rates[1:])
-        x, y, x0, k = sigmoid_fit(np.arange(start=0, stop=13, step=2), rec.hit_rates)
-        axs[i].plot(x, y, color='red')
-    plt.show()
+    # rows = []
+    # for rec in recs.values():
+    #     rows.append({"ID": rec.filename, "Genotype": rec.genotype, "threshold": rec.threshold, "session_threshold": rec.session_threshold, "session_x0": rec.x0_psy})
+    # session_threshold = pd.DataFrame(rows)
+    #
+    # from percephone.utils.math_formulas import sigmoid_fit
+    # fig, ax = plt.subplots(nrows=5, ncols=6, figsize=(20, 12), constrained_layout=True)
+    # axs = ax.flatten()
+    # for i, rec in enumerate(recs.values()):
+    #     axs[i].set_title(f"{rec.filename} - {rec.threshold}/{rec.session_threshold}({rec.x0_psy:.2f})")
+    #     axs[i].set_ylim(0, 1)
+    #     axs[i].scatter(np.arange(start=2, stop=13, step=2), rec.hit_rates[1:])
+    #     x, y, x0, k = sigmoid_fit(np.arange(start=0, stop=13, step=2), rec.hit_rates)
+    #     axs[i].plot(x, y, color='red')
+    # plt.show()
     # endregion
     # region ====== TBT variability ======
-    activity_long_df = get_mean_trial_activity_df(recs.values(), zscore=True)
-    pca_df = pca(activity_long_df)
+    # activity_long_df = get_mean_trial_activity_df(recs.values(), zscore=True)
+    # pca_df = pca(activity_long_df)
     # endregion
-
     # region ====== E/I Ratio ======
     ei_df = get_ei_ratio_df(recs.values())
+    ei_behavior_df = correlate_behavior(ei_df, column="EI_ratio_cste")
     # endregion

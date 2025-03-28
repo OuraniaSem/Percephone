@@ -52,7 +52,7 @@ def get_features(recs):
         }
         nb_trials = len(feature_vectors["behavior"])
         for trial_id in range(nb_trials):
-            row = {"ID": rec.filename, "Genotype": rec.genotype, "threshold": rec.session_threshold}
+            row = {"ID": rec.filename, "Genotype": rec.genotype, "threshold": rec.session_threshold, "bounded_x0": rec.bounded_x0}
             for feature, vector in feature_vectors.items():
                 row[feature] = vector[trial_id]
             rows.append(row)
@@ -80,6 +80,7 @@ def filter_amplitude(data, amplitude="all", no_go=False):
         filt_data = filt_data[filt_data["amplitude"] != 0]
     return filt_data
 
+
 def get_sub_supra_threshold(data, behavior_filter=None, genotype="WT", comparison="sub"):
     # Filtering the genotype
     data = data[data["Genotype"] == genotype]
@@ -92,8 +93,17 @@ def get_sub_supra_threshold(data, behavior_filter=None, genotype="WT", compariso
         grouping_cols = ["Genotype", "ID", "behavior"]
     # Filtering the amplitude
     threshold_trials = filter_amplitude(data, amplitude="threshold").groupby(grouping_cols, as_index=False).mean()
-    genotype_threshold_average = 2 * round(threshold_trials["threshold"].mean() / 2) if 0 < threshold_trials["threshold"].mean() < 12 else 12
-    amplitude = comparison if comparison != "mean_genotype" else genotype_threshold_average
+    if comparison == "rounded_mean_genotype":
+        amplitude = [2 * round(threshold_trials["threshold"].mean() / 2) if 0 < threshold_trials["threshold"].mean() < 12 else 12]
+    elif comparison == "real_mean_genotype":
+        amplitude = [2 * round(threshold_trials["bounded_x0"].mean() / 2) if 0 < threshold_trials["bounded_x0"].mean() < 12 else 12]
+        print(f"Mean bounded x0: {threshold_trials["bounded_x0"].mean()}")
+    elif comparison == "rounded_median_genotype":
+        amplitude = [2 * round(threshold_trials["threshold"].median() / 2) if 0 < threshold_trials["threshold"].median() < 12 else 12]
+    elif comparison == "real_median_genotype":
+        amplitude = [2 * round(threshold_trials["bounded_x0"].median() / 2) if 0 < threshold_trials["bounded_x0"].median() < 12 else 12]
+    else:
+        amplitude = comparison
     non_threshold_trials = filter_amplitude(data, amplitude=amplitude).groupby(grouping_cols, as_index=False).mean()
     # Filtering out the no-go trials
     non_threshold_trials = non_threshold_trials[non_threshold_trials["amplitude"] != 0]
@@ -111,7 +121,7 @@ def compare_sub_supra_within(data, behavior_filter=None, genotype="WT", comparis
     threshold_trials = threshold_trials.sort_values("ID").reset_index(drop=True)
     non_threshold_trials = non_threshold_trials.sort_values("ID").reset_index(drop=True)
     # Plotting the comparisons
-    not_variables = ["ID", "Genotype", "behavior", "amplitude", "threshold"]
+    not_variables = ["ID", "Genotype", "behavior", "amplitude", "threshold", "bounded_x0"]
     variables = [col for col in data.columns if col not in not_variables]
     fig, axes = plt.subplots(nrows=3, ncols=4, figsize=(18, 12), constrained_layout=True)
     axes_flat = axes.flatten()
@@ -127,13 +137,13 @@ def compare_sub_supra_within(data, behavior_filter=None, genotype="WT", comparis
 def compare_sub_supra_between(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo", gp1_amps="sub", gp2_amps="sub",
                               colors=[ppt.wt_color, ppt.hypo_color]):
     gp1_threshold, gp1_non_threshold = get_sub_supra_threshold(data, behavior_filter=behavior_filter, genotype=gp1, comparison=gp1_amps if gp1_amps != "threshold" else "sub")
-    if gp1_amps == "mean_genotype" and gp2_amps == "gp1_threshold":
+    if (gp1_amps in ["rounded_mean_genotype", "real_mean_genotype", "rounded_median_genotype", "real_median_genotype"] and gp2_amps == "gp1_threshold"):
         gp2_amps = [gp1_non_threshold["amplitude"].values[0]]
     gp2_threshold, gp2_non_threshold = get_sub_supra_threshold(data, behavior_filter=behavior_filter, genotype=gp2, comparison=gp2_amps if gp2_amps != "threshold" else "sub")
     # Plotting the comparisons
     data_gp1 = gp1_threshold if gp1_amps == "threshold" else gp1_non_threshold
     data_gp2 = gp2_threshold if gp2_amps == "threshold" else gp2_non_threshold
-    not_variables = ["ID", "Genotype", "behavior", "amplitude", "threshold"]
+    not_variables = ["ID", "Genotype", "behavior", "amplitude", "threshold", "bounded_x0"]
     variables = [col for col in data.columns if col not in not_variables]
     fig, axes = plt.subplots(nrows=3, ncols=4, figsize=(18, 12), constrained_layout=True)
     axes_flat = axes.flatten()
@@ -144,6 +154,7 @@ def compare_sub_supra_between(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo
                  f"\n[behavior filter={behavior_filter}] n={len(data_gp1)}{gp1}/{len(data_gp2)}{gp2}", fontsize=20)
     fig.canvas.manager.set_window_title(f"comp_{gp1_amps}({gp1})_{gp2_amps}({gp2})_{behavior_filter}")
     plt.show()
+    return data_gp1, data_gp2
 
 
 def compare_det_undet(data, genotype="WT", amplitude="all"):
@@ -156,7 +167,7 @@ def compare_det_undet(data, genotype="WT", amplitude="all"):
     det_data = ampl_data[ampl_data["behavior"] == True]
     undet_data = ampl_data[ampl_data["behavior"] == False]
     # Plotting the comparisons
-    not_variables = ["ID", "Genotype", "behavior", "amplitude", "threshold"]
+    not_variables = ["ID", "Genotype", "behavior", "amplitude", "threshold", "bounded_x0"]
     variables = [col for col in data.columns if col not in not_variables]
     fig, axes = plt.subplots(nrows=3, ncols=4, figsize=(18, 12), constrained_layout=True)
     axes_flat = axes.flatten()
@@ -168,7 +179,6 @@ def compare_det_undet(data, genotype="WT", amplitude="all"):
     fig.canvas.manager.set_window_title(f"comp_{genotype}_det_undet_{amplitude}")
     plt.show()
     return det_data, undet_data
-
 
 
 def group_comp_param(recs, parameter, ko_hypo_only=False, stim_ampl="all", ylim=[]):
@@ -210,11 +220,6 @@ def group_comp_param(recs, parameter, ko_hypo_only=False, stim_ampl="all", ylim=
         If `recs` does not contain the expected attributes (`genotype`, `matrices`, `stim_ampl_filter`, etc.).
     KeyError
         If the requested `parameter` is not found in `recs.matrices`.
-
-    Example
-    -------
-    >>> group_comp_param(recs, parameter="Peak_delay", ko_hypo_only=True, stim_ampl="threshold", ylim=[-10, 10])
-    (Displays and saves a figure comparing Peak Delay between WT and KO-Hypo across different conditions.)
     """
     fig, axs = plt.subplots(2, 4, figsize=(24, 16), constrained_layout=True)
     for i, neuron_type in enumerate(["EXC", "INH"]):
@@ -305,11 +310,6 @@ def det_comp_param(recs, parameter, stim_ampl="all", ylim=[]):
         If `recs` does not contain the expected attributes (`genotype`, `matrices`, `stim_ampl_filter`, etc.).
     KeyError
         If the requested `parameter` is not found in `recs.matrices`.
-
-    Example
-    -------
-    >>> det_comp_param(recs, parameter="Peak_delay", stim_ampl=[10, 12], ylim=[-50, 50])
-    (Displays and saves a figure comparing Peak Delay for detected vs. undetected stimuli.)
     """
     fig, axs = plt.subplots(2, 6, figsize=(36, 16), constrained_layout=True)
     for i, neuron_type in enumerate(["EXC", "INH"]):
@@ -432,11 +432,6 @@ def fraction_resp(pattern, n_type, ko_hypo_only=True, stim_ampl="all", no_go_nor
         If `recs` does not contain expected attributes (`genotype`, `matrices`, `stim_ampl_filter`, etc.).
     KeyError
         If `n_type` is not found in `recs.matrices` or if the `pattern` does not exist.
-
-    Example
-    -------
-    >>> wt_det, ko_det, wt_undet, ko_undet = fraction_resp(pattern=1, n_type="EXC", stim_ampl=[10, 20])
-    (Returns the percentage of responsive neurons for detected/undetected stimuli in each genotype.)
     """
     wt_det, wt_undet, ko_det, ko_undet = [], [], [], []
     for rec in recs.values():
@@ -525,11 +520,6 @@ def plot_neuron_frac_wt_ko(pattern, ko_hypo_only=True, stim_ampl="all", ylim=[],
         If `pattern` is not 0, 1, or -1.
     AttributeError
         If `fraction_resp()` fails due to missing attributes in `recs`.
-
-    Example
-    -------
-    >>> plot_neuron_frac_wt_ko(pattern=1, ko_hypo_only=False, stim_ampl="all", ylim=[0, 50])
-    (Displays and saves a figure comparing neuron recruitment between WT and KO groups.)
     """
     if ko_hypo_only:
         ko_type = "KO-Hypo"
@@ -597,11 +587,6 @@ def plot_neuron_frac_det_undet(pattern, ko_hypo_only=True, stim_ampl="all", ylim
         If `pattern` is not 0, 1, or -1.
     AttributeError
         If `fraction_resp()` fails due to missing attributes in `recs`.
-
-    Example
-    -------
-    >>> plot_neuron_frac_det_undet(pattern=1, ko_hypo_only=False, stim_ampl=[10, 20], ylim=[0, 50])
-    (Displays and saves a figure comparing detected vs. undetected neuron recruitment in WT and KO groups.)
     """
     if ko_hypo_only:
         ko_type = "KO-Hypo"
@@ -678,12 +663,6 @@ def resp_contrast(pattern="recruited", stim_ampl="all", method="ratio", ylim=[])
         If `pattern` is not `"recruited"`, `"activated"`, or `"inhibited"`, or if `method` is not `"ratio"` or `"delta"`.
     AttributeError
         If `fraction_resp()` fails due to missing attributes in `recs`.
-
-    Example
-    -------
-    >>> resp_contrast(pattern="activated", stim_ampl=[10, 20], method="ratio", ylim=[0, 5])
-    >>> resp_contrast(pattern="inhibited", stim_ampl=[10, 20], method="delta", ylim=[0, 5])
-    (Displays and saves a figure comparing the contrast of activated neurons between detected and undetected trials.)
     """
     pat_dict = {"recruited": 0, "activated": 1, "inhibited": -1}
     fig, axs = plt.subplots(1,2,figsize=(12,8), constrained_layout=True)
@@ -794,11 +773,12 @@ if __name__ == '__main__':
         rec.auc()
     full_data = get_features(recs.values())
     data = full_data[full_data["ID"] != 5886]
-    compare_sub_supra_within(data, behavior_filter=None, genotype="WT", comparison="all")
-    compare_sub_supra_between(data, behavior_filter=False, gp1="KO", gp2="KO-Hypo", gp1_amps="mean", gp2_amps="threshold", colors=[ppt.ko_color, ppt.hypo_color])
-    det, undet = compare_det_undet(data, genotype="KO-Hypo", amplitude="all")
-    mean_det = np.mean(det.drop(columns="Genotype"), axis=0)
-    mean_undet = np.mean(undet.drop(columns="Genotype"), axis=0)
+    # data = full_data[~full_data["ID"].isin([6606, 4745, 4939])] # group of WT with high threshold
+    # compare_sub_supra_within(data, behavior_filter=None, genotype="WT", comparison="all")
+    wt, hypo = compare_sub_supra_between(data, behavior_filter=False, gp1="WT", gp2="KO", gp1_amps="real_mean_genotype", gp2_amps="gp1_threshold", colors=[ppt.wt_color, ppt.hypo_color])
+    # det, undet = compare_det_undet(data, genotype="KO-Hypo", amplitude="all")
+    # mean_det = np.mean(det.drop(columns="Genotype"), axis=0)
+    # mean_undet = np.mean(undet.drop(columns="Genotype"), axis=0)
 
 
     # ====== Responsivity ======
