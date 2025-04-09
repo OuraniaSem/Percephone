@@ -568,7 +568,7 @@ if __name__ == '__main__':
                 interactive_heatmap(rec, rec.df_f_exc)
 
     else:
-        rec_directory = directory + "20241203_7539_00_synchro/"
+        rec_directory = directory + "20241217_7540_00_synchro/"
         rec = RecordingAmplDet(rec_directory, 0, roi_path, cache=True)
         # rec.peak_delay_amp()
         # rec.auc()

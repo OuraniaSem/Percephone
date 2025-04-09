@@ -13,6 +13,7 @@ import percephone.plts.stats as ppt
 # region ======================================== TBT variability ======================================================
 
 def get_mean_trial_activity_df(recs, zscore=True):
+    prestim_frames = 15
     rows = []
     for rec in recs:
         exc_activity = rec.zscore_exc if zscore else rec.df_f_exc
@@ -22,14 +23,20 @@ def get_mean_trial_activity_df(recs, zscore=True):
         stim_time_vector = rec.stim_time
         stim_duration_vector = rec.stim_durations
         for neuron_type, activity in zip(["EXC", "INH"], [exc_activity, inh_activity]):
+            resp_mat = rec.matrices[neuron_type]["Responsivity"]
             for n_id, neuron_activity in enumerate(activity):
                 for trial_id in range(len(behavior_vector)):
                     stim_start = stim_time_vector[trial_id]
                     stim_duration = int(stim_duration_vector[trial_id])
                     trial_activity = np.mean(neuron_activity[stim_start: stim_start + stim_duration])
+                    prestim_activity = neuron_activity[stim_start - prestim_frames: stim_start]
+                    prestim_mean_activity = np.mean(prestim_activity)
+                    prestim_std_activity = np.std(prestim_activity)
                     row = {"Genotype": rec.genotype, "ID": rec.filename, "Threshold": rec.session_threshold,
                            "Trial": trial_id, "Amplitude": amplitude_vector[trial_id],
-                           "Behavior": behavior_vector[trial_id], "Neuron": f"{neuron_type}_{n_id}", "Activity": trial_activity}
+                           "Behavior": behavior_vector[trial_id], "Neuron": f"{neuron_type}_{n_id}", "Resp": resp_mat[n_id, trial_id],
+                           "Activity": trial_activity, "Prestim_mean": prestim_mean_activity,
+                           "Prestim_std": prestim_std_activity}
                     rows.append(row)
     return pd.DataFrame(rows)
 
@@ -72,21 +79,54 @@ def pca(mean_activity_df):
     return pd.DataFrame(rows)
 
 
+def compare_tbt_var_per_amp(df):
+    """
+    For each recording, compute the standard deviation
+    Parameters
+    ----------
+    df
+
+    Returns
+    -------
+
+    """
+    rows = []
+    # For each recording, we compute the std of nb of recruited neurons per amplitude
+
+
+
 
 
 # endregion ============================================================================================================
 # region ======================================== Pre-stimulus =========================================================
 
+def prestim_activated_neurons(activity_df):
+    """
+    Compare the pre-stimulus activity of activated neurons during detected trials and their activity during non-detected trials
 
+    Parameters
+    ----------
+    df
 
+    Returns
+    -------
 
+    """
+    rows = []
+    for rec_id in activity_df["ID"].unique():
+        rec_data = activity_df[activity_df["ID"] == rec_id].copy()
+        # Keeping only the EXC neurons
+        rec_data = rec_data[rec_data["Neuron"].str.startswith("EXC")]
+        act_hit_neurons = set(rec_data[(rec_data["Behavior"] == True) & (rec_data["Resp"] == 1) & (rec_data["Amplitude"] == 4)]["Neuron"].values)
+        rows.append({"Genotype": rec_data["Genotype"].values[0], "ID": rec_id, "Kept neurons": act_hit_neurons})
+    return pd.DataFrame(rows)
 
 # endregion ============================================================================================================
 # region ======================================== E/I Ratio ============================================================
 
 def get_ei_ratio_df(recs):
     """
-    Returns a Dataframe wiht each row being the E/I ratio for a specific trial for a specific animal. E/I ratio is
+    Returns a Dataframe withl each row being the E/I ratio for a specific trial for a specific animal. E/I ratio is
     defined as the percentage of activated ExC neurons over the percentage of activated INH neurons.
     TODO: find a better definition of E/I ratio to avoid infinity values
 
@@ -118,6 +158,10 @@ def get_ei_ratio_df(recs):
         log_cst_ei_ratio_vector = np.log(cst_ei_ratio_vector)
         # 5) Log normalized E/I Ratio
         log_norm_ei_ratio_vector = np.log(norm_ei_ratio_vector)
+        # 6) Normalized difference
+        norm_dif_ei_vector = np.divide(act_EXC_vector - act_INH_vector, act_EXC_vector + act_INH_vector)
+        # 6) Difference
+        dif_ei_vector = act_EXC_vector - act_INH_vector
         for trial_id in range(len(behavior_vector)):
             rows.append({"Genotype": rec.genotype, "ID": rec.filename, "Threshold": rec.session_threshold,
                          "Trial": trial_id, "Amplitude": amplitude_vector[trial_id],
@@ -126,7 +170,9 @@ def get_ei_ratio_df(recs):
                          "EI_ratio_cste": cst_ei_ratio_vector[trial_id],
                          "EI_ratio_norm": norm_ei_ratio_vector[trial_id],
                          "EI_ratio_log_cste": log_cst_ei_ratio_vector[trial_id],
-                         "EI_ratio_log_norm": log_norm_ei_ratio_vector[trial_id]})
+                         "EI_ratio_log_norm": log_norm_ei_ratio_vector[trial_id],
+                         "EI_ratio_norm_dif": norm_dif_ei_vector[trial_id],
+                         "EI_ratio_dif": dif_ei_vector[trial_id]})
     return pd.DataFrame(rows)
 
 
@@ -140,6 +186,45 @@ def correlate_behavior(data, column=None):
         rows.append({"ID": rec_data["ID"].values[0], "Genotype": rec_data["Genotype"].values[0],
                      "Threshold": rec_data["Threshold"].values[0], "R2": r**2, "pval": pval})
     return pd.DataFrame(rows)
+
+
+def compare_ei_ratio(ei_df, gp1="WT", gp2="KO-Hypo", column=None):
+    """
+    Plot the comparison of the E/I ratio between detected and non detected trials and between genotypes
+    Parameters
+    ----------
+    data
+    column
+
+    Returns
+    -------
+
+    """
+    colors_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color],
+                   "KO": [ppt.ko_color, ppt.ko_light_color]}
+    if column is None:
+        column = ei_df.columns[-1]
+    filtered_data = ei_df[ei_df["Amplitude"] == ei_df["Threshold"]].drop(columns=["Trial", "Amplitude"])
+    data = filtered_data.groupby(["Genotype", "ID", "Threshold", "Behavior"], as_index=False).mean()
+    # Plotting the data
+    gp1_det = data[(data["Genotype"] == gp1) & (data["Behavior"] == True)][column].values
+    gp1_undet = data[(data["Genotype"] == gp1) & (data["Behavior"] == False)][column].values
+    gp2_det = data[(data["Genotype"] == gp2) & (data["Behavior"] == True)][column].values
+    gp2_undet = data[(data["Genotype"] == gp2) & (data["Behavior"] == False)][column].values
+    fig, ax = plt.subplots(nrows=2, ncols=2, figsize=(12, 12), constrained_layout=True)
+    ppt.boxplot(ax[0, 0], gp1_det, gp1_undet, ylabel="E/I ratio", paired=True, title=f"{gp1}", ylim=[], colors=colors_dict[gp1], det_marker=False, force_markers_identity=False)
+    ppt.boxplot(ax[0, 1], gp2_det, gp2_undet, ylabel="E/I ratio", paired=True, title=f"{gp2}", ylim=[], colors=colors_dict[gp2], det_marker=False, force_markers_identity=False)
+    ppt.boxplot(ax[1, 0], gp1_det, gp2_det, ylabel="E/I ratio", paired=False, title="Detected Trials", ylim=[], colors=[colors_dict[gp1][0], colors_dict[gp2][0]], det_marker=False, force_markers_identity=False)
+    ppt.boxplot(ax[1, 1], gp1_undet, gp2_undet, ylabel="E/I ratio", paired=False, title="Non-Detected Trials", ylim=[], colors=[colors_dict[gp1][1], colors_dict[gp2][1]], det_marker=False, force_markers_identity=False)
+    fig.suptitle(f"E/I ratio comparison ({gp1} & {gp2})\n [method = {column}]", fontsize=16)
+    fig.canvas.manager.set_window_title(f"EI_comparison_{gp1}_{gp2})_{column}")
+    plt.show()
+    return data
+
+
+# endregion ============================================================================================================
+# region ========================================== Noise ==============================================================
+
 
 # endregion ============================================================================================================
 
@@ -181,9 +266,11 @@ if __name__ == '__main__':
     # endregion
     # region ====== TBT variability ======
     # activity_long_df = get_mean_trial_activity_df(recs.values(), zscore=True)
+    # prestim_df = prestim_activated_neurons(activity_long_df)
     # pca_df = pca(activity_long_df)
     # endregion
     # region ====== E/I Ratio ======
     ei_df = get_ei_ratio_df(recs.values())
-    ei_behavior_df = correlate_behavior(ei_df, column="EI_ratio_cste")
+    # ei_behavior_df = correlate_behavior(ei_df, column="EI_ratio_cste")
+    ei_comp_df = compare_ei_ratio(ei_df, column="EI_ratio_norm")
     # endregion

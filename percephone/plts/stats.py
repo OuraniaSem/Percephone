@@ -92,7 +92,6 @@ def boxplot(ax, gp1, gp2, ylabel, paired=False, title="", ylim=[], colors=[wt_co
         columns names
 
     """
-    print("Boxplot plotting.")
     if paired:
         gp1_nan = np.array(gp1)[~np.isnan(gp1) & ~np.isnan(gp2)]
         gp2_nan = np.array(gp2)[~np.isnan(gp1) & ~np.isnan(gp2)]
@@ -139,13 +138,11 @@ def boxplot(ax, gp1, gp2, ylabel, paired=False, title="", ylim=[], colors=[wt_co
             warnings.warn("The ylim you have set don't cover the data range.")
         ax.set_ylim(ylim)
     else:
-        lim_max = max(int(max_y * 0.15 + max_y), int(math.ceil(max_y / 2)) * 2)
-        lim_inf = min(0, min_y + 0.15 * min_y)
-        ax.set_ylim(ymin=lim_inf, ymax=lim_max)
+        ax.set_ylim(top=ax.get_ylim()[1] * 1.2)
 
     # Plotting the significance bar
     bar_color = "black"
-    y = max_y + 0.10 * abs(max_y)
+    y = max_y + 0.1 * (ax.get_ylim()[1] - ax.get_ylim()[0])
     ax.plot([x[0], x[1]], [y, y], lw=mpl.rcParams['axes.linewidth'], c=bar_color, clip_on=False)
     # Computing and plotting the significance symbol
     if len(gp1_nan) > 2 and len(gp2_nan) > 2:

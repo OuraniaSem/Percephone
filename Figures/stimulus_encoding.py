@@ -773,10 +773,9 @@ if __name__ == '__main__':
         rec.auc()
     full_data = get_features(recs.values())
     data = full_data[full_data["ID"] != 5886]
-    # data = full_data[~full_data["ID"].isin([6606, 4745, 4939])] # group of WT with high threshold
-    # compare_sub_supra_within(data, behavior_filter=None, genotype="WT", comparison="all")
-    wt, hypo = compare_sub_supra_between(data, behavior_filter=False, gp1="WT", gp2="KO", gp1_amps="real_mean_genotype", gp2_amps="gp1_threshold", colors=[ppt.wt_color, ppt.hypo_color])
-    # det, undet = compare_det_undet(data, genotype="KO-Hypo", amplitude="all")
+    # compare_sub_supra_within(data, behavior_filter=False, genotype="KO", comparison="all_supra")
+    wt, hypo = compare_sub_supra_between(data, behavior_filter=False, gp1="KO", gp2="KO-Hypo", gp1_amps="all_supra", gp2_amps="all_supra", colors=[ppt.ko_color, ppt.hypo_color])
+    # det, undet = compare_det_undet(data, genotype="KO-Hypo", amplitude="all_supra")
     # mean_det = np.mean(det.drop(columns="Genotype"), axis=0)
     # mean_undet = np.mean(undet.drop(columns="Genotype"), axis=0)
 
