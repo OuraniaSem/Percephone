@@ -6,9 +6,13 @@ import scipy.stats as ss
 from matplotlib import pyplot as plt
 from multiprocessing import cpu_count, pool
 from sklearn.decomposition import PCA
+from sklearn.metrics.pairwise import cosine_similarity
 
 import percephone.core.recording as pc
 import percephone.plts.stats as ppt
+from percephone.plts.utils import stat_boxplot
+
+
 # endregion
 # region ======================================== TBT variability ======================================================
 
@@ -28,15 +32,17 @@ def get_mean_trial_activity_df(recs, zscore=True):
                 for trial_id in range(len(behavior_vector)):
                     stim_start = stim_time_vector[trial_id]
                     stim_duration = int(stim_duration_vector[trial_id])
-                    trial_activity = np.mean(neuron_activity[stim_start: stim_start + stim_duration])
+                    trial_activity = neuron_activity[stim_start: stim_start + stim_duration]
+                    trial_mean_activity = np.mean(trial_activity)
+                    trial_std_activity = np.std(trial_activity)
                     prestim_activity = neuron_activity[stim_start - prestim_frames: stim_start]
                     prestim_mean_activity = np.mean(prestim_activity)
                     prestim_std_activity = np.std(prestim_activity)
                     row = {"Genotype": rec.genotype, "ID": rec.filename, "Threshold": rec.session_threshold,
                            "Trial": trial_id, "Amplitude": amplitude_vector[trial_id],
                            "Behavior": behavior_vector[trial_id], "Neuron": f"{neuron_type}_{n_id}", "Resp": resp_mat[n_id, trial_id],
-                           "Activity": trial_activity, "Prestim_mean": prestim_mean_activity,
-                           "Prestim_std": prestim_std_activity}
+                           "Stim_mean": trial_mean_activity, "Stim_std": trial_std_activity,
+                           "Prestim_mean": prestim_mean_activity, "Prestim_std": prestim_std_activity}
                     rows.append(row)
     return pd.DataFrame(rows)
 
@@ -50,7 +56,7 @@ def pca(mean_activity_df):
     for ax_id, rec_id in enumerate(mean_activity_df["ID"].unique()):
         rec_data = mean_activity_df[mean_activity_df["ID"] == rec_id].copy()
         data = rec_data.pivot(index=["Genotype", "ID", "Threshold", "Trial", "Amplitude", "Behavior"], columns="Neuron",
-                              values="Activity").reset_index()
+                              values="Stim_mean").reset_index()
         genotype = data["Genotype"].values[0]
         mouse_id = data["ID"].values[0]
         threshold = data["Threshold"].values[0]
@@ -100,9 +106,11 @@ def compare_tbt_var_per_amp(df):
 # endregion ============================================================================================================
 # region ======================================== Pre-stimulus =========================================================
 
+
 def prestim_activated_neurons(activity_df):
     """
-    Compare the pre-stimulus activity of activated neurons during detected trials and their activity during non-detected trials
+    Plot, for each neuron, the significance of the difference in prestim between the trials where the neuron is
+    activated and the trials where the neuron is not responsive.
 
     Parameters
     ----------
@@ -112,14 +120,122 @@ def prestim_activated_neurons(activity_df):
     -------
 
     """
+    activity_df["Diff_mean"] = activity_df["Stim_mean"] - activity_df["Prestim_mean"]
+    activity_df["Diff_std"] = activity_df["Stim_std"] - activity_df["Prestim_std"]
+    neurons_sets = []
     rows = []
     for rec_id in activity_df["ID"].unique():
-        rec_data = activity_df[activity_df["ID"] == rec_id].copy()
+        rec_data = activity_df[(activity_df["ID"] == rec_id) & (activity_df["Amplitude"] == activity_df["Threshold"])].copy()
         # Keeping only the EXC neurons
         rec_data = rec_data[rec_data["Neuron"].str.startswith("EXC")]
-        act_hit_neurons = set(rec_data[(rec_data["Behavior"] == True) & (rec_data["Resp"] == 1) & (rec_data["Amplitude"] == 4)]["Neuron"].values)
-        rows.append({"Genotype": rec_data["Genotype"].values[0], "ID": rec_id, "Kept neurons": act_hit_neurons})
+        # Selecting the neurons that are activated at least once during detected trials
+        act_hit_neurons = set(rec_data[(rec_data["Behavior"] == True) & (rec_data["Resp"] == 1)]["Neuron"].values)
+        neurons_sets.append({"Genotype": rec_data["Genotype"].values[0], "ID": rec_id, "Kept neurons": act_hit_neurons})
+        neuron_data = rec_data[rec_data["Neuron"].isin(act_hit_neurons)].copy()
+        # Comparing the pre-stim of neurons when they are activated compared to when they are not
+        for neuron_id in neuron_data["Neuron"].unique():
+            activated = neuron_data[(neuron_data["Neuron"] == neuron_id) & (neuron_data["Resp"] == 1)].copy()
+            non_activated = neuron_data[(neuron_data["Neuron"] == neuron_id) & (neuron_data["Resp"] != 1)].copy()
+            if len(activated) > 2 and len(non_activated) > 2:
+                raw_mean = stat_boxplot(activated["Prestim_mean"], non_activated["Prestim_mean"], "Prestim_mean", title="", paired=False, verbose=False)
+                raw_std = stat_boxplot(activated["Prestim_std"], non_activated["Prestim_std"], "Prestim_std", title="", paired=False, verbose=False)
+                diff_mean = stat_boxplot(activated["Diff_mean"], non_activated["Diff_mean"], "Diff_mean", title="", paired=False, verbose=False)
+                diff_std = stat_boxplot(activated["Diff_std"], non_activated["Diff_std"], "Diff_std", title="", paired=False, verbose=False)
+            else:
+                raw_mean = np.nan
+                raw_std = np.nan
+                diff_mean = np.nan
+                diff_std = np.nan
+            rows.append({"Genotype": rec_data["Genotype"].values[0], "ID": rec_id, "Neuron": neuron_id,
+                         "Raw_Mean": raw_mean, "Raw_Std": raw_std, "Diff_Mean": diff_mean, "Diff_Std": diff_std})
+    results = pd.DataFrame(rows)
+    # Plotting the results
+    param = "Diff_Std"
+    fig, axs = plt.subplots(nrows=4, ncols=6, figsize=(20, 12), constrained_layout=True)
+    ax = axs.flatten()
+    for ax_id, rec_id in enumerate(results["ID"].unique()):
+        data = results[results["ID"] == rec_id].copy()
+        colors = ['green' if val <= 0.05 else ("orange" if val <= 0.1 else 'red') for val in data[param].values]
+        ax[ax_id].bar(range(len(data)), data[param].values, color= colors, alpha=0.7, width=0.5)
+        ax[ax_id].set_title(f"{rec_id} - {data["Genotype"].values[0]}", fontsize=12)
+        ax[ax_id].axhline(y=0.05, color='gray', linestyle='--', lw=0.5)
+        ax[ax_id].tick_params(axis='both', labelsize=10)
+    fig.suptitle(f"Significance of the difference in pre-stim activity ({param}) for each neuron (activated vs. non activated)", fontsize=15)
+    plt.show()
     return pd.DataFrame(rows)
+
+
+def prestim_act_vector(activity_df, metric=None, hit_activated_only=False):
+    """
+    Compute the cosine similarity between each pair of trial, then see if there is a difference between within-condition
+    similarity and cross-condition similarity. Working with threshold trials (and neurons that are activated at least
+    once during detected trials).
+    Parameters
+    ----------
+    activity_df
+
+    Returns
+    -------
+
+    """
+    if metric is None:
+        metric = activity_df.columns[-1]
+    rows = []
+    for rec_id in activity_df["ID"].unique():
+        rec_data = activity_df[(activity_df["ID"] == rec_id) & (activity_df["Amplitude"] == activity_df["Threshold"])].copy()
+        # Keeping only the EXC neurons
+        rec_data = rec_data[rec_data["Neuron"].str.startswith("EXC")]
+        if hit_activated_only:
+            # Selecting the neurons that are activated at least once during detected trials
+            act_hit_neurons = set(rec_data[(rec_data["Behavior"] == True) & (rec_data["Resp"] == 1)]["Neuron"].values)
+            rec_data[metric] = rec_data[metric].where(rec_data["Neuron"].isin(act_hit_neurons), np.nan)
+        # Building a data frame with detected trials and one with non-detected trials
+        long_hit_data = rec_data[rec_data["Behavior"] == True].copy()
+        long_miss_data = rec_data[rec_data["Behavior"] == False].copy()
+        hit_data = long_hit_data.pivot(index=["Neuron"], columns=["Trial"], values=metric)
+        miss_data = long_miss_data.pivot(index=["Neuron"], columns=["Trial"], values=metric)
+        # Concatenate columns with names indicating their original dataframe
+        def concat_cols(df, name):
+            df_copy = df.copy()
+            df_copy.columns = [f"{name}_{col}" for col in df_copy.columns]
+            return df_copy
+        # Concatenate dataframes
+        concat_hit = concat_cols(hit_data, 'Hit')
+        concat_miss = concat_cols(miss_data, 'Miss')
+        combined_df = pd.concat([concat_hit, concat_miss], axis=1)
+        # Compute cosine similarity between columns
+        cos_sim_matrix = pd.DataFrame(cosine_similarity(combined_df.T), index=combined_df.columns, columns=combined_df.columns)
+        # Transform to long format (pairwise)
+        similarity_df = cos_sim_matrix.stack().reset_index()
+        similarity_df.columns = ['Column_1', 'Column_2', 'Cosine_Similarity']
+        # Add table names
+        similarity_df['Table_1'] = similarity_df['Column_1'].apply(lambda x: x.split('_')[0])
+        similarity_df['Table_2'] = similarity_df['Column_2'].apply(lambda x: x.split('_')[0])
+        # Optional: Filter out self-similarity and duplicate pairs
+        similarity_df = similarity_df[similarity_df['Column_1'] != similarity_df['Column_2']]
+        similarity_df = similarity_df.reset_index(drop=True)
+        similarity_df["abs_cos_sim"] = abs(similarity_df["Cosine_Similarity"])
+        similarity_df = similarity_df.drop(columns=['Cosine_Similarity', "Column_1", "Column_2"])
+        grouped = similarity_df.groupby(['Table_1', 'Table_2'], as_index=False).mean()
+        hit_sim = grouped[(grouped["Table_1"] == "Hit") & (grouped["Table_2"] == "Hit")]["abs_cos_sim"].values[0] if len(grouped[(grouped["Table_1"] == "Hit") & (grouped["Table_2"] == "Hit")]["abs_cos_sim"].values) > 0 else np.nan
+        miss_sim = grouped[(grouped["Table_1"] == "Miss") & (grouped["Table_2"] == "Miss")]["abs_cos_sim"].values[0] if len(grouped[(grouped["Table_1"] == "Miss") & (grouped["Table_2"] == "Miss")]["abs_cos_sim"].values) > 0 else np.nan
+        btw_sim = grouped[grouped["Table_1"] != grouped["Table_2"]]["abs_cos_sim"].values[0]
+        rows.append({"Genotype": rec_data["Genotype"].values[0], "ID": rec_id, "Hit_sim": hit_sim,
+                     "Miss_sim": miss_sim, "Between_sim": btw_sim})
+    results = pd.DataFrame(rows)
+    # Plotting the difference
+    fig, ax = plt.subplots(nrows=3, ncols=3, figsize=(20, 12), constrained_layout=True)
+    for row, genotype in enumerate(results["Genotype"].unique()):
+        data = results[results["Genotype"] == genotype].copy()
+        ppt.boxplot(ax[row, 0], data["Hit_sim"].values, data["Miss_sim"].values, ylabel="Mean_abs_cos_cim", paired=True, title=f"{genotype} - Hit/Miss", ylim=[],
+                    det_marker=False, force_markers_identity=False)
+        ppt.boxplot(ax[row, 1], data["Hit_sim"].values, data["Between_sim"].values, ylabel="Mean_abs_cos_cim", paired=True, title=f"{genotype} - Hit/btw", ylim=[],
+                    det_marker=False, force_markers_identity=False)
+        ppt.boxplot(ax[row, 2], data["Miss_sim"].values, data["Between_sim"].values, ylabel="Mean_abs_cos_cim", paired=True, title=f"{genotype} - Miss/btw", ylim=[],
+                    det_marker=False, force_markers_identity=False)
+    plt.suptitle(f"")
+    plt.show()
+    return results
 
 # endregion ============================================================================================================
 # region ======================================== E/I Ratio ============================================================
@@ -265,12 +381,13 @@ if __name__ == '__main__':
     # plt.show()
     # endregion
     # region ====== TBT variability ======
-    # activity_long_df = get_mean_trial_activity_df(recs.values(), zscore=True)
-    # prestim_df = prestim_activated_neurons(activity_long_df)
+    activity_long_df = get_mean_trial_activity_df(recs.values(), zscore=True)
+    prestim_df = prestim_activated_neurons(activity_long_df)
+    prestim_vector_df = prestim_act_vector(activity_long_df, metric="Stim_mean", hit_activated_only=False)
     # pca_df = pca(activity_long_df)
     # endregion
     # region ====== E/I Ratio ======
-    ei_df = get_ei_ratio_df(recs.values())
+    # ei_df = get_ei_ratio_df(recs.values())
     # ei_behavior_df = correlate_behavior(ei_df, column="EI_ratio_cste")
-    ei_comp_df = compare_ei_ratio(ei_df, column="EI_ratio_norm")
+    # ei_comp_df = compare_ei_ratio(ei_df, column="EI_ratio_norm")
     # endregion
