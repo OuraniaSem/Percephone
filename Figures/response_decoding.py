@@ -483,11 +483,11 @@ if __name__ == '__main__':
     # corr_data = correlate_mean_zscore_behavior_frame(frame_data[frame_data["Amplitude"] == 12])
     # plot_frame_correlation(corr_data)
 
-    frame_dff = get_activity_by_frame_df(recs.values(), zscore=False)
-    frame_model_df, frame_mean_sem, frame_comp = frame_model(frame_dff)
+    # frame_dff = get_activity_by_frame_df(recs.values(), zscore=False)
+    # frame_model_df, frame_mean_sem, frame_comp = frame_model(frame_dff)
 
-    saved_framed_model_df = pd.read_csv("C:/Users/cvandromme/Desktop/frame_dff.csv")
+    saved_framed_model_df = pd.read_csv("C:/Users/cvandromme/Desktop/frame_model_df.csv")
     # frame_model_df_amp_gp = frame_model_df.groupby(["Genotype", "ID", "Threshold", "Amplitude"], as_index=False).mean().drop(columns=["Trial", "Duration", "Behavior"])
-    plot_hit_miss_classif(frame_model_df)
-    data = plot_hit_miss_classif_comp(frame_model_df, gp1="WT", gp2="KO-Hypo", title_precision="")
+    plot_hit_miss_classif(saved_framed_model_df)
+    data = plot_hit_miss_classif_comp(saved_framed_model_df, gp1="WT", gp2="KO-Hypo", title_precision="")
 

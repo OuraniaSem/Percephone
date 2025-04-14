@@ -813,9 +813,9 @@ def normality_check(data, title="variable", plot=True):
         # --- Histogram (Top Left) ---
         ax_hist = norm_fig.add_subplot(spec[0:2, 0:3])
         ax_hist.hist(data, bins=15)
-        ax_hist.set_ylabel("Frequency")
-        ax_hist.set_xlabel("Variable value")
-        ax_hist.set_title("Gaussian distribution?")
+        ax_hist.set_ylabel("Frequency", fontsize=8)
+        ax_hist.set_xlabel("Variable value", fontsize=8)
+        ax_hist.set_title("Gaussian distribution?", fontsize=10)
         # --- Single QQ-Plot (Bottom Left) ---
         ax_qq = norm_fig.add_subplot(spec[2:5, 0:3])
         sm.qqplot(data, line="s", ax=ax_qq)
@@ -837,7 +837,7 @@ def normality_check(data, title="variable", plot=True):
                 label = chr(97 + index - 1) if index != 13 else "Real"
                 ax_rnd.text(0.05, 0.9, label, transform=ax_rnd.transAxes, fontsize=12)
                 axes_grid.append(ax_rnd)
-        norm_fig.suptitle(f"Normality check for {title} \nShapiro-Wilk p-value = {p_value:.3f}")
+        norm_fig.suptitle(f"Normality check for {title} \nShapiro-Wilk p-value = {p_value:.3f}", fontsize=12)
         norm_fig.canvas.manager.set_window_title(f"Normality Check - {title}")
     return p_value
 
@@ -851,9 +851,9 @@ def homogeneity_check(predicted, residuals, title="variable"):
     # Compute the lowess smoothing line
     smoothed = lowess(sqrt_standard_resid, predicted, frac=0.3)
     ax.plot(smoothed[:, 0], smoothed[:, 1], color="red", linestyle="--", label="Lowess trend")
-    ax.set_xlabel("Fitted values")
-    ax.set_ylabel("$\sqrt{|Standardized\ Residuals|}$")
-    ax.set_title(f"Scale-Location Plot for {title}")
+    ax.set_xlabel("Fitted values", fontsize=8)
+    ax.set_ylabel("$\sqrt{|Standardized\ Residuals|}$", fontsize=8)
+    ax.set_title(f"Scale-Location Plot for {title}", fontsize=12)
     fig.canvas.manager.set_window_title(f"Homogeneity Check - {title}")
     plt.show()
 

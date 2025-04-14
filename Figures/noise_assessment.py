@@ -10,6 +10,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 import percephone.core.recording as pc
 import percephone.plts.stats as ppt
+from Figures.stimulus_encoding import get_features
 from percephone.plts.utils import stat_boxplot
 
 
@@ -44,7 +45,12 @@ def get_mean_trial_activity_df(recs, zscore=True):
                            "Stim_mean": trial_mean_activity, "Stim_std": trial_std_activity,
                            "Prestim_mean": prestim_mean_activity, "Prestim_std": prestim_std_activity}
                     rows.append(row)
-    return pd.DataFrame(rows)
+    activity_df = pd.DataFrame(rows)
+    activity_df["Diff_mean"] = activity_df["Stim_mean"] - activity_df["Prestim_mean"]
+    activity_df["Diff_std"] = activity_df["Stim_std"] - activity_df["Prestim_std"]
+    activity_df["Ratio_mean"] = activity_df["Stim_mean"] / activity_df["Prestim_mean"]
+    activity_df["Ratio_std"] = activity_df["Stim_std"] / activity_df["Prestim_std"]
+    return activity_df
 
 
 def pca(mean_activity_df):
@@ -85,7 +91,7 @@ def pca(mean_activity_df):
     return pd.DataFrame(rows)
 
 
-def compare_tbt_var_per_amp(df):
+def compare_tbt_var_per_amp(recruitment_df):
     """
     For each recording, compute the standard deviation
     Parameters
@@ -96,11 +102,22 @@ def compare_tbt_var_per_amp(df):
     -------
 
     """
-    rows = []
-    # For each recording, we compute the std of nb of recruited neurons per amplitude
-
-
-
+    grouped = recruitment_df.groupby(["Genotype", "ID", "threshold", "behavior", "amplitude"], as_index=False).std()
+    hit = grouped[grouped["behavior"] == True]
+    miss = grouped[grouped["behavior"] == False]
+    fig, ax = plt.subplots(nrows=2, ncols=1, figsize=(15, 12), constrained_layout=True)
+    ppt.curveplot(ax[0], hit[hit["Genotype"] != "KO"], between="Genotype", within="amplitude", variable="act_EXC_perc",
+                  title="Variation of std of the % of activated EXC neurons across amplitudes for hit trials",
+                  ylabel=None, xlabel=None, ylim=None, colors=[ppt.hypo_color, ppt.wt_color],
+                  id_display=True, legend_display=True,
+                  qq_show=True, transformation=None, consider_normality=False, consider_homogeneity=False)
+    ppt.curveplot(ax[1], miss[miss["Genotype"] != "KO"], between="Genotype", within="amplitude", variable="act_EXC_perc",
+                  title="Variation of std of the % of activated EXC neurons across amplitudes for miss trials",
+                  ylabel=None, xlabel=None, ylim=None, colors=[ppt.hypo_color, ppt.wt_color],
+                  id_display=True, legend_display=True,
+                  qq_show=True, transformation=None, consider_normality=False, consider_homogeneity=False)
+    plt.show()
+    return hit
 
 
 # endregion ============================================================================================================
@@ -120,8 +137,6 @@ def prestim_activated_neurons(activity_df):
     -------
 
     """
-    activity_df["Diff_mean"] = activity_df["Stim_mean"] - activity_df["Prestim_mean"]
-    activity_df["Diff_std"] = activity_df["Stim_std"] - activity_df["Prestim_std"]
     neurons_sets = []
     rows = []
     for rec_id in activity_df["ID"].unique():
@@ -178,17 +193,21 @@ def prestim_act_vector(activity_df, metric=None, hit_activated_only=False):
     -------
 
     """
+    color_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color],
+                  "KO": [ppt.ko_color, ppt.ko_light_color]}
     if metric is None:
         metric = activity_df.columns[-1]
     rows = []
     for rec_id in activity_df["ID"].unique():
-        rec_data = activity_df[(activity_df["ID"] == rec_id) & (activity_df["Amplitude"] == activity_df["Threshold"])].copy()
+        # rec_data = activity_df[(activity_df["ID"] == rec_id) & (activity_df["Amplitude"] == activity_df["Threshold"])].copy()
+        rec_data = activity_df[(activity_df["ID"] == rec_id) & (activity_df["Amplitude"] == 4)].copy()
         # Keeping only the EXC neurons
         rec_data = rec_data[rec_data["Neuron"].str.startswith("EXC")]
         if hit_activated_only:
             # Selecting the neurons that are activated at least once during detected trials
             act_hit_neurons = set(rec_data[(rec_data["Behavior"] == True) & (rec_data["Resp"] == 1)]["Neuron"].values)
             rec_data[metric] = rec_data[metric].where(rec_data["Neuron"].isin(act_hit_neurons), np.nan)
+            rec_data = rec_data.dropna(subset=[metric])
         # Building a data frame with detected trials and one with non-detected trials
         long_hit_data = rec_data[rec_data["Behavior"] == True].copy()
         long_miss_data = rec_data[rec_data["Behavior"] == False].copy()
@@ -211,7 +230,7 @@ def prestim_act_vector(activity_df, metric=None, hit_activated_only=False):
         # Add table names
         similarity_df['Table_1'] = similarity_df['Column_1'].apply(lambda x: x.split('_')[0])
         similarity_df['Table_2'] = similarity_df['Column_2'].apply(lambda x: x.split('_')[0])
-        # Optional: Filter out self-similarity and duplicate pairs
+        # Filtering out self-similarity and duplicate pairs
         similarity_df = similarity_df[similarity_df['Column_1'] != similarity_df['Column_2']]
         similarity_df = similarity_df.reset_index(drop=True)
         similarity_df["abs_cos_sim"] = abs(similarity_df["Cosine_Similarity"])
@@ -224,16 +243,26 @@ def prestim_act_vector(activity_df, metric=None, hit_activated_only=False):
                      "Miss_sim": miss_sim, "Between_sim": btw_sim})
     results = pd.DataFrame(rows)
     # Plotting the difference
-    fig, ax = plt.subplots(nrows=3, ncols=3, figsize=(20, 12), constrained_layout=True)
+    fig, ax = plt.subplots(nrows=3, ncols=4, figsize=(20, 12), constrained_layout=True)
     for row, genotype in enumerate(results["Genotype"].unique()):
+        colors = color_dict[genotype]
         data = results[results["Genotype"] == genotype].copy()
-        ppt.boxplot(ax[row, 0], data["Hit_sim"].values, data["Miss_sim"].values, ylabel="Mean_abs_cos_cim", paired=True, title=f"{genotype} - Hit/Miss", ylim=[],
-                    det_marker=False, force_markers_identity=False)
-        ppt.boxplot(ax[row, 1], data["Hit_sim"].values, data["Between_sim"].values, ylabel="Mean_abs_cos_cim", paired=True, title=f"{genotype} - Hit/btw", ylim=[],
-                    det_marker=False, force_markers_identity=False)
-        ppt.boxplot(ax[row, 2], data["Miss_sim"].values, data["Between_sim"].values, ylabel="Mean_abs_cos_cim", paired=True, title=f"{genotype} - Miss/btw", ylim=[],
-                    det_marker=False, force_markers_identity=False)
-    plt.suptitle(f"")
+        ppt.boxplot(ax[row, 0], data["Hit_sim"].values, data["Miss_sim"].values, ylabel="Mean_abs_cos_sim", paired=True, title=f"{genotype} - Hit/Miss", ylim=[],
+                    colors=colors, det_marker=False, force_markers_identity=False)
+        ppt.boxplot(ax[row, 1], data["Hit_sim"].values, data["Between_sim"].values, ylabel="Mean_abs_cos_sim", paired=True, title=f"{genotype} - Hit/btw", ylim=[],
+                    colors=[colors[0], "purple"], det_marker=False, force_markers_identity=False)
+        ppt.boxplot(ax[row, 2], data["Miss_sim"].values, data["Between_sim"].values, ylabel="Mean_abs_cos_sim", paired=True, title=f"{genotype} - Miss/btw", ylim=[],
+                    colors=[colors[1], "purple"], det_marker=False, force_markers_identity=False)
+    wt = results[results["Genotype"] == "WT"].copy()
+    hypo = results[results["Genotype"] == "KO-Hypo"].copy()
+    colors2 = {"Hit_sim": [ppt.wt_color, ppt.hypo_color], "Miss_sim": [ppt.wt_light_color, ppt.hypo_light_color],
+               "Between_sim": ["purple", "purple"]}
+    for row2, comp in enumerate(["Hit_sim", "Miss_sim", "Between_sim"]):
+        ppt.boxplot(ax[row2, 3], wt[comp].values, hypo[comp].values, ylabel="Mean_abs_cos_sim", paired=False, title=f"WT/KO-Hypo - {comp}", ylim=[],
+                    colors=colors2[comp], det_marker=False, force_markers_identity=False)
+    fig.suptitle(f"Comparison of mean cosine similarity across pairs of trials within and between condition, threshold trials"
+                 f"\n {metric} [hit_activated_only={hit_activated_only}]", fontsize=12)
+    fig.canvas.manager.set_window_title(f"Trials_pairs_{metric}_cos_sim_{hit_activated_only}")
     plt.show()
     return results
 
@@ -341,6 +370,75 @@ def compare_ei_ratio(ei_df, gp1="WT", gp2="KO-Hypo", column=None):
 # endregion ============================================================================================================
 # region ========================================== Noise ==============================================================
 
+def baseline_and_SNR(recruitment_df):
+    """
+    Compares the baseline activity and the SNR between WT and KO-Hypo
+
+    Parameters
+    ----------
+    activity_df
+
+    Returns
+    -------
+
+    """
+    color_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color],
+                  "KO": [ppt.ko_color, ppt.ko_light_color]}
+    grouped = recruitment_df.groupby(["Genotype", "ID", "threshold", "behavior", "amplitude"], as_index=False).mean()
+    bsl = grouped[grouped["amplitude"] == 0]
+    hit = grouped[(grouped["amplitude"] == grouped["threshold"]) & (grouped["behavior"] == True)]
+    miss = grouped[(grouped["amplitude"] == grouped["threshold"]) & (grouped["behavior"] == False)]
+    # Baseline
+    fig, ax = plt.subplots(nrows=4, ncols=8, figsize=(25, 14), constrained_layout=True)
+    for col_id, col in enumerate(["act_EXC_perc", "inh_EXC_perc", "act_INH_perc", "inh_INH_perc"]):
+        for row_id, genotype in enumerate(bsl["Genotype"].unique()):
+            ppt.boxplot(ax[row_id, 2 * col_id], bsl[bsl["Genotype"] == genotype][col].values, hit[hit["Genotype"] == genotype][col].values,
+                        ylabel=col, paired=True, title=f"{genotype} Bsl/Hit", ylim=[],
+                        colors=["purple", color_dict[genotype][0]], det_marker=False, force_markers_identity=False)
+            ppt.boxplot(ax[row_id, 2 * col_id + 1], bsl[bsl["Genotype"] == genotype][col].values, miss[miss["Genotype"] == genotype][col].values,
+                        ylabel=col, paired=True, title=f"{genotype} Bsl/Miss", ylim=[],
+                        colors=["purple", color_dict[genotype][1]], det_marker=False, force_markers_identity=False)
+        ppt.boxplot(ax[3, 2 * col_id], bsl[bsl["Genotype"] == "WT"][col].values, bsl[bsl["Genotype"] == "KO-Hypo"][col].values,
+                    ylabel=col, paired=False, title="WT/KO-Hypo Bsl", ylim=[],
+                    colors=[color_dict["WT"][0], color_dict["KO-Hypo"][0]], det_marker=False, force_markers_identity=False)
+        ppt.boxplot(ax[3, 2 * col_id + 1], bsl[bsl["Genotype"] == "WT"][col].values, bsl[bsl["Genotype"] == "KO"][col].values,
+                    ylabel=col, paired=False, title="WT/KO Bsl", ylim=[],
+                    colors=[color_dict["WT"][0], color_dict["KO"][0]], det_marker=False, force_markers_identity=False)
+    fig.suptitle(f"Comparison of percentage of recruited neurons during hit and miss trials to baseline (no-go trials)", fontsize=12)
+    fig.canvas.manager.set_window_title(f"Baseline")
+    # SNR
+    fig_snr, ax_snr = plt.subplots(nrows=5, ncols=6, figsize=(25, 14), constrained_layout=True)
+    for df in [hit, miss, bsl]:
+        df["recr_EXC_perc"] = df["act_EXC_perc"] + df["inh_EXC_perc"]
+        df["recr_INH_perc"] = df["act_INH_perc"] + df["inh_INH_perc"]
+    key_cols = ["Genotype", "ID"]
+    bsl_snr_cols = bsl.columns[-6:]  # last 6 columns assumed to be SNR-related
+    hit_snr = hit[key_cols + list(bsl_snr_cols)].merge(bsl[key_cols + list(bsl_snr_cols)], on=key_cols, suffixes=("_hit", "_bsl"))
+    miss_snr = miss[key_cols + list(bsl_snr_cols)].merge(bsl[key_cols + list(bsl_snr_cols)], on=key_cols, suffixes=("_miss", "_bsl"))
+    for col in bsl_snr_cols:
+        hit_snr[col] = hit_snr[f"{col}_hit"] / hit_snr[f"{col}_bsl"]
+        miss_snr[col] = miss_snr[f"{col}_miss"] / miss_snr[f"{col}_bsl"]
+    hit_snr = hit_snr[key_cols + list(bsl_snr_cols)]
+    miss_snr = miss_snr[key_cols + list(bsl_snr_cols)]
+    for col_id, col in enumerate(bsl_snr_cols):
+        for row_id, genotype in enumerate(bsl["Genotype"].unique()):
+            ppt.boxplot(ax_snr[row_id, col_id], hit_snr[hit_snr["Genotype"] == genotype][col].values, miss_snr[miss_snr["Genotype"] == genotype][col].values,
+                        ylabel=col, paired=True, title=f"Hit/Miss {genotype}", ylim=[],
+                        colors=color_dict[genotype], det_marker=False, force_markers_identity=False)
+        ppt.boxplot(ax_snr[3, col_id],
+                    hit_snr[hit_snr["Genotype"] == "WT"][col].values,
+                    hit_snr[hit_snr["Genotype"] == "KO-Hypo"][col].values,
+                    ylabel=col, paired=True, title="Hit SNR WT/KO-Hypo", ylim=[],
+                    colors=[color_dict["WT"][0], color_dict["KO-Hypo"][0]], det_marker=False, force_markers_identity=False)
+        ppt.boxplot(ax_snr[4, col_id],
+                    miss_snr[miss_snr["Genotype"] == "WT"][col].values,
+                    miss_snr[miss_snr["Genotype"] == "KO-Hypo"][col].values,
+                    ylabel=col, paired=True, title="Miss SNR WT/KO-Hypo", ylim=[],
+                    colors=[color_dict["WT"][1], color_dict["KO-Hypo"][1]], det_marker=False, force_markers_identity=False)
+    fig_snr.suptitle(f"Comparison of the SNR between hit and miss trials and between genotypes", fontsize=12)
+    fig_snr.canvas.manager.set_window_title("SNR")
+    plt.show()
+    return bsl, hit, miss, hit_snr, miss_snr
 
 # endregion ============================================================================================================
 
@@ -381,13 +479,26 @@ if __name__ == '__main__':
     # plt.show()
     # endregion
     # region ====== TBT variability ======
+    recruitement_df = get_features(recs.values(), amp_delay=False)
     activity_long_df = get_mean_trial_activity_df(recs.values(), zscore=True)
+    activity_long_dff = get_mean_trial_activity_df(recs.values(), zscore=False)
     prestim_df = prestim_activated_neurons(activity_long_df)
     prestim_vector_df = prestim_act_vector(activity_long_df, metric="Stim_mean", hit_activated_only=False)
+    prestim_vector_dff = prestim_act_vector(activity_long_dff, metric="Diff_mean", hit_activated_only=True)
+    tbt_recr_var_df = compare_tbt_var_per_amp(recruitement_df)
     # pca_df = pca(activity_long_df)
     # endregion
     # region ====== E/I Ratio ======
-    # ei_df = get_ei_ratio_df(recs.values())
+    ei_df = get_ei_ratio_df(recs.values())
     # ei_behavior_df = correlate_behavior(ei_df, column="EI_ratio_cste")
-    # ei_comp_df = compare_ei_ratio(ei_df, column="EI_ratio_norm")
+    ei_comp_df = compare_ei_ratio(ei_df, column="EI_ratio_norm")
     # endregion
+    # region ====== Baseline ======
+    baseline_df, hit_df, miss_df, hit_snr, miss_snr = baseline_and_SNR(recruitement_df)
+    # endregion
+    rows = []
+    for rec in recs.values():
+        hit_thres = (rec.detected_stim == True) & (rec.stim_ampl == 4)
+        miss_thres = (rec.detected_stim == False) & (rec.stim_ampl == 4)
+        rows.append({"Genotype": rec.genotype, "ID": rec.filename, "Hit": hit_thres.sum(), "Miss": miss_thres.sum()})
+    test = pd.DataFrame(rows)

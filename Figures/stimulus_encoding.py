@@ -13,7 +13,7 @@ import percephone.plts.stats as ppt
 # endregion ============================================================================================================
 # region ======================================== Response features ====================================================
 
-def get_features(recs):
+def get_features(recs, amp_delay=True):
     """
     Get the neuronal percentage of recruited neurons for both neuron type for all trials for all recordings and build a
     DataFrame.
@@ -38,7 +38,9 @@ def get_features(recs):
             "act_EXC_perc": rec.get_perc_resp(pattern=1, n_type="EXC"),
             "inh_EXC_perc": rec.get_perc_resp(pattern=-1, n_type="EXC"),
             "act_INH_perc": rec.get_perc_resp(pattern=1, n_type="INH"),
-            "inh_INH_perc": rec.get_perc_resp(pattern=-1, n_type="INH"),
+            "inh_INH_perc": rec.get_perc_resp(pattern=-1, n_type="INH")}
+        if amp_delay:
+            feature_vectors.update({
             # Mean peak amplitude for responsive neurons
             "act_EXC_amp": rec.get_mean_param(pattern=1, n_type="EXC", parameter="Peak_amplitude"),
             "inh_EXC_amp": rec.get_mean_param(pattern=-1, n_type="EXC", parameter="Peak_amplitude"),
@@ -48,8 +50,7 @@ def get_features(recs):
             "act_EXC_delay": rec.get_mean_param(pattern=1, n_type="EXC", parameter="Peak_delay"),
             "inh_EXC_delay": rec.get_mean_param(pattern=-1, n_type="EXC", parameter="Peak_delay"),
             "act_INH_delay": rec.get_mean_param(pattern=1, n_type="INH", parameter="Peak_delay"),
-            "inh_INH_delay": rec.get_mean_param(pattern=-1, n_type="INH", parameter="Peak_delay"),
-        }
+            "inh_INH_delay": rec.get_mean_param(pattern=-1, n_type="INH", parameter="Peak_delay")})
         nb_trials = len(feature_vectors["behavior"])
         for trial_id in range(nb_trials):
             row = {"ID": rec.filename, "Genotype": rec.genotype, "threshold": rec.session_threshold, "bounded_x0": rec.bounded_x0}
