@@ -363,6 +363,65 @@ def det_comp_param(recs, parameter, stim_ampl="all", ylim=[]):
     plt.show()
 
 
+def nogo_fa_cr(recs):
+    rows = []
+    for rec in recs:
+        licks = rec.lick_time
+        act_EXC_perc = rec.get_perc_resp(pattern=1, n_type="EXC")
+        inh_EXC_perc = rec.get_perc_resp(pattern=-1, n_type="EXC")
+        act_INH_perc = rec.get_perc_resp(pattern=1, n_type="INH")
+        inh_INH_perc = rec.get_perc_resp(pattern=-1, n_type="INH")
+        for trial_id, (trial_amp, time) in enumerate(zip(rec.stim_ampl, rec.stim_time)):
+            if trial_amp == 0:
+                # Defining if the no-go is a FA or CR
+                time_diff_vector = licks - ([time] * len(licks))
+                is_fa = np.any((time_diff_vector >= 0) & (time_diff_vector < 75))
+                rows.append({"ID": rec.filename, "Genotype": rec.genotype, "FA": is_fa,
+                             "act_EXC_perc": act_EXC_perc[trial_id], "inh_EXC_perc": inh_EXC_perc[trial_id],
+                             "rec_EXC_perc": act_EXC_perc[trial_id] + inh_EXC_perc[trial_id],
+                             "act_INH_perc": act_INH_perc[trial_id], "inh_INH_perc": inh_INH_perc[trial_id],
+                             "rec_INH_perc": act_INH_perc[trial_id] + inh_INH_perc[trial_id]})
+    data = pd.DataFrame(rows)
+    gp_data_global = data.drop(columns="FA").groupby(["ID", "Genotype"], as_index=False).mean()
+    gp_data = data.groupby(["ID", "Genotype", "FA"], as_index=False).mean()
+    fig, ax = plt.subplots(nrows=3, ncols=6, figsize=(25, 15), constrained_layout=True)
+    for col, metric in enumerate(gp_data.columns[-6:]):
+        ppt.boxplot(ax[0, col], gp_data_global[gp_data_global["Genotype"] == "WT"][metric].values,
+                    gp_data_global[gp_data_global["Genotype"] == "KO-Hypo"][metric].values, ylabel=metric,
+                    paired=False, title=f"All No-Go trials", ylim=[0, 50],
+                    colors=[ppt.wt_color, ppt.hypo_color])
+        ppt.boxplot(ax[1, col], gp_data[(gp_data["Genotype"] == "WT") & (gp_data["FA"] == True)][metric].values,
+                    gp_data[(gp_data["Genotype"] == "KO-Hypo") & (gp_data["FA"] == True)][metric].values, ylabel=metric,
+                    paired=False, title=f"False Alarm", ylim=[0, 50],
+                    colors=[ppt.wt_color, ppt.hypo_color])
+        ppt.boxplot(ax[2, col], gp_data[(gp_data["Genotype"] == "WT") & (gp_data["FA"] == False)][metric].values,
+                    gp_data[(gp_data["Genotype"] == "KO-Hypo") & (gp_data["FA"] == False)][metric].values, ylabel=metric,
+                    paired=False, title=f"Correct Rejection", ylim=[0, 50],
+                    colors=[ppt.wt_color, ppt.hypo_color])
+    fig.suptitle("Comparison between genotypes of neuronal recruitment during no-go trials")
+    fig.canvas.manager.set_window_title("Recruitment NoGo")
+    plt.show()
+    return gp_data
+
+def delta_hit_miss_comp(feature_df):
+    """
+    Compares the delta in recruited neurons (hit-miss) between genotypes.
+
+    Parameters
+    ----------
+    feature_df
+
+    Returns
+    -------
+
+    """
+    # Filtering out no go trials
+    data = feature_df[feature_df["amplitude"] != 0]
+    # Retrieving the mean recruitment during hits and miss for each animal and computing the delta
+    gp_data = data.drop(columns=["threshold", "bounded_x0"]).groupby(["ID", "Genotype", "behavior"], as_index=False).mean()
+
+    return gp_data
+
 # endregion ============================================================================================================
 # region ======================================== Responsivity =========================================================
 def nb_neurons(recs):
@@ -689,7 +748,7 @@ def resp_contrast(pattern="recruited", stim_ampl="all", method="ratio", ylim=[])
     plt.show()
 
 
-def plot_neuron_perc_amp(recs, pattern="recruited", detected_trials=True, undetected_trials=True, ylim=[], sign_exc_inh=[[], []],
+def plot_neuron_perc_amp(recs, pattern="recruited", detected_trials=True, undetected_trials=True, nogo_norm=False, ylim=[],
                          transformation=None, normality=[False, False], homogeneity=[False, False]):
     pat_dict = {"recruited": 0, "activated": 1, "inhibited": -1}
     assert pattern in pat_dict.keys()
@@ -717,27 +776,28 @@ def plot_neuron_perc_amp(recs, pattern="recruited", detected_trials=True, undete
                 if pattern != "recruited":
                     trials[trials != pat_dict[pattern]] = 0
                 recruited_det = np.mean(np.count_nonzero(trials, axis=0))
-                # The no-go trials are used to normalized
-                # trials_no_go = resp_mat[:, rec.stim_ampl_filter(stim_ampl=[0], include_no_go=True)]
-                # trials_no_go[trials_no_go != 1] = 0
-                # recruited_no_go = np.mean(np.count_nonzero(trials_no_go, axis=0))
-                # recruited_det -= recruited_no_go
-                # recruited_det = 0 if recruited_det < 0 else recruited_det
+                if nogo_norm:
+                    # The no-go trials are used to normalized
+                    trials_no_go = resp_mat[:, rec.stim_ampl_filter(stim_ampl=[0], include_no_go=True)]
+                    trials_no_go[trials_no_go != 1] = 0
+                    recruited_no_go = np.mean(np.count_nonzero(trials_no_go, axis=0))
+                    recruited_det -= recruited_no_go
+                    recruited_det = 0 if recruited_det < 0 else recruited_det
                 perc_n_det = (recruited_det / total_n) * 100
                 row = {"ID": rec.filename, "Genotype": rec.genotype, "Amplitude": amp, f"perc_{n_type}": perc_n_det}
                 rows.append(row)
         data = pd.DataFrame(rows)
         data_nan = data.fillna(0)
         test, post_hoc = ppt.curveplot(ax[i], data_nan, between="Genotype", within="Amplitude", variable=f"perc_{n_type}",
-                                       title=f"Percentage of {pattern} {n_type} neurons",
-                                       ylabel=None, xlabel=None, ylim=None, colors=["#c57c9a", "firebrick", "#326993"],
-                                       id_display=True, legend_display=True, qq_show=True, transformation=transformation, consider_normality=normality[i],
+                                       title=f"Percentage of {pattern} {n_type} neurons", data_points=False,
+                                       ylabel=None, xlabel=None, ylim=[0, 30], colors=["#c57c9a", "firebrick", "#326993"],
+                                       id_display=True, legend_display=False, qq_show=True, transformation=transformation, consider_normality=normality[i],
                                        consider_homogeneity=homogeneity[i])
         results[f"data_{n_type}"] = data_nan
         results[f"test_{n_type}"] = test
         results[f"post_{n_type}"] = post_hoc
     title = f"ampcurv_{pattern}_{trials_name}_trials"
-    fig.suptitle(f"Percentage of {pattern} neurons for {trials_name} trials", fontsize=15)
+    fig.suptitle(f"Percentage of {pattern} neurons for {trials_name} trials\n[no-go normalization == {nogo_norm}]", fontsize=15)
     fig.canvas.manager.set_window_title(title)
     plt.show()
     return results
@@ -780,6 +840,12 @@ if __name__ == '__main__':
     # mean_det = np.mean(det.drop(columns="Genotype"), axis=0)
     # mean_undet = np.mean(undet.drop(columns="Genotype"), axis=0)
 
+    results = plot_neuron_perc_amp(recs.values(), pattern="activated", detected_trials=True, undetected_trials=True,
+                                   nogo_norm=True, ylim=[], transformation="yeojohnson", normality=[False, True],
+                                   homogeneity=[False, True])
+
+    nogo_df = nogo_fa_cr(recs.values())
+    delta_df = delta_hit_miss_comp(full_data)
 
     # ====== Responsivity ======
     # neurons = nb_neurons(recs.values())

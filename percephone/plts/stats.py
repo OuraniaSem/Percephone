@@ -540,6 +540,7 @@ def boxplot_3_conditions(group1_data, group2_data, cond_labels=["A", "B", "C"],
 
 
 def curveplot(ax, data, between="Genotype", within="Trial", variable=None,
+              data_points=True,
               title=None, ylabel=None, xlabel=None, ylim=None, colors=None, id_display=True, legend_display=True, qq_show=True,
               transformation=None, consider_normality=False, consider_homogeneity=False):
     """
@@ -597,35 +598,41 @@ def curveplot(ax, data, between="Genotype", within="Trial", variable=None,
     ylabel = ylabel or variable
     xlabel = xlabel or within
     title = title or f"Evolution of {variable} across {within} for {between if nb_groups > 1 else groups_names[0]}"
-    # For each measurement, plot the data points associated with each group with their label when hovering
-    x_pad = (measurements[1] - measurements[0]) / 10  # The maximum distance from the measurement x
-    scatters = []
-    all_labels = []
-    for measure in measurements:
-        # First defining the x coordinates for the different groups
-        x_coords = np.linspace(start=measure - x_pad, stop=measure + x_pad, num=nb_groups) if nb_groups > 1 else [measure]
-        for x, group, color in zip(x_coords, groups_names, colors):
-            subset = data[(data[between] == group) & (data[within] == measure)]
-            gp_measure = subset[variable].values
-            if len(gp_measure) > 0:
-                gp_plot = ax.scatter([x] * len(gp_measure), gp_measure, color=color, alpha=0.5, marker="+")
-                scatters.append(gp_plot)
-                all_labels.append(subset["ID"].values)
-                # Displaying the ID when hovering the data points
-    if id_display:
-        cursor = mplcursors.cursor(scatters, hover=True)  # Single cursor for all scatters
+    if data_points:
+        # For each measurement, plot the data points associated with each group with their label when hovering
+        x_pad = (measurements[1] - measurements[0]) / 10  # The maximum distance from the measurement x
+        scatters = []
+        all_labels = []
+        for measure in measurements:
+            # First defining the x coordinates for the different groups
+            x_coords = np.linspace(start=measure - x_pad, stop=measure + x_pad, num=nb_groups) if nb_groups > 1 else [measure]
+            for x, group, color in zip(x_coords, groups_names, colors):
+                subset = data[(data[between] == group) & (data[within] == measure)]
+                gp_measure = subset[variable].values
+                if len(gp_measure) > 0:
+                    gp_plot = ax.scatter([x] * len(gp_measure), gp_measure, color=color, alpha=0.5, marker="+")
+                    scatters.append(gp_plot)
+                    all_labels.append(subset["ID"].values)
+                    # Displaying the ID when hovering the data points
+        if id_display:
+            cursor = mplcursors.cursor(scatters, hover=True)  # Single cursor for all scatters
 
-        def on_add(sel):
-            scatter_index = scatters.index(sel.artist)
-            labels = all_labels[scatter_index]
-            sel.annotation.set_text(labels[sel.index])
-        cursor.connect("add", on_add)
+            def on_add(sel):
+                scatter_index = scatters.index(sel.artist)
+                labels = all_labels[scatter_index]
+                sel.annotation.set_text(labels[sel.index])
+            cursor.connect("add", on_add)
     # Get the mean value of each group for each measurement and plot the corresponding curve
     for group, color in zip(groups_names, colors):
         mean_group = [np.nanmean(data[(data[between] == group) & (data[within] == measure)][variable].values) for measure in measurements]
-        ax.plot(measurements, mean_group, color=color, label=f"Mean {group}")
+        sem_group = [ss.sem(data[(data[between] == group) & (data[within] == measure)][variable].values) for measure in measurements]
+        if data_points:
+            ax.plot(measurements, mean_group, color=color, label=f"Mean {group}")
+        else:
+            ax.errorbar(measurements, mean_group, linestyle="-.", color=color, yerr=sem_group, capsize=6, markersize=15, lw=3, label=f"Mean {group}")
+
     if legend_display:
-        ax.legend()
+        ax.legend(fontsize=12)
     else:
         cursor = mplcursors.cursor(ax.lines, hover=True)
         cursor.connect("add", lambda sel: sel.annotation.set_text(sel.artist.get_label()))
@@ -633,11 +640,14 @@ def curveplot(ax, data, between="Genotype", within="Trial", variable=None,
     ax.set_title(title)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
+    ax.set_xticks(measurements)
+    ax.tick_params(axis='both', labelsize=10)
+    ax.spines[['right', 'top', ]].set_visible(False)
     # Setting the ylim
     min_data = np.nanmin(data[variable])
     max_data = np.nanmax(data[variable])
     if ylim:
-        if not (ylim[0] <= min_data and ylim[1] >= max_data):
+        if data_points and not (ylim[0] <= min_data and ylim[1] >= max_data):
             warnings.warn("The ylim you have set don't cover the data range.")
             ax.set_ylabel("⚠⚠⚠ " + ylabel + " ⚠⚠⚠", fontweight="bold", color="red")
         ax.set_ylim(ylim)
@@ -816,11 +826,17 @@ def normality_check(data, title="variable", plot=True):
         ax_hist.set_ylabel("Frequency", fontsize=8)
         ax_hist.set_xlabel("Variable value", fontsize=8)
         ax_hist.set_title("Gaussian distribution?", fontsize=10)
+        ax_hist.tick_params(axis='both', labelsize=8)
         # --- Single QQ-Plot (Bottom Left) ---
         ax_qq = norm_fig.add_subplot(spec[2:5, 0:3])
         sm.qqplot(data, line="s", ax=ax_qq)
+        ax_qq.lines[0].set_markersize(5)
+        ax_qq.lines[1].set_linewidth(2)
         ax_qq.text(0.05, 0.9, f"n = {sample_size}", transform=ax_qq.transAxes)
         ax_qq.set_title("Points aligned on the line?")
+        ax_qq.set_ylabel(ax_qq.get_ylabel(), fontsize=8)
+        ax_qq.set_xlabel(ax_qq.get_xlabel(), fontsize=8)
+        ax_qq.tick_params(axis='both', labelsize=8)
         # --- 5×5 Grid of QQ-Plots (Right) ---
         random_datasets = [np.random.normal(loc=0, scale=1, size=sample_size) for _ in range(24)]
         random_datasets.insert(12, data)  # Insert real data in center
@@ -829,6 +845,10 @@ def normality_check(data, title="variable", plot=True):
             for col in range(3, 8):
                 ax_rnd = norm_fig.add_subplot(spec[row, col])
                 sm.qqplot(random_datasets.pop(0), line="s", ax=ax_rnd)
+                ax_rnd.lines[0].set_markersize(5)
+                ax_rnd.lines[1].set_linewidth(2)
+                ax_rnd.set_ylabel(ax_rnd.get_ylabel(), fontsize=8)
+                ax_rnd.set_xlabel(ax_rnd.get_xlabel(), fontsize=8)
                 ax_rnd.set_xticks([])
                 ax_rnd.set_yticks([])
                 ax_rnd.set_frame_on(False)
@@ -847,13 +867,14 @@ def homogeneity_check(predicted, residuals, title="variable"):
     sqrt_standard_resid = np.sqrt(np.abs(standard_resid))
     # Create a separate figure for the scale-location plot
     fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
-    ax.scatter(predicted, sqrt_standard_resid, alpha=0.6)
+    ax.scatter(predicted, sqrt_standard_resid, alpha=0.6, s=5)
     # Compute the lowess smoothing line
     smoothed = lowess(sqrt_standard_resid, predicted, frac=0.3)
-    ax.plot(smoothed[:, 0], smoothed[:, 1], color="red", linestyle="--", label="Lowess trend")
+    ax.plot(smoothed[:, 0], smoothed[:, 1], color="red", linestyle="--", label="Lowess trend", lw=2)
     ax.set_xlabel("Fitted values", fontsize=8)
     ax.set_ylabel("$\sqrt{|Standardized\ Residuals|}$", fontsize=8)
     ax.set_title(f"Scale-Location Plot for {title}", fontsize=12)
+    ax.tick_params(axis='both', labelsize=8)
     fig.canvas.manager.set_window_title(f"Homogeneity Check - {title}")
     plt.show()
 
