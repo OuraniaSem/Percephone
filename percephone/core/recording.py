@@ -743,11 +743,21 @@ class RecordingAmplDet(Recording):
         filtered_para_mat = np.where(resp_mat == pattern, para_mat, np.nan)
         return np.nanmean(filtered_para_mat, axis=0)
 
-    def get_mean_activity(self, zscore=True, n_type="EXC"):
+
+    def get_estimated_activity(self, zscore=True, n_type="EXC", estimator="mean", real_duration=True):
         assert n_type in ["EXC", "INH"], "Please provide a valid neuron type (EXC or INH)"
-
-
-
+        if zscore:
+            activity = self.zscore_exc if n_type == "EXC" else self.zscore_inh
+        else:
+            activity = self.df_f_exc if n_type == "EXC" else self.df_f_inh
+        est_act_mat = np.zeros_like(self.matrices[n_type]["Responsivity"], dtype=float)
+        for n_id, neuron in enumerate(activity):
+            for trial_id, (trial_start, trial_duration) in enumerate(zip(self.stim_time, self.stim_durations)):
+                if not real_duration:
+                    trial_duration = 15
+                data = neuron[trial_start : trial_start + int(trial_duration)]
+                est_act_mat[n_id, trial_id] = data.mean() if estimator == "mean" else (data.std() if estimator == "std" else np.nan)
+        return est_act_mat
 
 if __name__ == '__main__':
     import percephone.plts.heatmap as hm

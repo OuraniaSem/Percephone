@@ -451,7 +451,58 @@ def plot_hit_miss_classif_comp(frame_model_df, gp1="WT", gp2="KO-Hypo", title_pr
     plt.show()
     return data
 
+def compare_accuracy(recs, random=42):
+    """
+    Train a logistic regression model with different subsets of neurons and compare the decoding accuracy.
+    Parameters
+    ----------
+    recs
 
+    Returns
+    -------
+
+    """
+    rows = []
+    skf = StratifiedKFold(n_splits=4, shuffle=True, random_state=random)
+    for rec in recs:
+        # Retrieving the neuronal activity
+        exc_mat = rec.get_estimated_activity(zscore=True, n_type="EXC", estimator="mean", real_duration=True)
+        inh_mat = rec.get_estimated_activity(zscore=True, n_type="INH", estimator="mean", real_duration=True)
+        full_mat = np.concatenate([exc_mat, inh_mat], axis=0).T
+        nb_exc = exc_mat.shape[0]
+        y = rec.detected_stim
+        for fold, (train_idx, test_idx) in enumerate(skf.split(full_mat, y), start=1):
+            # X_train, X_test, y_train, y_test = train_test_split(full_mat, y, test_size=0.2, stratify=y, random_state=random)
+            X_train, X_test = full_mat[train_idx], full_mat[test_idx]
+            y_train, y_test = y[train_idx], y[test_idx]
+            X_res, y_res = RandomUnderSampler(random_state=random).fit_resample(X_train, y_train)
+            model = LogisticRegression(max_iter=5000, random_state=random)
+            # Fitting the model with all neurons
+            model.fit(X_res, y_res)
+            y_pred_all = model.predict(X_test)
+            acc_all = get_metrics(y_test, y_pred_all)["Accuracy"]
+            # Fitting the model with EXC neurons
+            model.fit(X_res[:, :nb_exc], y_res)
+            y_pred_exc = model.predict(X_test[:, :nb_exc])
+            acc_exc = get_metrics(y_test, y_pred_exc)["Accuracy"]
+            # Fitting the model with INH neurons
+            model.fit(X_res[:, nb_exc:], y_res)
+            y_pred_inh = model.predict(X_test[:, nb_exc:])
+            acc_inh = get_metrics(y_test, y_pred_inh)["Accuracy"]
+            rows.append({"ID": rec.filename, "Genotype": rec.genotype, "Fold": fold, "acc_all": acc_all, "acc_exc": acc_exc, "acc_inh": acc_inh})
+    full_data = pd.DataFrame(rows)
+    data = full_data.groupby(["Genotype", "ID"], as_index=False).mean()
+    fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(18, 8), constrained_layout=True)
+    ppt.boxplot(ax[0], data["acc_all"], data["acc_exc"], ylabel="Accuracy", paired=True, title=f"All neurons/EXC", ylim=[0, 1],
+                colors=["#859717", "#229708"], det_marker=False, force_markers_identity=False)
+    ppt.boxplot(ax[1], data["acc_all"], data["acc_inh"], ylabel="Accuracy", paired=True, title=f"All neurons/INH", ylim=[0, 1],
+                colors=["#859717", "#cba61b"], det_marker=False, force_markers_identity=False)
+    ppt.boxplot(ax[2], data["acc_exc"], data["acc_inh"], ylabel="Accuracy", paired=True, title=f"EXC/INH", ylim=[0, 1],
+                colors=["#229708", "#cba61b"], det_marker=False, force_markers_identity=False)
+    fig.suptitle("Comparison of decoding accuracy between neuron types")
+    fig.canvas.manager.set_window_title(f"Accuracy n_types")
+    plt.show()
+    return data
 
 # endregion ============================================================================================================
 
@@ -472,8 +523,8 @@ if __name__ == '__main__':
     pool = pool.ThreadPool(processes=workers)
     async_results = [pool.apply_async(opening_rec, args=(file, i)) for i, file in enumerate(files_)]
     recs = {ar.get().filename: ar.get() for ar in async_results}
-    for rec in recs.values():
-        rec.peak_delay_amp()
+    # for rec in recs.values():
+    #     rec.peak_delay_amp()
     # endregion ============
     # test = perceptual_magnitude_behavior_corr(recs.values())
     # mean_corr = test.groupby("Genotype").mean()
@@ -486,8 +537,9 @@ if __name__ == '__main__':
     # frame_dff = get_activity_by_frame_df(recs.values(), zscore=False)
     # frame_model_df, frame_mean_sem, frame_comp = frame_model(frame_dff)
 
-    saved_framed_model_df = pd.read_csv("C:/Users/cvandromme/Desktop/frame_model_df.csv")
+    # saved_framed_model_df = pd.read_csv("C:/Users/cvandromme/Desktop/frame_model_df.csv")
     # frame_model_df_amp_gp = frame_model_df.groupby(["Genotype", "ID", "Threshold", "Amplitude"], as_index=False).mean().drop(columns=["Trial", "Duration", "Behavior"])
-    plot_hit_miss_classif(saved_framed_model_df)
-    data = plot_hit_miss_classif_comp(saved_framed_model_df, gp1="WT", gp2="KO-Hypo", title_precision="")
+    # plot_hit_miss_classif(saved_framed_model_df)
+    # data = plot_hit_miss_classif_comp(saved_framed_model_df, gp1="WT", gp2="KO-Hypo", title_precision="")
 
+    accuracy_comp_df = compare_accuracy(recs.values(), random=42)

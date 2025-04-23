@@ -384,7 +384,7 @@ def nogo_fa_cr(recs):
     data = pd.DataFrame(rows)
     gp_data_global = data.drop(columns="FA").groupby(["ID", "Genotype"], as_index=False).mean()
     gp_data = data.groupby(["ID", "Genotype", "FA"], as_index=False).mean()
-    fig, ax = plt.subplots(nrows=3, ncols=6, figsize=(25, 15), constrained_layout=True)
+    fig, ax = plt.subplots(nrows=3, ncols=6, figsize=(36, 18), constrained_layout=True)
     for col, metric in enumerate(gp_data.columns[-6:]):
         ppt.boxplot(ax[0, col], gp_data_global[gp_data_global["Genotype"] == "WT"][metric].values,
                     gp_data_global[gp_data_global["Genotype"] == "KO-Hypo"][metric].values, ylabel=metric,
@@ -403,7 +403,8 @@ def nogo_fa_cr(recs):
     plt.show()
     return gp_data
 
-def delta_hit_miss_comp(feature_df):
+
+def delta_hit_miss_comp(feature_df, threshold_only=False):
     """
     Compares the delta in recruited neurons (hit-miss) between genotypes.
 
@@ -416,11 +417,38 @@ def delta_hit_miss_comp(feature_df):
 
     """
     # Filtering out no go trials
-    data = feature_df[feature_df["amplitude"] != 0]
+    feature_df["rec_EXC_perc"] = feature_df["act_EXC_perc"] + feature_df["inh_EXC_perc"]
+    feature_df["rec_INH_perc"] = feature_df["act_INH_perc"] + feature_df["inh_INH_perc"]
+    if threshold_only:
+        data = feature_df[feature_df["amplitude"] == feature_df["threshold"]]
+    else:
+        data = feature_df[feature_df["amplitude"] != 0]
+    nogo = feature_df[feature_df["amplitude"] == 0]
     # Retrieving the mean recruitment during hits and miss for each animal and computing the delta
-    gp_data = data.drop(columns=["threshold", "bounded_x0"]).groupby(["ID", "Genotype", "behavior"], as_index=False).mean()
-
-    return gp_data
+    gp_data = data.drop(columns=["threshold", "bounded_x0", "amplitude"]).groupby(["ID", "Genotype", "behavior"], as_index=False).mean()
+    gp_nogo = nogo.drop(columns=["threshold", "bounded_x0", "amplitude", "behavior"]).groupby(["ID", "Genotype"], as_index=False).mean().set_index("ID")
+    hit_data = gp_data[gp_data["behavior"] == True].copy().drop(columns=["behavior", "Genotype"]).set_index("ID")
+    # nogo_data = gp_nogo.drop(columns=["behavior", "Genotype"]).set_index("ID")
+    delta_data = hit_data - gp_data[gp_data["behavior"] == False].drop(columns=["behavior", "Genotype"]).set_index("ID")
+    delta_data = delta_data.merge(gp_data[["ID", "Genotype"]].drop_duplicates(), how="left", left_index=True, right_on="ID")
+    delta_nogo_data = hit_data - gp_nogo.drop(columns=["Genotype"])
+    delta_nogo_data = delta_nogo_data.merge(gp_nogo[["Genotype"]], how="left", left_index=True, right_index=True)
+    fig, ax = plt.subplots(nrows=2, ncols=6, figsize=(36, 16), constrained_layout=True)
+    for col, metric in enumerate(["act_EXC_perc", "inh_EXC_perc", "rec_EXC_perc", "act_INH_perc", "inh_INH_perc", "rec_INH_perc"]):
+        ppt.boxplot(ax[0, col], delta_data[delta_data["Genotype"] == "WT"][metric].values,
+                    delta_data[delta_data["Genotype"] == "KO-Hypo"][metric].values,
+                    ylabel=metric,
+                    paired=False, title="Δ Hit-Miss", ylim=[-10, 50],
+                    colors=[ppt.wt_color, ppt.hypo_color])
+        ppt.boxplot(ax[1, col], delta_nogo_data[delta_nogo_data["Genotype"] == "WT"][metric].values,
+                    delta_nogo_data[delta_nogo_data["Genotype"] == "KO-Hypo"][metric].values,
+                    ylabel=metric,
+                    paired=False, title="Δ Hit-NoGo", ylim=[-20, 70],
+                    colors=[ppt.wt_color, ppt.hypo_color])
+    fig.suptitle(f"Delta in recruitment of neurons (WT vs. KO-Hypo)\n[Only threshold == {threshold_only}]")
+    fig.canvas.manager.set_window_title(f"Recruitment Delta [threshold={threshold_only}]")
+    plt.show()
+    return delta_data, delta_nogo_data
 
 # endregion ============================================================================================================
 # region ======================================== Responsivity =========================================================
@@ -845,7 +873,7 @@ if __name__ == '__main__':
                                    homogeneity=[False, True])
 
     nogo_df = nogo_fa_cr(recs.values())
-    delta_df = delta_hit_miss_comp(full_data)
+    delta_df, delta_nogo_df = delta_hit_miss_comp(full_data, threshold_only=True)
 
     # ====== Responsivity ======
     # neurons = nb_neurons(recs.values())
