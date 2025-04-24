@@ -79,7 +79,6 @@ class Recording:
         self.session_threshold = 8 if self.filename == 6606 else self.session_threshold  # 0% hit rate at 6 (computed)
         self.input_path = input_path
         self.matrices = {"EXC": {}, "INH": {}}
-
         iscell = np.load(input_path + 'iscell.npy', allow_pickle=True)
         # Create a dimension in iscell to define excitatory and inhibitory cells
         exh_inh = np.ones((len(iscell), 1))  # array to define excitatory
@@ -106,6 +105,10 @@ class Recording:
         if os.path.exists(input_path + 'matrice_resp_exc.npy') and os.path.exists(input_path + 'matrice_resp_inh.npy'):
             self.matrices["EXC"]["Responsivity"] = np.load(self.input_path + "matrice_resp_exc.npy")
             self.matrices["INH"]["Responsivity"] = np.load(self.input_path + "matrice_resp_inh.npy")
+
+        assert len(inhibitory_ids) == self.df_f_inh.shape[0], (f"{self.filename} → The number of inhibitory neurons "
+                                                               f"doesn't match between ROI ({len(inhibitory_ids)}) and "
+                                                               f"df_f_inh.npy file ({self.df_f_inh.shape[0]})")
 
     def compute_df_f(self, cell_ids, save_path, mean_f_bsl):
         """

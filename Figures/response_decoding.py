@@ -1,5 +1,7 @@
 # region ======================================== Imports ==============================================================
 import os
+
+import mplcursors
 import numpy as np
 import pandas as pd
 import statsmodels.formula.api as smf
@@ -7,7 +9,7 @@ import statsmodels.api as sm
 from imblearn.under_sampling import RandomUnderSampler
 from matplotlib import pyplot as plt
 from multiprocessing import cpu_count, pool
-from scipy.stats import pointbiserialr
+from scipy.stats import pointbiserialr, linregress
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import confusion_matrix, classification_report
 from sklearn.model_selection import train_test_split, GridSearchCV, StratifiedKFold
@@ -492,17 +494,70 @@ def compare_accuracy(recs, random=42):
             rows.append({"ID": rec.filename, "Genotype": rec.genotype, "Fold": fold, "acc_all": acc_all, "acc_exc": acc_exc, "acc_inh": acc_inh})
     full_data = pd.DataFrame(rows)
     data = full_data.groupby(["Genotype", "ID"], as_index=False).mean()
-    fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(18, 8), constrained_layout=True)
-    ppt.boxplot(ax[0], data["acc_all"], data["acc_exc"], ylabel="Accuracy", paired=True, title=f"All neurons/EXC", ylim=[0, 1],
-                colors=["#859717", "#229708"], det_marker=False, force_markers_identity=False)
-    ppt.boxplot(ax[1], data["acc_all"], data["acc_inh"], ylabel="Accuracy", paired=True, title=f"All neurons/INH", ylim=[0, 1],
-                colors=["#859717", "#cba61b"], det_marker=False, force_markers_identity=False)
-    ppt.boxplot(ax[2], data["acc_exc"], data["acc_inh"], ylabel="Accuracy", paired=True, title=f"EXC/INH", ylim=[0, 1],
-                colors=["#229708", "#cba61b"], det_marker=False, force_markers_identity=False)
+    fig, ax = plt.subplots(nrows=3, ncols=3, figsize=(18, 24), constrained_layout=True)
+    for row, (group, gp_label) in enumerate(zip([data, data[data["Genotype"] == "WT"], data[data["Genotype"] == "KO-Hypo"]],
+                                                ["all", "WT", "KO-Hypo"])):
+        ppt.boxplot(ax[row, 0], group["acc_all"].values, group["acc_exc"].values, ylabel="Accuracy", paired=True, title=f"All neurons/EXC ({gp_label})", ylim=[0, 1],
+                    colors=["#859717", "#229708"], det_marker=False, force_markers_identity=False)
+        ppt.boxplot(ax[row, 1], group["acc_all"].values, group["acc_inh"].values, ylabel="Accuracy", paired=True, title=f"All neurons/INH ({gp_label})", ylim=[0, 1],
+                    colors=["#859717", "#cba61b"], det_marker=False, force_markers_identity=False)
+        ppt.boxplot(ax[row, 2], group["acc_exc"].values, group["acc_inh"].values, ylabel="Accuracy", paired=True, title=f"EXC/INH ({gp_label})", ylim=[0, 1],
+                    colors=["#229708", "#cba61b"], det_marker=False, force_markers_identity=False)
     fig.suptitle("Comparison of decoding accuracy between neuron types")
     fig.canvas.manager.set_window_title(f"Accuracy n_types")
     plt.show()
     return data
+
+
+def correlate_nb_accuracy(recs, accuracy_df):
+    accuracy_df["n_EXC"] = accuracy_df["ID"].map(lambda id_: recs[id_].zscore_exc.shape[0])
+    accuracy_df["n_INH"] = accuracy_df["ID"].map(lambda id_: recs[id_].zscore_inh.shape[0])
+    accuracy_df["n_all"] = accuracy_df["n_EXC"] + accuracy_df["n_INH"]
+
+    def plot_lin_reg(ax, data, x_col=None, y_col=None, id_col="ID", group_col=None,
+                     title=None, xlab=None, ylab=None, colors=None, line_color="red", id_display=True):
+        if colors is None:
+            colors = {"WT": ppt.wt_color, "KO": ppt.ko_color, "KO-Hypo": ppt.hypo_color}
+        xlab = xlab or x_col
+        ylab = ylab or y_col
+        # Correlation
+        results = dict(linregress(data[x_col], data[y_col])._asdict())
+        r2 = results["rvalue"] ** 2
+        line = results["slope"] * data[x_col] + results["intercept"]
+        # Plot the data points and regression line
+        ax.plot(data[x_col], line, color=line_color, lw=2)
+        if group_col is not None:
+            for g in sorted(data[group_col].unique()):
+                group = data[data[group_col] == g]
+                sc = ax.scatter(group[x_col], group[y_col], color=colors[g], alpha=0.7, label=g, s=10, marker="+")
+                if id_display:
+                    # Save the IDs for this group so that they can be accessed in the callback.
+                    ids = group["ID"].values
+                    mplcursors.cursor(sc, hover=True).connect("add", lambda sel, ids=ids: (sel.annotation.set_text(f"ID: {ids[sel.index]}"), sel.annotation.set_fontsize(8)))
+        else:
+            sc = ax.scatter(data[x_col], data[y_col], color=colors[g], alpha=0.7, label=g, s=10, marker="+")
+            if id_display:
+                ids = data["ID"].values
+                mplcursors.cursor(sc, hover=True).connect("add", lambda sel, ids=ids: (sel.annotation.set_text(f"ID: {ids[sel.index]}"), sel.annotation.set_fontsize(8)))
+        # Annotate the plot with R² and p-value
+        ax.text(0.05, 0.95, f"$r^2 = {r2:.3f}$\np-value = {results["pvalue"]:.3f}", transform=ax.transAxes, fontsize=8, verticalalignment="top", color="black")
+        ax.set_title(title, fontsize=12)
+        ax.set_xlabel(xlab, fontsize=10)
+        ax.set_ylabel(ylab, fontsize=10)
+        for lbl in ax.get_xticklabels() + ax.get_yticklabels():
+            lbl.set_fontsize(8)
+        return results
+
+    fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(18, 6), constrained_layout=True)
+    plot_lin_reg(ax[0], accuracy_df, x_col="n_EXC", y_col="acc_exc", group_col="Genotype", title="EXC")
+    plot_lin_reg(ax[1], accuracy_df, x_col="n_INH", y_col="acc_inh", group_col="Genotype", title="INH")
+    plot_lin_reg(ax[2], accuracy_df, x_col="n_all", y_col="acc_all", group_col="Genotype", title="All")
+    fig.suptitle("Correlation of the model accuracy with the number of neurons", fontsize=12)
+    fig.canvas.manager.set_window_title("Corr acc nb neurons")
+    plt.show()
+    return accuracy_df
+
+
 
 # endregion ============================================================================================================
 
@@ -523,6 +578,8 @@ if __name__ == '__main__':
     pool = pool.ThreadPool(processes=workers)
     async_results = [pool.apply_async(opening_rec, args=(file, i)) for i, file in enumerate(files_)]
     recs = {ar.get().filename: ar.get() for ar in async_results}
+
+
     # for rec in recs.values():
     #     rec.peak_delay_amp()
     # endregion ============
@@ -543,3 +600,4 @@ if __name__ == '__main__':
     # data = plot_hit_miss_classif_comp(saved_framed_model_df, gp1="WT", gp2="KO-Hypo", title_precision="")
 
     accuracy_comp_df = compare_accuracy(recs.values(), random=42)
+    acc_nb_df = correlate_nb_accuracy(recs, accuracy_comp_df)

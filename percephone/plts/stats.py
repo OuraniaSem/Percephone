@@ -138,7 +138,8 @@ def boxplot(ax, gp1, gp2, ylabel, paired=False, title="", ylim=[], colors=[wt_co
             warnings.warn("The ylim you have set don't cover the data range.")
         ax.set_ylim(ylim)
     else:
-        ax.set_ylim(top=ax.get_ylim()[1] * 1.2)
+        y_lim_sup = ax.get_ylim()[1]
+        ax.set_ylim(top=y_lim_sup * (1.2 if y_lim_sup > 0 else 0.8))
 
     # Plotting the significance bar
     bar_color = "black"
@@ -728,7 +729,7 @@ def curveplot(ax, data, between="Genotype", within="Trial", variable=None,
     if nb_groups > 1:
         if normality and homogeneity:
             # Performing the mixed ANOVA
-            test_results = pg.mixed_anova(data=data, dv=variable_col, between=between, within=within, subject="ID")
+            test_results = pg.mixed_anova(data=data, dv=variable_col, between=between, within=within, subject="ID", correction=True)
             p_val_between = test_results[test_results["Source"] == between]["p-unc"].iloc[0].astype(float)
             p_val_within = test_results[test_results["Source"] == within][GG_col].iloc[0].astype(float)
             p_val_inter = test_results[test_results["Source"] == "Interaction"][GG_col].iloc[0].astype(float)

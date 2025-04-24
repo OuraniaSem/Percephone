@@ -832,7 +832,27 @@ def plot_neuron_perc_amp(recs, pattern="recruited", detected_trials=True, undete
 
 
 # endregion ============================================================================================================
+# region ===================================== Neuronal clusters =======================================================
 
+def get_concat_act(rec, zscore=True):
+    return concat_array
+
+def pca_neurons(recs):
+    """
+    Try to cluster neurons based on their activity.
+
+    Returns
+    -------
+
+    """
+    rows = []
+
+
+
+
+
+
+# endregion ============================================================================================================
 
 if __name__ == '__main__':
     ### Initialisation of recs instances ###
@@ -863,17 +883,17 @@ if __name__ == '__main__':
     full_data = get_features(recs.values())
     data = full_data[full_data["ID"] != 5886]
     # compare_sub_supra_within(data, behavior_filter=False, genotype="KO", comparison="all_supra")
-    wt, hypo = compare_sub_supra_between(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo", gp1_amps="rounded_mean_genotype", gp2_amps="gp1_threshold", colors=[ppt.wt_color, ppt.hypo_color])
-    # det, undet = compare_det_undet(data, genotype="KO-Hypo", amplitude="all_supra")
+    # wt, hypo = compare_sub_supra_between(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo", gp1_amps="rounded_mean_genotype", gp2_amps="gp1_threshold", colors=[ppt.wt_color, ppt.hypo_color])
+    det, undet = compare_det_undet(data, genotype="KO-Hypo", amplitude="all_supra")
     # mean_det = np.mean(det.drop(columns="Genotype"), axis=0)
     # mean_undet = np.mean(undet.drop(columns="Genotype"), axis=0)
 
-    results = plot_neuron_perc_amp(recs.values(), pattern="activated", detected_trials=True, undetected_trials=True,
-                                   nogo_norm=True, ylim=[], transformation="yeojohnson", normality=[False, True],
-                                   homogeneity=[False, True])
+    # results = plot_neuron_perc_amp(recs.values(), pattern="inhibited", detected_trials=True, undetected_trials=False,
+    #                                nogo_norm=False, ylim=[], transformation="yeojohnson", normality=[True, True],
+    #                                homogeneity=[False, True])
 
-    nogo_df = nogo_fa_cr(recs.values())
-    delta_df, delta_nogo_df = delta_hit_miss_comp(full_data, threshold_only=True)
+    # nogo_df = nogo_fa_cr(recs.values())
+    # delta_df, delta_nogo_df = delta_hit_miss_comp(full_data, threshold_only=False)
 
     # ====== Responsivity ======
     # neurons = nb_neurons(recs.values())
