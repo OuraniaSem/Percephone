@@ -6,6 +6,7 @@ import pingouin as pg
 import scipy.stats as ss
 from multiprocessing import cpu_count, pool
 from matplotlib import pyplot as plt
+from sklearn.decomposition import PCA
 from statsmodels.formula.api import ols
 
 import percephone.core.recording as pc
@@ -834,10 +835,31 @@ def plot_neuron_perc_amp(recs, pattern="recruited", detected_trials=True, undete
 # endregion ============================================================================================================
 # region ===================================== Neuronal clusters =======================================================
 
-def get_concat_act(rec, zscore=True):
-    return concat_array
+def get_concat_act(rec, n_type="EXC", zscore=True):
+    """
+    Returns an array of the concatenated activity for all trials for the provided rec.
+    Parameters
+    ----------
+    rec
+    zscore
 
-def pca_neurons(recs):
+    Returns
+    -------
+
+    """
+    if n_type == "EXC":
+        activity = rec.zscore_exc if zscore else rec.df_f_exc
+    elif n_type == "INH":
+        activity = rec.zscore_inh if zscore else rec.df_f_inh
+
+    stim_times = np.array(rec.stim_time, dtype=int)
+    durations = np.array(rec.stim_durations, dtype=int)
+    frames_trials = []
+    for time, duration in zip(stim_times, durations):
+        frames_trials.append(activity[:, time:time + duration])
+    return np.concatenate(frames_trials, axis=1)
+
+def pca_neurons(recs, n_type="EXC", min_trials=5):
     """
     Try to cluster neurons based on their activity.
 
@@ -845,8 +867,41 @@ def pca_neurons(recs):
     -------
 
     """
+    color_dict = {"WT": [ppt.wt_color, ppt.wt_light_color, "gray"], "KO": [ppt.ko_color, ppt.ko_light_color, "gray"],
+                  "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color, "gray"]}
+    pattern_color = {-1: "blue", 0: "gray", 1: "red", 2: "purple"}
     rows = []
-
+    fig, axs = plt.subplots(nrows=4, ncols=6, figsize=(24, 12), sharex=True, constrained_layout=True)
+    ax = axs.flatten()
+    for ax_id, rec in enumerate(recs):
+        # Labelling the neurons according to their recruitment pattern
+        act_counts = np.sum(rec.matrices[n_type]["Responsivity"] == 1, axis=1)
+        inh_counts = np.sum(rec.matrices[n_type]["Responsivity"] == -1, axis=1)
+        pattern_arr = np.where((act_counts >= min_trials) & (inh_counts >= min_trials), 2, np.where(inh_counts >= min_trials, -1, np.where(act_counts >= min_trials, 1, 0)))
+        print(pattern_arr)
+        # Retrieving the neuronal activity during trials
+        concat_act = get_concat_act(rec, n_type=n_type, zscore=False)
+        # Performing a PCA
+        pca = PCA(n_components=2)
+        X_pca = pca.fit_transform(concat_act)
+        explained_var = pca.explained_variance_ratio_
+        # Storing the values in a DataFrame and plotting them
+        pca_df = pd.DataFrame(X_pca, columns=["PC1", "PC2"])
+        pca_df["Pattern"] = pattern_arr
+        for pattern_id, pattern_label in enumerate(sorted(pca_df["Pattern"].unique(), reverse=True)):
+            subset = pca_df[pca_df["Pattern"] == pattern_label]
+            ax[ax_id].scatter(subset["PC1"], subset["PC2"], c=pattern_color[pattern_label], label=pattern_label,
+                              alpha=0.7, s=5)
+        ax[ax_id].set_xlabel(f"PC1 ({explained_var[0]:.1%})", fontsize=10)
+        ax[ax_id].set_ylabel(f"PC2 ({explained_var[1]:.1%})", fontsize=10)
+        ax[ax_id].tick_params(axis='both', labelsize=10)
+        ax[ax_id].set_title(f"{rec.filename} ({rec.genotype})", color=color_dict[rec.genotype][0], fontsize=10)
+        rows.append({"Genotype": rec.genotype, "ID": rec.filename, "Threshold": rec.threshold,
+                     "PC1": explained_var[0], "PC2": explained_var[1]})
+    fig.suptitle("PCA of neuronal activity during trials")
+    fig.canvas.manager.set_window_title("PCA neuron act")
+    plt.show()
+    return pd.DataFrame(rows)
 
 
 
@@ -883,8 +938,8 @@ if __name__ == '__main__':
     full_data = get_features(recs.values())
     data = full_data[full_data["ID"] != 5886]
     # compare_sub_supra_within(data, behavior_filter=False, genotype="KO", comparison="all_supra")
-    # wt, hypo = compare_sub_supra_between(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo", gp1_amps="rounded_mean_genotype", gp2_amps="gp1_threshold", colors=[ppt.wt_color, ppt.hypo_color])
-    det, undet = compare_det_undet(data, genotype="KO-Hypo", amplitude="all_supra")
+    wt, hypo = compare_sub_supra_between(data, behavior_filter=False, gp1="KO", gp2="KO-Hypo", gp1_amps="all_supra", gp2_amps="all_supra", colors=[ppt.ko_color, ppt.hypo_color])
+    # det, undet = compare_det_undet(data, genotype="KO-Hypo", amplitude="all_supra")
     # mean_det = np.mean(det.drop(columns="Genotype"), axis=0)
     # mean_undet = np.mean(undet.drop(columns="Genotype"), axis=0)
 
@@ -908,5 +963,7 @@ if __name__ == '__main__':
     # post_INH = results["post_INH"]
     # post_INH_btw = post_INH["between"]
 
+    concat_act = get_concat_act(recs[4445], n_type="EXC", zscore=True)
+    neuron_pca_df = pca_neurons(recs.values())
 
 

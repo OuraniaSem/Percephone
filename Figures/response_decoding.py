@@ -509,7 +509,7 @@ def compare_accuracy(recs, random=42):
     return data
 
 
-def correlate_nb_accuracy(recs, accuracy_df):
+def correlate_nb_accuracy(recs, accuracy_df, threshold="median"):
     accuracy_df["n_EXC"] = accuracy_df["ID"].map(lambda id_: recs[id_].zscore_exc.shape[0])
     accuracy_df["n_INH"] = accuracy_df["ID"].map(lambda id_: recs[id_].zscore_inh.shape[0])
     accuracy_df["n_all"] = accuracy_df["n_EXC"] + accuracy_df["n_INH"]
@@ -532,7 +532,7 @@ def correlate_nb_accuracy(recs, accuracy_df):
                 sc = ax.scatter(group[x_col], group[y_col], color=colors[g], alpha=0.7, label=g, s=10, marker="+")
                 if id_display:
                     # Save the IDs for this group so that they can be accessed in the callback.
-                    ids = group["ID"].values
+                    ids = group[id_col].values
                     mplcursors.cursor(sc, hover=True).connect("add", lambda sel, ids=ids: (sel.annotation.set_text(f"ID: {ids[sel.index]}"), sel.annotation.set_fontsize(8)))
         else:
             sc = ax.scatter(data[x_col], data[y_col], color=colors[g], alpha=0.7, label=g, s=10, marker="+")
@@ -548,11 +548,36 @@ def correlate_nb_accuracy(recs, accuracy_df):
             lbl.set_fontsize(8)
         return results
 
-    fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(18, 6), constrained_layout=True)
-    plot_lin_reg(ax[0], accuracy_df, x_col="n_EXC", y_col="acc_exc", group_col="Genotype", title="EXC")
-    plot_lin_reg(ax[1], accuracy_df, x_col="n_INH", y_col="acc_inh", group_col="Genotype", title="INH")
-    plot_lin_reg(ax[2], accuracy_df, x_col="n_all", y_col="acc_all", group_col="Genotype", title="All")
-    fig.suptitle("Correlation of the model accuracy with the number of neurons", fontsize=12)
+    fig, ax = plt.subplots(nrows=4, ncols=3, figsize=(18, 24), constrained_layout=True)
+    plot_lin_reg(ax[0 ,0], accuracy_df, x_col="n_EXC", y_col="acc_exc", group_col="Genotype", title="EXC")
+    plot_lin_reg(ax[0 ,1], accuracy_df, x_col="n_INH", y_col="acc_inh", group_col="Genotype", title="INH")
+    plot_lin_reg(ax[0 ,2], accuracy_df, x_col="n_all", y_col="acc_all", group_col="Genotype", title="All")
+    # Comparing the number of neurons between individuals with high and low accuracy
+    for col, accuracy_metric in enumerate(["acc_exc", "acc_inh", "acc_all"]):
+        if threshold == "median":
+            t_val = np.percentile(accuracy_df[accuracy_metric].values, 50)
+        elif threshold == "mean":
+            t_val = np.mean(accuracy_df[accuracy_metric].values)
+        elif threshold == "middle":
+            t_val = (max(accuracy_df[accuracy_metric].values) + min(accuracy_df[accuracy_metric].values))/2
+        elif isinstance(threshold, float):
+            t_val = threshold
+        ax[0, col].axhline(y=t_val, linestyle="--", color="gray", lw=0.5)
+        low_perf = accuracy_df[accuracy_df[accuracy_metric] < t_val]
+        high_perf = accuracy_df[accuracy_df[accuracy_metric] >= t_val]
+        ppt.boxplot(ax[1, col], low_perf["n_EXC"].values, high_perf["n_EXC"].values, ylabel="n_EXC", paired=False,
+                    title=f"{accuracy_metric} Low/High acc", ylim=[],
+                    colors=["#229708", "#229708"], det_marker=False, force_markers_identity=False)
+        ppt.boxplot(ax[2, col], low_perf["n_INH"].values, high_perf["n_INH"].values, ylabel="n_INH", paired=False,
+                    title=f"{accuracy_metric} Low/High acc", ylim=[],
+                    colors=["#cba61b", "#cba61b"], det_marker=False, force_markers_identity=False)
+        ppt.boxplot(ax[3, col], low_perf["n_all"].values, high_perf["n_all"].values, ylabel="n_all", paired=False,
+                    title=f"{accuracy_metric} Low/High acc", ylim=[],
+                    colors=["#859717", "#859717"], det_marker=False, force_markers_identity=False)
+
+
+    fig.suptitle(f"Correlation of the model accuracy with the number of neurons.\nComparison of the number of neurons "
+                 f"between high and low accuracy animal (threshold={threshold})", fontsize=12)
     fig.canvas.manager.set_window_title("Corr acc nb neurons")
     plt.show()
     return accuracy_df
@@ -600,4 +625,4 @@ if __name__ == '__main__':
     # data = plot_hit_miss_classif_comp(saved_framed_model_df, gp1="WT", gp2="KO-Hypo", title_precision="")
 
     accuracy_comp_df = compare_accuracy(recs.values(), random=42)
-    acc_nb_df = correlate_nb_accuracy(recs, accuracy_comp_df)
+    acc_nb_df = correlate_nb_accuracy(recs, accuracy_comp_df, threshold="median")

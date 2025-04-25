@@ -540,7 +540,7 @@ if __name__ == '__main__':
     user = "Célien"
     plot_all_records = False
     plot_ordered_heatmap = True
-    plot_responsivity_heatmap = False
+    plot_responsivity_heatmap = True
     plot_normal_heatmap = True
     if user == "Célien":
         directory = "C:/Users/cvandromme/Desktop/Data/"
