@@ -8,6 +8,7 @@ from multiprocessing import cpu_count, pool
 from matplotlib import pyplot as plt
 from sklearn.decomposition import PCA
 from statsmodels.formula.api import ols
+from tqdm import tqdm
 
 import percephone.core.recording as pc
 import percephone.plts.stats as ppt
@@ -405,7 +406,7 @@ def nogo_fa_cr(recs):
     return gp_data
 
 
-def delta_hit_miss_comp(feature_df, threshold_only=False):
+def delta_hit_miss_comp(feature_df, threshold_only=False, wt_threshold=False):
     """
     Compares the delta in recruited neurons (hit-miss) between genotypes.
 
@@ -421,35 +422,66 @@ def delta_hit_miss_comp(feature_df, threshold_only=False):
     feature_df["rec_EXC_perc"] = feature_df["act_EXC_perc"] + feature_df["inh_EXC_perc"]
     feature_df["rec_INH_perc"] = feature_df["act_INH_perc"] + feature_df["inh_INH_perc"]
     if threshold_only:
-        data = feature_df[feature_df["amplitude"] == feature_df["threshold"]]
+        if wt_threshold:
+            data = feature_df[feature_df["amplitude"] == 4]
+        else:
+            data = feature_df[feature_df["amplitude"] == feature_df["threshold"]]
     else:
         data = feature_df[feature_df["amplitude"] != 0]
+    hits = data[data["behavior"] == True]
+    miss = data[data["behavior"] == False]
     nogo = feature_df[feature_df["amplitude"] == 0]
-    # Retrieving the mean recruitment during hits and miss for each animal and computing the delta
-    gp_data = data.drop(columns=["threshold", "bounded_x0", "amplitude"]).groupby(["ID", "Genotype", "behavior"], as_index=False).mean()
-    gp_nogo = nogo.drop(columns=["threshold", "bounded_x0", "amplitude", "behavior"]).groupby(["ID", "Genotype"], as_index=False).mean().set_index("ID")
-    hit_data = gp_data[gp_data["behavior"] == True].copy().drop(columns=["behavior", "Genotype"]).set_index("ID")
-    # nogo_data = gp_nogo.drop(columns=["behavior", "Genotype"]).set_index("ID")
-    delta_data = hit_data - gp_data[gp_data["behavior"] == False].drop(columns=["behavior", "Genotype"]).set_index("ID")
-    delta_data = delta_data.merge(gp_data[["ID", "Genotype"]].drop_duplicates(), how="left", left_index=True, right_on="ID")
-    delta_nogo_data = hit_data - gp_nogo.drop(columns=["Genotype"])
-    delta_nogo_data = delta_nogo_data.merge(gp_nogo[["Genotype"]], how="left", left_index=True, right_index=True)
-    fig, ax = plt.subplots(nrows=2, ncols=6, figsize=(36, 16), constrained_layout=True)
-    for col, metric in enumerate(["act_EXC_perc", "inh_EXC_perc", "rec_EXC_perc", "act_INH_perc", "inh_INH_perc", "rec_INH_perc"]):
-        ppt.boxplot(ax[0, col], delta_data[delta_data["Genotype"] == "WT"][metric].values,
-                    delta_data[delta_data["Genotype"] == "KO-Hypo"][metric].values,
-                    ylabel=metric,
-                    paired=False, title="Δ Hit-Miss", ylim=[-10, 50],
-                    colors=[ppt.wt_color, ppt.hypo_color])
-        ppt.boxplot(ax[1, col], delta_nogo_data[delta_nogo_data["Genotype"] == "WT"][metric].values,
-                    delta_nogo_data[delta_nogo_data["Genotype"] == "KO-Hypo"][metric].values,
-                    ylabel=metric,
-                    paired=False, title="Δ Hit-NoGo", ylim=[-20, 70],
-                    colors=[ppt.wt_color, ppt.hypo_color])
-    fig.suptitle(f"Delta in recruitment of neurons (WT vs. KO-Hypo)\n[Only threshold == {threshold_only}]")
-    fig.canvas.manager.set_window_title(f"Recruitment Delta [threshold={threshold_only}]")
+    metrics = ['act_EXC_perc', 'inh_EXC_perc', 'rec_EXC_perc', 'act_INH_perc', 'inh_INH_perc', 'rec_INH_perc']
+    def mean_by_group(sub, label):
+        gp = sub.groupby(['ID', 'Genotype'])[metrics].mean().add_suffix(f'_{label}')
+        return gp
+    gp_hit = mean_by_group(hits, 'hit')
+    gp_miss = mean_by_group(miss, 'miss')
+    gp_nogo = mean_by_group(nogo, 'nogo')
+    joined = gp_hit.join(gp_miss, how='inner').join(gp_nogo, how='inner')
+    delta = pd.DataFrame(index=joined.index)
+    for m in metrics:
+        delta[f'Δ{m}'] = joined[f'{m}_hit'] - joined[f'{m}_miss']
+        delta[f'Δ{m}_nogo'] = joined[f'{m}_hit'] - joined[f'{m}_nogo']
+    delta = delta.reset_index()
+    fig, axes = plt.subplots(2, 6, figsize=(36, 16), constrained_layout=True)
+    for col_idx, m in enumerate(metrics):
+        ax1 = axes[0, col_idx]
+        ax2 = axes[1, col_idx]
+        wt = delta[delta['Genotype'] == "WT"][f'Δ{m}']
+        hypo = delta[delta['Genotype'] == "KO-Hypo"][f'Δ{m}']
+        wt_nogo = delta[delta['Genotype'] == "WT"][f'Δ{m}_nogo']
+        hypo_nogo = delta[delta['Genotype'] == "KO-Hypo"][f'Δ{m}_nogo']
+        ppt.boxplot(ax1, wt, hypo, ylabel=m, title='Δ Hit–Miss',
+                    colors=[ppt.wt_color, ppt.hypo_color], paired=False, ylim=[-10, 50])
+        ppt.boxplot(ax2, wt_nogo, hypo_nogo, ylabel=m, title='Δ Hit–NoGo',
+                    colors=[ppt.wt_color, ppt.hypo_color], paired=False, ylim=[-20, 70])
+    # # Retrieving the mean recruitment during hits and miss for each animal and computing the delta
+    # gp_data = data.drop(columns=["threshold", "bounded_x0", "amplitude"]).groupby(["ID", "Genotype", "behavior"], as_index=False).mean()
+    # gp_nogo = nogo.drop(columns=["threshold", "bounded_x0", "amplitude", "behavior"]).groupby(["ID", "Genotype"], as_index=False).mean().set_index("ID")
+    # hit_data = gp_data[gp_data["behavior"] == True].copy().drop(columns=["behavior", "Genotype"]).set_index("ID")
+    # # nogo_data = gp_nogo.drop(columns=["behavior", "Genotype"]).set_index("ID")
+    # delta_data = hit_data - gp_data[gp_data["behavior"] == False].drop(columns=["behavior", "Genotype"]).set_index("ID")
+    # delta_data = delta_data.merge(gp_data[["ID", "Genotype"]].drop_duplicates(), how="left", left_index=True, right_on="ID")
+    # delta_nogo_data = hit_data - gp_nogo.drop(columns=["Genotype"])
+    # delta_nogo_data = delta_nogo_data.merge(gp_nogo[["Genotype"]], how="left", left_index=True, right_index=True)
+    # fig, ax = plt.subplots(nrows=2, ncols=6, figsize=(36, 16), constrained_layout=True)
+    # for col, metric in enumerate(["act_EXC_perc", "inh_EXC_perc", "rec_EXC_perc", "act_INH_perc", "inh_INH_perc", "rec_INH_perc"]):
+    #     ppt.boxplot(ax[0, col], delta_data[delta_data["Genotype"] == "WT"][metric].values,
+    #                 delta_data[delta_data["Genotype"] == "KO-Hypo"][metric].values,
+    #                 ylabel=metric,
+    #                 paired=False, title="Δ Hit-Miss", ylim=[-10, 50],
+    #                 colors=[ppt.wt_color, ppt.hypo_color])
+    #     ppt.boxplot(ax[1, col], delta_nogo_data[delta_nogo_data["Genotype"] == "WT"][metric].values,
+    #                 delta_nogo_data[delta_nogo_data["Genotype"] == "KO-Hypo"][metric].values,
+    #                 ylabel=metric,
+    #                 paired=False, title="Δ Hit-NoGo", ylim=[-20, 70],
+    #                 colors=[ppt.wt_color, ppt.hypo_color])
+    fig.suptitle(f"Delta in recruitment of neurons (WT vs. KO-Hypo)\n[Only threshold={threshold_only} (WT={wt_threshold})]")
+    fig.canvas.manager.set_window_title(f"Recruitment Delta [threshold={threshold_only}_WT={wt_threshold}]")
     plt.show()
-    return delta_data, delta_nogo_data
+    # return delta_data, delta_nogo_data
+    return delta
 
 # endregion ============================================================================================================
 # region ======================================== Responsivity =========================================================
@@ -835,7 +867,7 @@ def plot_neuron_perc_amp(recs, pattern="recruited", detected_trials=True, undete
 # endregion ============================================================================================================
 # region ===================================== Neuronal clusters =======================================================
 
-def get_concat_act(rec, n_type="EXC", zscore=True):
+def get_concat_act(rec, n_type="EXC", zscore=True, pre_stim=False):
     """
     Returns an array of the concatenated activity for all trials for the provided rec.
     Parameters
@@ -852,14 +884,16 @@ def get_concat_act(rec, n_type="EXC", zscore=True):
     elif n_type == "INH":
         activity = rec.zscore_inh if zscore else rec.df_f_inh
 
-    stim_times = np.array(rec.stim_time, dtype=int)
+    start_times = np.array(rec.stim_time, dtype=int)
+    if pre_stim:
+        start_times -= 15
     durations = np.array(rec.stim_durations, dtype=int)
     frames_trials = []
-    for time, duration in zip(stim_times, durations):
+    for time, duration in zip(start_times, durations):
         frames_trials.append(activity[:, time:time + duration])
     return np.concatenate(frames_trials, axis=1)
 
-def pca_neurons(recs, n_type="EXC", min_trials=5):
+def pca_neurons(recs, n_type="EXC", min_trials=5, pre_stim=False):
     """
     Try to cluster neurons based on their activity.
 
@@ -871,39 +905,131 @@ def pca_neurons(recs, n_type="EXC", min_trials=5):
                   "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color, "gray"]}
     pattern_color = {-1: "blue", 0: "gray", 1: "red", 2: "purple"}
     rows = []
-    fig, axs = plt.subplots(nrows=4, ncols=6, figsize=(24, 12), sharex=True, constrained_layout=True)
+    fig, axs = plt.subplots(nrows=4, ncols=6, figsize=(24, 12), sharex=True, constrained_layout=True, subplot_kw={'projection': '3d'})
     ax = axs.flatten()
     for ax_id, rec in enumerate(recs):
         # Labelling the neurons according to their recruitment pattern
         act_counts = np.sum(rec.matrices[n_type]["Responsivity"] == 1, axis=1)
         inh_counts = np.sum(rec.matrices[n_type]["Responsivity"] == -1, axis=1)
         pattern_arr = np.where((act_counts >= min_trials) & (inh_counts >= min_trials), 2, np.where(inh_counts >= min_trials, -1, np.where(act_counts >= min_trials, 1, 0)))
-        print(pattern_arr)
         # Retrieving the neuronal activity during trials
-        concat_act = get_concat_act(rec, n_type=n_type, zscore=False)
+        concat_act = get_concat_act(rec, n_type=n_type, zscore=False, pre_stim=pre_stim)
         # Performing a PCA
-        pca = PCA(n_components=2)
+        pca = PCA(n_components=3, svd_solver='arpack', whiten=True)
         X_pca = pca.fit_transform(concat_act)
         explained_var = pca.explained_variance_ratio_
         # Storing the values in a DataFrame and plotting them
-        pca_df = pd.DataFrame(X_pca, columns=["PC1", "PC2"])
+        pca_df = pd.DataFrame(X_pca, columns=["PC1", "PC2", "PC3"])
         pca_df["Pattern"] = pattern_arr
         for pattern_id, pattern_label in enumerate(sorted(pca_df["Pattern"].unique(), reverse=True)):
             subset = pca_df[pca_df["Pattern"] == pattern_label]
-            ax[ax_id].scatter(subset["PC1"], subset["PC2"], c=pattern_color[pattern_label], label=pattern_label,
+            ax[ax_id].scatter(subset["PC1"], subset["PC2"], subset["PC3"], c=pattern_color[pattern_label], label=str(pattern_label),
                               alpha=0.7, s=5)
         ax[ax_id].set_xlabel(f"PC1 ({explained_var[0]:.1%})", fontsize=10)
         ax[ax_id].set_ylabel(f"PC2 ({explained_var[1]:.1%})", fontsize=10)
+        ax[ax_id].set_zlabel(f"PC3 ({explained_var[2]:.1%})", fontsize=10)
         ax[ax_id].tick_params(axis='both', labelsize=10)
         ax[ax_id].set_title(f"{rec.filename} ({rec.genotype})", color=color_dict[rec.genotype][0], fontsize=10)
         rows.append({"Genotype": rec.genotype, "ID": rec.filename, "Threshold": rec.threshold,
                      "PC1": explained_var[0], "PC2": explained_var[1]})
+    for extra_ax in ax[len(recs):]:
+        extra_ax.set_axis_off()
     fig.suptitle("PCA of neuronal activity during trials")
     fig.canvas.manager.set_window_title("PCA neuron act")
     plt.show()
     return pd.DataFrame(rows)
 
+def hit_tuned_neurons(recs, normalize=True):
+    """
+    Compares the numbers of neurons that are significantly tuned to detection between genotypes.
+    Normalization parameter is used to know if we have more reliable responders because we have more responders or just
+    if we really have a greater proportion of reliable responders no matter the number of responders during hits.
 
+    Parameters
+    ----------
+    recs
+
+    Returns
+    -------
+
+    """
+    rows = []
+    for rec in recs.values():
+        if normalize:
+            nb_resp_exc = ((rec.matrices["EXC"]["Responsivity"][:, rec.detected_stim] != 0).any(axis=1)).sum()
+            nb_resp_inh = ((rec.matrices["INH"]["Responsivity"][:, rec.detected_stim] != 0).any(axis=1)).sum()
+        else:
+            nb_resp_exc = 1
+            nb_resp_inh = 1
+        exc_activated = rec.hit_tuned_exc.tolist().count(1)/nb_resp_exc
+        exc_inhibited = rec.hit_tuned_exc.tolist().count(-1)/nb_resp_exc
+        inh_activated = rec.hit_tuned_inh.tolist().count(1)/nb_resp_inh
+        inh_inhibited = rec.hit_tuned_inh.tolist().count(-1)/nb_resp_inh
+        nb_exc = rec.zscore_exc.shape[0]
+        nb_inh = rec.zscore_inh.shape[0]
+        print(f"EXC: {rec.hit_tuned_exc.tolist().count(1)} act {rec.hit_tuned_exc.tolist().count(-1)} inh / {nb_resp_exc} / {nb_exc}")
+        print(f"INH: {rec.hit_tuned_inh.tolist().count(1)} act {rec.hit_tuned_inh.tolist().count(-1)} inh / {nb_resp_inh} / {nb_inh}")
+        rows.append({"Genotype": rec.genotype, "ID": rec.filename,
+                     "exc_activated": exc_activated, "exc_inhibited": exc_inhibited,
+                     "inh_activated": inh_activated, "inh_inhibited": inh_inhibited,
+                     "exc_activated_perc": exc_activated/nb_exc, "exc_inhibited_perc": exc_inhibited/nb_exc,
+                     "inh_activated_perc": inh_activated/nb_inh, "inh_inhibited_perc": inh_inhibited/nb_inh})
+    data = pd.DataFrame(rows)
+    fig, ax = plt.subplots(nrows=4, ncols=4, figsize=(24, 32), constrained_layout=True)
+    for col_id, cluster in enumerate(["exc_activated", "exc_inhibited", "inh_activated", "inh_inhibited"]):
+        wt = data[data["Genotype"] == "WT"][cluster].values
+        hypo = data[data["Genotype"] == "KO-Hypo"][cluster].values
+        ko = data[data["Genotype"] == "KO"][cluster].values
+        wt_perc = data[data["Genotype"] == "WT"][f"{cluster}_perc"].values
+        hypo_perc = data[data["Genotype"] == "KO-Hypo"][f"{cluster}_perc"].values
+        ko_perc = data[data["Genotype"] == "KO"][f"{cluster}_perc"].values
+
+        ppt.boxplot(ax[0, col_id], wt, hypo, paired=False, ylabel=f"n {cluster}", title=f"WT/KO-Hypo",
+                    ylim=[], colors=[ppt.wt_color, ppt.hypo_color])
+        ppt.boxplot(ax[1, col_id], wt_perc, hypo_perc, paired=False, ylabel=f"% {cluster}", title=f"WT/KO-Hypo",
+                    ylim=[], colors=[ppt.wt_color, ppt.hypo_color])
+        ppt.boxplot(ax[2, col_id], wt, ko, paired=False, ylabel=f"n {cluster}", title=f"WT/KO",
+                    ylim=[], colors=[ppt.wt_color, ppt.ko_color])
+        ppt.boxplot(ax[3, col_id], wt_perc, ko_perc, paired=False, ylabel=f"% {cluster}", title=f"WT/KO",
+                    ylim=[], colors=[ppt.wt_color, ppt.ko_color])
+    fig.suptitle(f"Comparison between genotypes of the number of Hit tuned neurons\n[Normalization by recruited = {normalize}]", fontsize=12)
+    fig.canvas.manager.set_window_title(f"Hit tuned neurons_norm={normalize}")
+    plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/Figures_april_2025/Hit_tuned_neurons_{normalize}.pdf")
+    plt.show()
+    return data
+
+
+def neurons_hit_consistency(recs):
+    rows = []
+    for rec in recs.values():
+        for n_type in ["EXC", "INH"]:
+            # resp_mat = rec.matrices[n_type]["Responsivity"][:, rec.detected_stim]
+            resp_mat = rec.matrices[n_type]["Responsivity"][:, rec.detected_stim]
+            label_list = rec.hit_tuned_exc if n_type == "EXC" else rec.hit_tuned_inh
+            for n_id, label in enumerate(label_list):
+                if label == 1:
+                    prop = np.count_nonzero(resp_mat[n_id] == 1) / resp_mat.shape[1]
+                    rows.append({"Genotype": rec.genotype, "ID": rec.filename, "Type": n_type, "Neuron": n_id,
+                                 "Label": "ON", "Consistency": prop})
+                elif label == -1:
+                    prop = np.count_nonzero(resp_mat[n_id] == -1) / resp_mat.shape[1]
+                    rows.append({"Genotype": rec.genotype, "ID": rec.filename, "Type": n_type, "Neuron": n_id,
+                                 "Label": "OFF", "Consistency": prop})
+                else:
+                    continue
+    data = pd.DataFrame(rows)
+    # data["Label"] = data["Label"].map({-1: "inhibited", 0: "none", 1: "activated"}).astype("category")
+    gp_data = data.groupby(["Genotype", "ID", "Type", "Label"], as_index=False).mean().drop(columns=["Neuron"])
+    fig, ax = plt.subplots(nrows=2, ncols=2, figsize=(12, 16), constrained_layout=True)
+    for row_id, n_type in enumerate(["EXC", "INH"]):
+        for col_id, label in enumerate(["OFF", "ON"]):
+            ppt.boxplot(ax[row_id, col_id], gp_data[(gp_data["Type"] == n_type) & (gp_data["Label"] == label) & (gp_data["Genotype"] == "WT")]["Consistency"],
+                        gp_data[(gp_data["Type"] == n_type) & (gp_data["Label"] == label) & (gp_data["Genotype"] == "KO-Hypo")]["Consistency"],
+                        paired=False, ylabel=f"Consistency", title=f"{n_type} - {label}", ylim=[], colors=[ppt.wt_color, ppt.hypo_color])
+    fig.suptitle(f"Comparison of the consistency of hit tuned neuron response between WT and KO-Hypo", fontsize=12)
+    fig.canvas.manager.set_window_title("Hit tuned consistency")
+    plt.show()
+    return gp_data
 
 
 
@@ -935,10 +1061,12 @@ if __name__ == '__main__':
     for rec in recs.values():
         rec.peak_delay_amp()
         rec.auc()
+        # rec.hit_tuned()
+        # rec.amp_tuned()
     full_data = get_features(recs.values())
     data = full_data[full_data["ID"] != 5886]
     # compare_sub_supra_within(data, behavior_filter=False, genotype="KO", comparison="all_supra")
-    wt, hypo = compare_sub_supra_between(data, behavior_filter=False, gp1="KO", gp2="KO-Hypo", gp1_amps="all_supra", gp2_amps="all_supra", colors=[ppt.ko_color, ppt.hypo_color])
+    # wt, hypo = compare_sub_supra_between(data, behavior_filter=False, gp1="KO", gp2="KO-Hypo", gp1_amps="all_supra", gp2_amps="all_supra", colors=[ppt.ko_color, ppt.hypo_color])
     # det, undet = compare_det_undet(data, genotype="KO-Hypo", amplitude="all_supra")
     # mean_det = np.mean(det.drop(columns="Genotype"), axis=0)
     # mean_undet = np.mean(undet.drop(columns="Genotype"), axis=0)
@@ -948,7 +1076,9 @@ if __name__ == '__main__':
     #                                homogeneity=[False, True])
 
     # nogo_df = nogo_fa_cr(recs.values())
-    # delta_df, delta_nogo_df = delta_hit_miss_comp(full_data, threshold_only=False)
+    # delta_df, delta_nogo_df = delta_hit_miss_comp(data, threshold_only=True, wt_threshold=True)
+    # delta_df = delta_hit_miss_comp(data, threshold_only=True, wt_threshold=True)
+
 
     # ====== Responsivity ======
     # neurons = nb_neurons(recs.values())
@@ -963,7 +1093,17 @@ if __name__ == '__main__':
     # post_INH = results["post_INH"]
     # post_INH_btw = post_INH["between"]
 
-    concat_act = get_concat_act(recs[4445], n_type="EXC", zscore=True)
-    neuron_pca_df = pca_neurons(recs.values())
+    # concat_act = get_concat_act(recs[4445], n_type="EXC", zscore=True)
+    # neuron_pca_df = pca_neurons(recs.values(), pre_stim=False, min_trials=5)
 
-
+    # rows = []
+    # for rec in recs.values():
+    #     rows.append({"Genotype": rec.genotype, "ID": rec.filename, "EXC_classif": rec.hit_tuned_exc, "INH_classif": rec.hit_tuned_inh,})
+    # result = pd.DataFrame(rows)
+    #
+    hit_tuned_df = hit_tuned_neurons(recs, normalize=False)
+    consistency_df = neurons_hit_consistency(recs)
+    fig, ax = plt.subplots(figsize=(8, 2), constrained_layout=True)
+    im = ax.imshow(np.vstack([recs[7553].hit_tuned_exc, recs[7553].amp_tuned_exc]), cmap="inferno", aspect='auto', interpolation='nearest')
+    cbar = fig.colorbar(im, ax=ax, ticks=[-1, 0, 1], orientation='horizontal')
+    plt.show()

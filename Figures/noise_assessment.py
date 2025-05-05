@@ -158,7 +158,7 @@ def prestim_comp(activity_df):
         ppt.boxplot(ax[1, col], wt["Prestim_std"].values, hypo["Prestim_std"].values, ylabel="Prestim_std", paired=False,
                     title=condition, ylim=[],
                     colors=[ppt.wt_color, ppt.hypo_color], det_marker=False, force_markers_identity=False)
-    fig.suptitle("Pre-stimulus mean and std comparison between genotypes")
+    fig.suptitle("Pre-stimulus mean and std comparison between genotypes", fontsize=12)
     fig.canvas.manager.set_window_title("Pre-stimulus comparison")
     plt.show()
     return gp_mean, gp_hit, gp_miss
@@ -179,7 +179,7 @@ def snr_comp(activity_df):
     color_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color],
                   "KO": [ppt.ko_color, ppt.ko_light_color]}
     data = activity_df[activity_df["Amplitude"] != 0]
-    gp_data = activity_df.drop(columns=["Trial", "Amplitude", "Neuron", "Resp"]).groupby(["Genotype", "ID", "Behavior"], as_index=False).mean()
+    gp_data = data.drop(columns=["Trial", "Amplitude", "Neuron", "Resp"]).groupby(["Genotype", "ID", "Behavior"], as_index=False).mean()
     hit_data = gp_data[gp_data["Behavior"] == True]
     miss_data = gp_data[gp_data["Behavior"] == False]
     fig, ax = plt.subplots(nrows=2, ncols=3, figsize=(18, 12), constrained_layout=True)
@@ -190,7 +190,7 @@ def snr_comp(activity_df):
                     paired=True, title=genotype, ylim=[], colors=color_dict[genotype], det_marker=False, force_markers_identity=False)
         ppt.boxplot(ax[1, col], hit["Ratio_std"].values, miss["Ratio_std"].values, ylabel="Std stim / std prestim",
                     paired=True, title=genotype, ylim=[], colors=color_dict[genotype], det_marker=False, force_markers_identity=False)
-    fig.suptitle(f"Comparison of the SNR between hit and miss trials")
+    fig.suptitle(f"Comparison of the SNR between hit and miss trials", fontsize=12)
     fig.canvas.manager.set_window_title("SNR comparison")
     plt.show()
     return gp_data
@@ -198,7 +198,7 @@ def snr_comp(activity_df):
 def compare_to_wt_threshold(activity_df):
     """
     Compares the SNR, of KO-Hypo mice to the one of WT mice at an amplitude where we have a difference between stim and
-    pre-stim in T but not in Hypo (6). And then compares the signal (stim) and the noise (pre-stim). Why don't KO-Hypo
+    pre-stim in WT but not in Hypo (6). And then compares the signal (stim) and the noise (pre-stim). Why don't KO-Hypo
     mice detects lower amplitude (lower signal or higher noise ?)
 
     Parameters
@@ -209,7 +209,7 @@ def compare_to_wt_threshold(activity_df):
     -------
 
     """
-    data = activity_df[activity_df["Amplitude"] == 6]
+    data = activity_df[activity_df["Amplitude"] == 4]
     gp_data = data.drop(columns=["Trial", "Amplitude", "Neuron", "Resp", "Behavior"]).groupby(["Genotype", "ID"], as_index=False).mean()
     wt = gp_data[gp_data["Genotype"] == "WT"]
     hypo = gp_data[gp_data["Genotype"] == "KO-Hypo"]
@@ -234,7 +234,7 @@ def compare_to_wt_threshold(activity_df):
 def prestim_influence_neuron_activation(activity_df):
     """
     Comparison of the pre-stimulus activity of stimulus activated neurons between trials when they are activated or not
-    activated. Comparison of the mean value of prestimulus across all trials where the neurons was activated to the mean
+    activated. Comparison of the mean value of prestimulus across all trials where the neurons were activated to the mean
     value of pre-stimulus across all trials where the neuron was not activated.
     Parameters
     ----------
@@ -249,7 +249,7 @@ def prestim_influence_neuron_activation(activity_df):
     data = activity_df[activity_df["Amplitude"] != 0]
     gp_neuron = data.drop(columns=["Trial", "Amplitude", "Behavior", "Threshold"]).groupby(["Genotype", "ID", "Neuron", "Resp"], as_index=False).mean()
     gp_mouse = gp_neuron.drop(columns=["Neuron"]).groupby(["Genotype", "ID", "Resp"], as_index=False).mean()
-    fig, ax = plt.subplots(nrows=3, ncols=3, figsize=(18, 18), constrained_layout=True)
+    fig, ax = plt.subplots(nrows=3, ncols=3, figsize=(18, 24), constrained_layout=True)
     for col, genotype in enumerate(gp_mouse["Genotype"].unique()):
         act_trials = gp_mouse[(gp_mouse["Genotype"] == genotype) & (gp_mouse["Resp"] == 1)]
         non_trials = gp_mouse[(gp_mouse["Genotype"] == genotype) & (gp_mouse["Resp"] == 0)]
@@ -263,6 +263,9 @@ def prestim_influence_neuron_activation(activity_df):
         ppt.boxplot(ax[2, col], act_trials["Abs_Diff_mean"].values, non_trials["Abs_Diff_mean"].values, ylabel="Mean DFF",
                     paired=True, title="Abs_Diff_mean (act/non_act)", ylim=[], colors=color_dict[genotype],
                     det_marker=False, force_markers_identity=False)
+    fig.suptitle(f"Comparison of mean pre-stimulus activity of stimulus activated neurons between trials when they were activated or not", fontsize=12)
+    fig.canvas.manager.set_window_title("Pre-stim comp (act vs non_act)")
+    plt.savefig("Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/Figures_april_2025/Pre-stim_comp_(act_vs_non_act).pdf")
     plt.show()
     return gp_mouse
 
@@ -647,9 +650,9 @@ if __name__ == '__main__':
     # region ====== Baseline ======
     # baseline_df, hit_df, miss_df, hit_snr, miss_snr = baseline_and_SNR(recruitement_df)
     # endregion
-    rows = []
-    for rec in recs.values():
-        hit_thres = (rec.detected_stim == True) & (rec.stim_ampl == 4)
-        miss_thres = (rec.detected_stim == False) & (rec.stim_ampl == 4)
-        rows.append({"Genotype": rec.genotype, "ID": rec.filename, "Hit": hit_thres.sum(), "Miss": miss_thres.sum()})
-    test = pd.DataFrame(rows)
+    # rows = []
+    # for rec in recs.values():
+    #     hit_thres = (rec.detected_stim == True) & (rec.stim_ampl == 4)
+    #     miss_thres = (rec.detected_stim == False) & (rec.stim_ampl == 4)
+    #     rows.append({"Genotype": rec.genotype, "ID": rec.filename, "Hit": hit_thres.sum(), "Miss": miss_thres.sum()})
+    # test = pd.DataFrame(rows)

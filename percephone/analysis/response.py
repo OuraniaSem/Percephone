@@ -14,6 +14,7 @@ from scipy.signal import savgol_filter
 import matplotlib.pyplot as plt
 import random as rnd
 from scipy.integrate import simpson
+from scipy.stats import pearsonr
 from sklearn.linear_model import LinearRegression
 from tqdm import tqdm
 from percephone.analysis.utils import kernel_biexp
@@ -236,3 +237,105 @@ def peak_matrices(rec, zscore_data, resp_mask):
                 result_amp[neuron, stim] = np.NaN
     return result_index, result_amp
 
+
+def classify_neurons(rec, n_type="EXC", seed=42, n_shuffles=5000, zscore=False):
+    if zscore:
+        activity = rec.zscore_exc if n_type == "EXC" else rec.zcore_inh
+    else:
+        activity = rec.df_f_exc if n_type == "EXC" else rec.df_f_inh
+    # Creating a binary vector of behavior  label
+    nb_frames = activity.shape[1]
+    behavior_mask = np.zeros(nb_frames, dtype=float)
+    for time, duration, det in zip(rec.stim_time, rec.stim_durations, rec.detected_stim):
+        if not det:
+            continue
+        start = int(time)
+        end = int(time + duration)
+        behavior_mask[start:end] = 1
+    # Building null distribution by shuffling behavior vector
+    blocks = [(int(t), int(d)) for t, d, det in zip(rec.stim_time, rec.stim_durations, rec.detected_stim) if det]
+    shuffled_behavior = np.zeros((n_shuffles, nb_frames), dtype=float)
+    rng = np.random.default_rng(seed)
+    for i in tqdm(range(n_shuffles), desc=f"[{rec.filename}] Shuffling behavior"):
+        # shuffled_behavior.append(rng.permutation(behavior_mask))
+        for attempt in range(100):
+            mask = np.zeros(nb_frames, dtype=bool)
+            success = True
+            # randomize block order to avoid bias
+            for dur in rng.permutation([dur for _, dur in blocks]):
+                # find all indices j where mask[j:j+dur] is all False
+                # we can only place block fully within [0, T)
+                valid_starts = np.where(np.convolve(~mask, np.ones(dur, dtype=int), mode="valid") == dur)[0]
+                if len(valid_starts) == 0:
+                    success = False
+                    break
+                # pick a random start
+                start = rng.choice(valid_starts)
+                mask[start:start + dur] = True
+            if success:
+                shuffled_behavior[i, mask] = 1.0
+                break
+        else:
+            raise RuntimeError(f"Could not place blocks after 100 attempts (shuffle {i})")
+    # Correlating the behavior with the neuronal activity
+    classif = []
+    for neuron in tqdm(activity, desc="Classifying neurons"):
+        # Computing observed similarity: normalized inner product (cf. Bo Liang et al.)
+        # → sim = 2 * (behavior·trace) / (||behavior||^2 + ||trace||^2)
+        trace = neuron.astype(float)
+        sim_obs = 2 * np.dot(behavior_mask, trace) / (np.dot(behavior_mask, behavior_mask) + np.dot(trace, trace))
+        null_dist = np.empty(n_shuffles, dtype=float)
+        for i in range(n_shuffles):
+            null_dist[i] = 2 * np.dot(shuffled_behavior[i], trace) / (np.dot(shuffled_behavior[i], shuffled_behavior[i]) + np.dot(trace, trace))
+        # Computing thresholds of the random distribution
+        low_thresh, high_thresh = np.percentile(null_dist, [0.83, 99.17])
+        # Classifying the neuron
+        if sim_obs > high_thresh:
+            classif.append(1)
+        elif sim_obs < low_thresh:
+            classif.append(-1)
+        else:
+            classif.append(0)
+    return classif
+
+
+def amp_tuned_neurons(rec, n_type="EXC", seed=42, n_shuffles=5000, zscore=False):
+    if zscore:
+        activity = rec.zscore_exc if n_type == "EXC" else rec.zcore_inh
+    else:
+        activity = rec.df_f_exc if n_type == "EXC" else rec.df_f_inh
+    # Creating a binary vector of behavior label
+    nb_frames = activity.shape[1]
+    amp_mask = np.zeros(nb_frames, dtype=float)
+    for time, duration, amp in zip(rec.stim_time, rec.stim_durations, rec.stim_ampl):
+        start = int(time)
+        end = int(time + duration)
+        amp_mask[start:end] = amp
+    # Building null distribution by shuffling amplitude vector
+    blocks = [(int(t), int(d)) for t, d in zip(rec.stim_time, rec.stim_durations)]
+    shuffled_amp = np.zeros((n_shuffles, nb_frames), dtype=float)
+    rng = np.random.default_rng(seed)
+    for i in tqdm(range(n_shuffles), desc=f"[{rec.filename}] Shuffling amplitudes"):
+        permuted_amps = rng.permutation(rec.stim_ampl)
+        mask = np.zeros(nb_frames, float)
+        # re-write each block with its new permuted amp
+        for (start, dur), new_amp in zip(blocks, permuted_amps):
+            mask[start: start + dur] = new_amp
+        shuffled_amp[i] = mask
+    # Correlating the amplitude with the neuronal activity
+    classif = []
+    for neuron in tqdm(activity, desc="Classifying neurons"):
+        # Computing the Pearson R
+        trace = neuron.astype(float)
+        r_obs, _ = pearsonr(amp_mask, trace)
+        r_null = np.array([pearsonr(shuffled_amp[j], trace)[0] for j in range(n_shuffles)])
+        # Computing thresholds of the random distribution
+        low_thresh, high_thresh = np.percentile(r_null, [0.83, 99.17])
+        # Classifying the neuron
+        if r_obs > high_thresh:
+            classif.append(1)
+        elif r_obs < low_thresh:
+            classif.append(-1)
+        else:
+            classif.append(0)
+    return classif

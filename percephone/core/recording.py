@@ -13,7 +13,7 @@ import pandas as pd
 import scipy.signal as ss
 import matplotlib.pyplot as plt
 from percephone.utils.io import read_info, correction_drift_fluo, get_idx_frame_mesc, extract_analog_from_mesc
-from percephone.analysis.response import resp_matrice, auc_matrice, delay_matrice, peak_matrices
+from percephone.analysis.response import *
 from percephone.analysis.mlr import mlr
 from percephone.analysis.mlr_models import classic_model
 from percephone.utils.math_formulas import sigmoid_fit
@@ -106,6 +106,14 @@ class Recording:
             self.matrices["EXC"]["Responsivity"] = np.load(self.input_path + "matrice_resp_exc.npy")
             self.matrices["INH"]["Responsivity"] = np.load(self.input_path + "matrice_resp_inh.npy")
 
+        if os.path.exists(input_path + 'hit_tuned_exc.npy') and os.path.exists(input_path + 'hit_tuned_inh.npy'):
+            self.hit_tuned_exc = np.load(self.input_path + "hit_tuned_exc.npy")
+            self.hit_tuned_inh = np.load(self.input_path + "hit_tuned_inh.npy")
+
+        if os.path.exists(input_path + 'amp_tuned_exc.npy') and os.path.exists(input_path + 'amp_tuned_inh.npy'):
+            self.amp_tuned_exc = np.load(self.input_path + "amp_tuned_exc.npy")
+            self.amp_tuned_inh = np.load(self.input_path + "amp_tuned_inh.npy")
+
         assert len(inhibitory_ids) == self.df_f_inh.shape[0], (f"{self.filename} → The number of inhibitory neurons "
                                                                f"doesn't match between ROI ({len(inhibitory_ids)}) and "
                                                                f"df_f_inh.npy file ({self.df_f_inh.shape[0]})")
@@ -191,6 +199,19 @@ class Recording:
         self.matrices["INH"]["Responsivity"] = np.array(resp_matrice(self, self.zscore_inh))
         np.save(self.input_path + "matrice_resp_exc.npy", self.matrices["EXC"]["Responsivity"])
         np.save(self.input_path + "matrice_resp_inh.npy", self.matrices["INH"]["Responsivity"])
+
+    def hit_tuned(self):
+        self.hit_tuned_exc = classify_neurons(self, n_type="EXC", seed=42, n_shuffles=5000, zscore=False)
+        self.hit_tuned_inh = classify_neurons(self, n_type="INH", seed=42, n_shuffles=5000, zscore=False)
+        np.save(self.input_path + "hit_tuned_exc.npy", self.hit_tuned_exc)
+        np.save(self.input_path + "hit_tuned_inh.npy", self.hit_tuned_inh)
+
+    def amp_tuned(self):
+        self.amp_tuned_exc = amp_tuned_neurons(self, n_type="EXC", seed=42, n_shuffles=5000, zscore=False)
+        self.amp_tuned_inh = amp_tuned_neurons(self, n_type="INH", seed=42, n_shuffles=5000, zscore=False)
+        np.save(self.input_path + "amp_tuned_exc.npy", self.hit_tuned_exc)
+        np.save(self.input_path + "amp_tuned_inh.npy", self.hit_tuned_inh)
+
 
     def delay_onset_map(self):
         """
