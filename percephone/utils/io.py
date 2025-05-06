@@ -25,8 +25,8 @@ def read_info(folder_name, rois):
     name = int(folder_name[9:13])
     n_record = folder_name[14:16]
     date = str(folder_name[:4]) + "-" + str(folder_name[4:6]) + "-" + str(folder_name[6:8])
-    row = rois[(rois["Number"] == name) &
-               (rois["Recording number"] == int(n_record)) & (rois["Date"] == pd.to_datetime(date))]
+    row = rois[(rois["Number"] == name) & (rois["Recording number"] == int(n_record)) &
+               (rois["Date"] == pd.to_datetime(date))]
     inhibitory_ids = eval(f"[{str(row["Inhibitory neurons: ROIs"].values[0])}]")
     hit_rates = [float(x) for x in row["Stimulus detection"].values[0].split(',')]
     return (row["Number"].values[0],

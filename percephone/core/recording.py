@@ -73,7 +73,15 @@ class Recording:
         folder_name = os.path.basename(os.path.normpath(input_path)) + "/"
         rois = pd.read_excel(rois_path)
         self.filename, inhibitory_ids, self.sf, self.genotype, self.threshold, self.iti1_only, self.hit_rates = read_info(folder_name, rois)
-        _, _, self.x0_psy, self.k_psy = sigmoid_fit(np.arange(start=0, stop=13, step=2), self.hit_rates)
+        try:
+            if self.filename == 7554 and self.genotype == "KO-DMSO":
+                _, _, self.x0_psy, self.k_psy = sigmoid_fit(np.arange(start=0, stop=13, step=2), self.hit_rates, p0=[4.0, 1.0])
+            else:
+                _, _, self.x0_psy, self.k_psy = sigmoid_fit(np.arange(start=0, stop=13, step=2), self.hit_rates)
+        except Exception as e:
+            self.x0_psy = np.nan
+            self.k_psy = np.nan
+            print(f"{self.filename} → Could not fit a sigmoid on hit rates: {e}")
         self.session_threshold = 2 * round(self.x0_psy / 2) if 0 < self.x0_psy < 12 else 12
         self.bounded_x0 = self.x0_psy if 0 < self.x0_psy < 12 else 12
         self.session_threshold = 8 if self.filename == 6606 else self.session_threshold  # 0% hit rate at 6 (computed)
@@ -143,9 +151,9 @@ class Recording:
         df_f_percen : numpy.ndarray
             ΔF/F of all the cells selected (nb neurons * nb frames)
         """
-        print("Calculation Delta F / F.")
+        print(f"[{self.filename}] Calculation Delta F / F.")
         f_ = np.load(self.input_path + 'F.npy', allow_pickle=True)
-        print(f"Nb of frames in F: {len(f_[0])}")
+        print(f"[{self.filename}] Nb of frames in F: {len(f_[0])}")
         f_neu = np.load(self.input_path + 'Fneu.npy', allow_pickle=True)
         f_ = f_[cell_ids, :]
         f_neu = f_neu[cell_ids, :]

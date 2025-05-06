@@ -126,14 +126,17 @@ def compare_sub_supra_within(data, behavior_filter=None, genotype="WT", comparis
     # Plotting the comparisons
     not_variables = ["ID", "Genotype", "behavior", "amplitude", "threshold", "bounded_x0"]
     variables = [col for col in data.columns if col not in not_variables]
-    fig, axes = plt.subplots(nrows=3, ncols=4, figsize=(18, 12), constrained_layout=True)
+    fig, axes = plt.subplots(nrows=3, ncols=4, figsize=(24, 24), constrained_layout=True)
     axes_flat = axes.flatten()
     for variable, ax in zip(variables, axes_flat):
         ppt.boxplot(ax, threshold_trials[variable], non_threshold_trials[variable], ylabel=variable, paired=True, title="", ylim=[],
                     colors=colors_dict[genotype], det_marker=False, force_markers_identity=False)
     fig.suptitle(f"Comparison in {genotype} of threshold trials and {comparison} trials"
                  f"\n[behavior filter={behavior_filter}] n={len(non_threshold_trials)}", fontsize=20)
-    fig.canvas.manager.set_window_title(f"comp_{genotype}_threshold_{comparison}_{behavior_filter}")
+    title = f"comp_{genotype}_threshold_{comparison}_{behavior_filter}"
+    fig.canvas.manager.set_window_title(title)
+    if save_fig:
+        plt.savefig(f"{server_address}Threshold_analysis/{title}.pdf")
     plt.show()
 
 
@@ -148,21 +151,26 @@ def compare_sub_supra_between(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo
     data_gp2 = gp2_threshold if gp2_amps == "threshold" else gp2_non_threshold
     not_variables = ["ID", "Genotype", "behavior", "amplitude", "threshold", "bounded_x0"]
     variables = [col for col in data.columns if col not in not_variables]
-    fig, axes = plt.subplots(nrows=3, ncols=4, figsize=(18, 12), constrained_layout=True)
+    fig, axes = plt.subplots(nrows=3, ncols=4, figsize=(24, 24), constrained_layout=True)
     axes_flat = axes.flatten()
     for variable, ax in zip(variables, axes_flat):
         ppt.boxplot(ax, data_gp1[variable], data_gp2[variable], ylabel=variable, paired=False, title="", ylim=[],
                     colors=colors, det_marker=False, force_markers_identity=False)
     fig.suptitle(f"Comparison between {gp1_amps} trials of {gp1} & {gp2_amps} trials of {gp2}"
                  f"\n[behavior filter={behavior_filter}] n={len(data_gp1)}{gp1}/{len(data_gp2)}{gp2}", fontsize=20)
-    fig.canvas.manager.set_window_title(f"comp_{gp1_amps}({gp1})_{gp2_amps}({gp2})_{behavior_filter}")
+    title = f"comp_{gp1_amps}({gp1})_{gp2_amps}({gp2})_{behavior_filter}"
+    fig.canvas.manager.set_window_title(title)
+    if save_fig:
+        plt.savefig(f"{server_address}Threshold_analysis/{title}.pdf")
     plt.show()
     return data_gp1, data_gp2
 
 
 def compare_det_undet(data, genotype="WT", amplitude="all"):
     colors_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color],
-                   "KO": [ppt.ko_color, ppt.ko_light_color]}
+                   "KO": [ppt.ko_color, ppt.ko_light_color],
+                   "WT-DMSO": [ppt.wt_color, ppt.wt_light_color], "KO-DMSO": [ppt.hypo_color, ppt.hypo_light_color],
+                   "WT-BMS": [ppt.wt_bms_color, ppt.wt_bms_light_color], "KO-BMS": [ppt.all_ko_bms_color, ppt.all_ko_bms_light_color]}
     grouping_cols = ["Genotype", "ID", "behavior"]
     # Filtering the amplitude
     genotype_data = data[data["Genotype"] == genotype]
@@ -172,14 +180,17 @@ def compare_det_undet(data, genotype="WT", amplitude="all"):
     # Plotting the comparisons
     not_variables = ["ID", "Genotype", "behavior", "amplitude", "threshold", "bounded_x0"]
     variables = [col for col in data.columns if col not in not_variables]
-    fig, axes = plt.subplots(nrows=3, ncols=4, figsize=(18, 12), constrained_layout=True)
+    fig, axes = plt.subplots(nrows=3, ncols=4, figsize=(24, 24), constrained_layout=True)
     axes_flat = axes.flatten()
     for variable, ax in zip(variables, axes_flat):
         ppt.boxplot(ax, det_data[variable], undet_data[variable], ylabel=variable, paired=False, title="", ylim=[],
                     colors=colors_dict[genotype], det_marker=True, force_markers_identity=False)
     fig.suptitle(f"Comparison in {genotype} of detected trials and undetected trials"
                  f"\n[amplitude filter={amplitude}]", fontsize=20)
-    fig.canvas.manager.set_window_title(f"comp_{genotype}_det_undet_{amplitude}")
+    title = f"comp_{genotype}_det_undet_{amplitude}"
+    fig.canvas.manager.set_window_title(title)
+    if save_fig:
+        plt.savefig(f"{server_address}Threshold_analysis/{title}.pdf")
     plt.show()
     return det_data, undet_data
 
@@ -999,6 +1010,44 @@ def hit_tuned_neurons(recs, normalize=True):
     return data
 
 
+def plot_hit_amp_tuned(recs):
+    """
+    Plots a graph representing the hit tuned and amplitude tuned neurons for each mouse.
+    Parameters
+    ----------
+    recs
+
+    Returns
+    -------
+
+    """
+    color_dict = {"WT": ppt.wt_color, "KO": ppt.ko_color, "KO-Hypo": ppt.hypo_color}
+    rows = []
+    fig, ax = plt.subplots(nrows=2, ncols=22, figsize=(22, 12), gridspec_kw={'height_ratios': [3, 1]},
+                           constrained_layout=True)
+    for col, rec in enumerate(recs):
+        rows.append({"Genotype": rec.genotype, "ID": rec.filename,
+                     "Hit tuned EXC": rec.hit_tuned_exc, "Amp tuned EXC": rec.amp_tuned_exc,
+                     "Hit tuned INH": rec.hit_tuned_inh, "Amp tuned INH": rec.amp_tuned_inh})
+        im_exc = ax[0, col].imshow(np.vstack([rec.hit_tuned_exc, rec.amp_tuned_exc]).T, cmap="inferno", aspect='auto',
+                                   interpolation='nearest', vmin=-1, vmax=1)
+        ax[0, col].set_title(f"{rec.filename}\nEXC", fontsize=10, fontweight="bold", color=color_dict[rec.genotype])
+        ax[0, col].set_yticks([])
+        ax[0, col].set_xticks([0, 1])
+        ax[0, col].set_xticklabels(["Hit", "Amp"], fontsize=8, rotation=90)
+        im_inh = ax[1, col].imshow(np.vstack([rec.hit_tuned_inh, rec.amp_tuned_inh]).T, cmap="inferno", aspect='auto',
+                                   interpolation='nearest', vmin=-1, vmax=1)
+        ax[1, col].set_title(f"{rec.filename}\nINH", fontsize=10, fontweight="bold", color=color_dict[rec.genotype])
+        ax[1, col].set_yticks([])
+        ax[1, col].set_xticks([0, 1])
+        ax[1, col].set_xticklabels(["Hit", "Amp"], fontsize=8, rotation=90)
+    tuned_df = pd.DataFrame(rows)
+    cbar = fig.colorbar(im_exc, ax=ax[1, 21], ticks=[-1, 0, 1], orientation='vertical')
+    fig.suptitle("Hit & amplitude tuned neurons", fontsize=12)
+    plt.show()
+    return tuned_df
+
+
 def neurons_hit_consistency(recs):
     rows = []
     for rec in recs.values():
@@ -1036,38 +1085,63 @@ def neurons_hit_consistency(recs):
 # endregion ============================================================================================================
 
 if __name__ == '__main__':
+    BMS_analysis = True
     ### Initialisation of recs instances ###
-    directory = "C:/Users/cvandromme/Desktop/Data/"
-    roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
-    server_address = "Z:/Current_members/Ourania_Semelidou/2p/Figures_paper/"
+    if BMS_analysis:
+        directory = "C:/Users/cvandromme/Desktop/Data_DMSO_BMS/"
+        roi_path = "C:/Users/cvandromme/Desktop/Fmko_bms&dmso_info.xlsx"
+    else:
+        directory = "C:/Users/cvandromme/Desktop/Data/"
+        roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
+    server_address = "Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/Figures_april_2025/"
     roi_info = pd.read_excel(roi_path)
     files = os.listdir(directory)
     files_ = [file for file in files if file.endswith("synchro")]
     def opening_rec(fil, i):
-        rec = pc.RecordingAmplDet(directory + fil + "/", 0, roi_path)
+        if fil.split("_")[1].startswith("75"):
+            rec = pc.RecordingAmplDet(directory + fil + "/", 0, roi_path, cache=False, correction=False)
+        else:
+            rec = pc.RecordingAmplDet(directory + fil + "/", 0, roi_path)
         return rec
     workers = cpu_count()
     pool = pool.ThreadPool(processes=workers)
     async_results = [pool.apply_async(opening_rec, args=(file, i)) for i, file in enumerate(files_)]
-    recs = {ar.get().filename: ar.get() for ar in async_results}
+    if BMS_analysis:
+        recs = {f"{ar.get().filename}-{ar.get().genotype.split("-")[1]}": ar.get() for ar in async_results}
+    else:
+        recs = {ar.get().filename: ar.get() for ar in async_results}
+
     # ====== Building a summary table ======
     summary = []
     for rec in recs.values():
-        summary.append({"Genotype": rec.genotype, "ID": rec.filename, "Threshold": rec.session_threshold,
+        summary.append({"Genotype": rec.genotype, "ID": rec.filename, "x0_psy": rec.x0_psy, "Session Threshold": rec.session_threshold, "Global Threshold": rec.threshold,
                         "n_trials": len(rec.detected_stim), "n_EXC": len(rec.zscore_exc), "n_INH": len(rec.zscore_inh)})
     summary = pd.DataFrame(summary)
 
+    save_fig = False
+
     # ====== Response features ======
+
     for rec in recs.values():
-        rec.peak_delay_amp()
-        rec.auc()
+        if str(rec.filename).startswith("75"):
+            rec.responsivity()
+        # rec.peak_delay_amp()
+        # rec.auc()
         # rec.hit_tuned()
         # rec.amp_tuned()
-    full_data = get_features(recs.values())
-    data = full_data[full_data["ID"] != 5886]
-    # compare_sub_supra_within(data, behavior_filter=False, genotype="KO", comparison="all_supra")
-    # wt, hypo = compare_sub_supra_between(data, behavior_filter=False, gp1="KO", gp2="KO-Hypo", gp1_amps="all_supra", gp2_amps="all_supra", colors=[ppt.ko_color, ppt.hypo_color])
-    # det, undet = compare_det_undet(data, genotype="KO-Hypo", amplitude="all_supra")
+    # full_data = get_features(recs.values())
+    # data = full_data[full_data["ID"] != 5886]
+    #   --- Within ---
+    # compare_sub_supra_within(data, behavior_filter=None, genotype="KO-Hypo", comparison="supra")
+    # for filter in [None, True, False]:
+    #     for gen in ["KO", "KO-Hypo", "WT"]:
+    #         for comp in ["sub", "all_sub", "supra", "all_supra"]:
+    #             compare_sub_supra_within(data, behavior_filter=filter, genotype=gen, comparison=comp)
+    #   --- Between ---
+    # wt, hypo = compare_sub_supra_between(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo", gp1_amps="real_mean_genotype", gp2_amps="gp1_threshold", colors=[ppt.wt_color, ppt.hypo_color])
+    # --- Hit vs. Miss ---
+    # det, undet = compare_det_undet(data, genotype="KO-Hypo", amplitude="all") # /!\ full_data for all amp and data for threshold analysis
+
     # mean_det = np.mean(det.drop(columns="Genotype"), axis=0)
     # mean_undet = np.mean(undet.drop(columns="Genotype"), axis=0)
 
@@ -1101,9 +1175,12 @@ if __name__ == '__main__':
     #     rows.append({"Genotype": rec.genotype, "ID": rec.filename, "EXC_classif": rec.hit_tuned_exc, "INH_classif": rec.hit_tuned_inh,})
     # result = pd.DataFrame(rows)
     #
-    hit_tuned_df = hit_tuned_neurons(recs, normalize=False)
-    consistency_df = neurons_hit_consistency(recs)
-    fig, ax = plt.subplots(figsize=(8, 2), constrained_layout=True)
-    im = ax.imshow(np.vstack([recs[7553].hit_tuned_exc, recs[7553].amp_tuned_exc]), cmap="inferno", aspect='auto', interpolation='nearest')
-    cbar = fig.colorbar(im, ax=ax, ticks=[-1, 0, 1], orientation='horizontal')
-    plt.show()
+    # hit_tuned_df = hit_tuned_neurons(recs, normalize=False)
+    # consistency_df = neurons_hit_consistency(recs)
+    # fig, ax = plt.subplots(figsize=(8, 2), constrained_layout=True)
+    # im = ax.imshow(np.vstack([recs[7553].hit_tuned_exc, recs[7553].amp_tuned_exc]), cmap="inferno", aspect='auto', interpolation='nearest')
+    # cbar = fig.colorbar(im, ax=ax, ticks=[-1, 0, 1], orientation='horizontal')
+    # plt.show()
+
+    # tuned_df = plot_hit_amp_tuned(recs.values())
+

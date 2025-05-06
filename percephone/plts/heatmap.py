@@ -268,7 +268,7 @@ def interactive_heatmap(rec, activity):
     cbar.set_label(r'Z-score')
     ax.set_xlabel('Time (s)')
     ax.set_ylabel('Neurons')
-    tax1.set_title(rec.filename)
+    tax1.set_title(f"{rec.filename} ({rec.genotype}) - {rec.threshold}")
 
     durations = np.zeros(len(rec.stim_time), dtype=int)
     for i, timing in enumerate(rec.stim_time):
@@ -538,13 +538,18 @@ if __name__ == '__main__':
     plt.ion()
 
     user = "Célien"
+    BMS_analysis = False
     plot_all_records = False
     plot_ordered_heatmap = True
-    plot_responsivity_heatmap = True
+    plot_responsivity_heatmap = False
     plot_normal_heatmap = True
     if user == "Célien":
-        directory = "C:/Users/cvandromme/Desktop/Data/"
-        roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
+        if BMS_analysis:
+            directory = "C:/Users/cvandromme/Desktop/Data_DMSO_BMS/"
+            roi_path = "C:/Users/cvandromme/Desktop/Fmko_bms&dmso_info.xlsx"
+        else:
+            directory = "C:/Users/cvandromme/Desktop/Data/"
+            roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
         server_address = "Z:/Current_members/Ourania_Semelidou/2p/Figures_paper/"
     elif user == "Théo":
         directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
@@ -556,20 +561,21 @@ if __name__ == '__main__':
         files_ = [file for file in files if file.endswith("synchro")]
         for file in files_:
             folder = f"{directory}/{file}/"
-            rec = RecordingAmplDet(folder, 0, roi_path, cache=False)
-            rec.stim_time = corrected_prestim_windows(rec)
-            if plot_ordered_heatmap:
-                ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
-                                time_span="stim", window=0.5, estimator="Mean",
-                                det_sorted=True, amp_sorted=True, det_ordering=False)
-            if plot_responsivity_heatmap:
-                resp_heatmap(rec, n_type="EXC")
-            if plot_normal_heatmap:
-                interactive_heatmap(rec, rec.df_f_exc)
+            rec = RecordingAmplDet(folder, 0, roi_path)
+            if str(rec.filename).startswith("58"):
+            # rec.stim_time = corrected_prestim_windows(rec)
+                if plot_ordered_heatmap:
+                    ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
+                                    time_span="stim", window=0.5, estimator=None,
+                                    det_sorted=True, amp_sorted=True, det_ordering=False)
+                if plot_responsivity_heatmap:
+                    resp_heatmap(rec, n_type="EXC")
+                if plot_normal_heatmap:
+                    interactive_heatmap(rec, rec.zscore_exc)
 
     else:
-        rec_directory = directory + "20220715_4456_00_synchro/"
-        rec = RecordingAmplDet(rec_directory, 0, roi_path, cache=True)
+        rec_directory = directory + "20241206_7554_00_synchro/"
+        rec = RecordingAmplDet(rec_directory, 0, roi_path, cache=True, correction=False)
         # rec.peak_delay_amp()
         # rec.auc()
         if plot_ordered_heatmap:

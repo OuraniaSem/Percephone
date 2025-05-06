@@ -54,8 +54,11 @@ def sigmoid_Hill(x, n, k):
     return y
 
 
-def sigmoid_fit(xdata, ydata):
-    popt, pcov = curve_fit(sigmoid, xdata, ydata, maxfev=100000)
+def sigmoid_fit(xdata, ydata, p0=None):
+    if p0:
+        popt, pcov = curve_fit(sigmoid, xdata, ydata, p0=p0, maxfev=1000000)
+    else:
+        popt, pcov = curve_fit(sigmoid, xdata, ydata, maxfev=100000)
     fix_value = xdata[-1]  # + 1
     # slope, intercept = np.polyfit(x, y, 1)
     # slope = float("{:.2f}".format(slope))

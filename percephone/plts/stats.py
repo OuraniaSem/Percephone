@@ -873,7 +873,7 @@ def homogeneity_check(predicted, residuals, title="variable"):
     smoothed = lowess(sqrt_standard_resid, predicted, frac=0.3)
     ax.plot(smoothed[:, 0], smoothed[:, 1], color="red", linestyle="--", label="Lowess trend", lw=2)
     ax.set_xlabel("Fitted values", fontsize=8)
-    ax.set_ylabel("$\sqrt{|Standardized\ Residuals|}$", fontsize=8)
+    ax.set_ylabel(r"$\sqrt{|Standardized\ Residuals|}$", fontsize=8)
     ax.set_title(f"Scale-Location Plot for {title}", fontsize=12)
     ax.tick_params(axis='both', labelsize=8)
     fig.canvas.manager.set_window_title(f"Homogeneity Check - {title}")
