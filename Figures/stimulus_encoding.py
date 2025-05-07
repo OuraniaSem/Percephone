@@ -1085,23 +1085,20 @@ def neurons_hit_consistency(recs):
 # endregion ============================================================================================================
 
 if __name__ == '__main__':
-    BMS_analysis = True
+    BMS_analysis = False
     ### Initialisation of recs instances ###
     if BMS_analysis:
         directory = "C:/Users/cvandromme/Desktop/Data_DMSO_BMS/"
         roi_path = "C:/Users/cvandromme/Desktop/Fmko_bms&dmso_info.xlsx"
     else:
-        directory = "C:/Users/cvandromme/Desktop/Data/"
+        directory = "C:/Users/cvandromme/Desktop/Data_without/"
         roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
     server_address = "Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/Figures_april_2025/"
     roi_info = pd.read_excel(roi_path)
     files = os.listdir(directory)
     files_ = [file for file in files if file.endswith("synchro")]
     def opening_rec(fil, i):
-        if fil.split("_")[1].startswith("75"):
-            rec = pc.RecordingAmplDet(directory + fil + "/", 0, roi_path, cache=False, correction=False)
-        else:
-            rec = pc.RecordingAmplDet(directory + fil + "/", 0, roi_path)
+        rec = pc.RecordingAmplDet(directory + fil + "/", 0, roi_path, cache=True, correction=False)
         return rec
     workers = cpu_count()
     pool = pool.ThreadPool(processes=workers)
@@ -1123,24 +1120,23 @@ if __name__ == '__main__':
     # ====== Response features ======
 
     for rec in recs.values():
-        if str(rec.filename).startswith("75"):
-            rec.responsivity()
+        # rec.responsivity()
         # rec.peak_delay_amp()
-        # rec.auc()
-        # rec.hit_tuned()
-        # rec.amp_tuned()
-    # full_data = get_features(recs.values())
-    # data = full_data[full_data["ID"] != 5886]
+        rec.auc()
+        rec.hit_tuned()
+        rec.amp_tuned()
+    full_data = get_features(recs.values())
+    data = full_data[full_data["ID"] != 5886]
     #   --- Within ---
-    # compare_sub_supra_within(data, behavior_filter=None, genotype="KO-Hypo", comparison="supra")
+    compare_sub_supra_within(data, behavior_filter=False, genotype="KO", comparison="all_sub")
     # for filter in [None, True, False]:
     #     for gen in ["KO", "KO-Hypo", "WT"]:
     #         for comp in ["sub", "all_sub", "supra", "all_supra"]:
     #             compare_sub_supra_within(data, behavior_filter=filter, genotype=gen, comparison=comp)
     #   --- Between ---
-    # wt, hypo = compare_sub_supra_between(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo", gp1_amps="real_mean_genotype", gp2_amps="gp1_threshold", colors=[ppt.wt_color, ppt.hypo_color])
+    wt, hypo = compare_sub_supra_between(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo", gp1_amps="supra", gp2_amps="supra", colors=[ppt.wt_color, ppt.hypo_color])
     # --- Hit vs. Miss ---
-    # det, undet = compare_det_undet(data, genotype="KO-Hypo", amplitude="all") # /!\ full_data for all amp and data for threshold analysis
+    det, undet = compare_det_undet(data, genotype="KO-Hypo", amplitude="all_supra") # /!\ full_data for all amp and data for threshold analysis
 
     # mean_det = np.mean(det.drop(columns="Genotype"), axis=0)
     # mean_undet = np.mean(undet.drop(columns="Genotype"), axis=0)
@@ -1160,8 +1156,8 @@ if __name__ == '__main__':
     # plot_neuron_frac_det_undet(pattern=-1, ko_hypo_only=True, stim_ampl="session_threshold", no_go_normalize=True, ylim=[0, 60])
     # resp_contrast(pattern="recruited", stim_ampl="session_threshold", method="delta", ylim=[-10, 30])
     #
-    # results = plot_neuron_perc_amp(recs.values(), pattern="inhibited", detected_trials=False, undetected_trials=True, ylim=[0, 30],
-    #                                transformation="yeojohnson", normality=[False, False], homogeneity=[False, False])
+    results = plot_neuron_perc_amp(recs.values(), pattern="activated", detected_trials=True, undetected_trials=True, ylim=[0, 30],
+                                   transformation="yeojohnson", normality=[False, False], homogeneity=[False, False])
     # post_EXC = results["post_EXC"]
     # post_EXC_btw = post_EXC["between"]
     # post_INH = results["post_INH"]

@@ -541,7 +541,7 @@ if __name__ == '__main__':
     BMS_analysis = False
     plot_all_records = False
     plot_ordered_heatmap = True
-    plot_responsivity_heatmap = False
+    plot_responsivity_heatmap = True
     plot_normal_heatmap = True
     if user == "Célien":
         if BMS_analysis:
@@ -574,8 +574,9 @@ if __name__ == '__main__':
                     interactive_heatmap(rec, rec.zscore_exc)
 
     else:
-        rec_directory = directory + "20241206_7554_00_synchro/"
+        rec_directory = "C:/Users/cvandromme/Desktop/Data_without/20241206_7554_00_synchro/"
         rec = RecordingAmplDet(rec_directory, 0, roi_path, cache=True, correction=False)
+        # rec.responsivity()
         # rec.peak_delay_amp()
         # rec.auc()
         if plot_ordered_heatmap:

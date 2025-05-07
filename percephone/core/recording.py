@@ -409,7 +409,7 @@ class RecordingAmplDet(Recording):
         A 2D numpy.ndarray of the zscore of each inhibitory neuron at each frame of the recording
         (nb neurons * nb frames)
     """
-    def __init__(self, input_path, starting_trial, rois_path, tuple_mesc=(0, 0), mean_f=False, correction=True,
+    def __init__(self, input_path, starting_trial, rois_path, tuple_mesc=(0, 0), mean_f=False, correction=False,
                  cache=True, iti="ITI2", habituation=False):
         """
         Parameters

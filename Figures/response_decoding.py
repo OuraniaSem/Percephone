@@ -590,7 +590,7 @@ def correlate_nb_accuracy(recs, accuracy_df, threshold="median"):
 
 if __name__ == '__main__':
     # region ====== Initialisation of recs instances ======
-    directory = "C:/Users/cvandromme/Desktop/Data/"
+    directory = "C:/Users/cvandromme/Desktop/Data_without/"
     roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
     server_address = "Z:/Current_members/Ourania_Semelidou/2p/Figures_paper/"
     roi_info = pd.read_excel(roi_path)
