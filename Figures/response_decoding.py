@@ -589,10 +589,15 @@ def correlate_nb_accuracy(recs, accuracy_df, threshold="median"):
 
 
 if __name__ == '__main__':
-    # region ====== Initialisation of recs instances ======
-    directory = "C:/Users/cvandromme/Desktop/Data_without/"
-    roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
-    server_address = "Z:/Current_members/Ourania_Semelidou/2p/Figures_paper/"
+    BMS_analysis = False
+    ### Initialisation of recs instances ###
+    if BMS_analysis:
+        directory = "C:/Users/cvandromme/Desktop/Tactile_detection/Data_DMSO_BMS/"
+        roi_path = "C:/Users/cvandromme/Desktop/Tactile_detection/Fmko_bms&dmso_info.xlsx"
+    else:
+        directory = "C:/Users/cvandromme/Desktop/Tactile_detection/Data/"
+        roi_path = "C:/Users/cvandromme/Desktop/Tactile_detection/FmKO_ROIs&inhibitory.xlsx"
+    server_address = "Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/Figures_april_2025/"
     roi_info = pd.read_excel(roi_path)
     files = os.listdir(directory)
     files_ = [file for file in files if file.endswith("synchro")]
@@ -616,13 +621,13 @@ if __name__ == '__main__':
     # corr_data = correlate_mean_zscore_behavior_frame(frame_data[frame_data["Amplitude"] == 12])
     # plot_frame_correlation(corr_data)
 
-    frame_dff = get_activity_by_frame_df(recs.values(), zscore=False)
-    frame_model_df, frame_mean_sem, frame_comp = frame_model(frame_dff)
+    # frame_dff = get_activity_by_frame_df(recs.values(), zscore=False)
+    # frame_model_df, frame_mean_sem, frame_comp = frame_model(frame_dff)
 
-    # saved_framed_model_df = pd.read_csv("C:/Users/cvandromme/Desktop/frame_model_df.csv")
+    saved_framed_model_df = pd.read_csv("C:/Users/cvandromme/Desktop/frame_model_df.csv")
     # frame_model_df_amp_gp = frame_model_df.groupby(["Genotype", "ID", "Threshold", "Amplitude"], as_index=False).mean().drop(columns=["Trial", "Duration", "Behavior"])
     # plot_hit_miss_classif(saved_framed_model_df)
-    # data = plot_hit_miss_classif_comp(saved_framed_model_df, gp1="WT", gp2="KO-Hypo", title_precision="")
+    data = plot_hit_miss_classif_comp(saved_framed_model_df, gp1="WT", gp2="KO", title_precision="['EXC',_'INH'][0,_1,_-1]_-_db_cv=True")
 
     # accuracy_comp_df = compare_accuracy(recs.values(), random=42)
     # acc_nb_df = correlate_nb_accuracy(recs, accuracy_comp_df, threshold="median")

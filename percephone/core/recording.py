@@ -759,6 +759,7 @@ class RecordingAmplDet(Recording):
         return mask
 
     def get_perc_resp(self, pattern=1, n_type="EXC"):
+        """Returns an array of the percentage of responsive neurons per across trials"""
         assert n_type in ["EXC", "INH"], "Please provide a valid neuron type (EXC or INH)"
         assert pattern in [-1, 0, 1], "Please provide a valid neuron type (-1, 0 or 1)"
         resp_mat = np.array(self.matrices[n_type]["Responsivity"])

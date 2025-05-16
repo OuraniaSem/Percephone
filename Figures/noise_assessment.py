@@ -5,6 +5,8 @@ import pandas as pd
 import scipy.stats as ss
 from matplotlib import pyplot as plt
 from multiprocessing import cpu_count, pool
+
+from scipy.stats import linregress
 from sklearn.decomposition import PCA
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -512,6 +514,85 @@ def compare_ei_ratio(ei_df, gp1="WT", gp2="KO-Hypo", column=None):
     plt.show()
     return data
 
+def population_EI_ratio(recs, pyr_inhibition=False):
+    """ Computes the averaged population E/I ratio in hit and miss trials for both genotypes and compare them"""
+    rows = []
+    for rec in recs:
+        n_exc = rec.zscore_exc.shape[0]
+        n_inh = rec.zscore_inh.shape[0]
+        threshold_stim_vector = rec.stim_ampl == rec.session_threshold
+        if pyr_inhibition:
+            I_type = "EXC"
+            I_activity = -1
+            I_nb = n_exc
+            I_label = "% inhibited EXC"
+        else:
+            I_type = "INH"
+            I_activity = 1
+            I_nb = n_inh
+            I_label = "% activated INH"
+        hit_exc = np.mean(np.count_nonzero(rec.matrices["EXC"]["Responsivity"][:, (rec.detected_stim & threshold_stim_vector)] == 1, axis=0)) / n_exc
+        miss_exc = np.mean(np.count_nonzero(rec.matrices["EXC"]["Responsivity"][:, (~rec.detected_stim & threshold_stim_vector)] == 1, axis=0)) / n_exc
+        hit_inh = np.mean(np.count_nonzero(rec.matrices[I_type]["Responsivity"][:, (rec.detected_stim & threshold_stim_vector)] == I_activity, axis=0)) / I_nb
+        miss_inh = np.mean(np.count_nonzero(rec.matrices[I_type]["Responsivity"][:, (~rec.detected_stim & threshold_stim_vector)] == I_activity, axis=0)) / I_nb
+        ei_hit = hit_exc / hit_inh
+        ei_miss = miss_exc / miss_inh
+        rows.append({"ID": rec.filename, "Genotype": rec.genotype, "EI_hit": ei_hit, "EI_miss": ei_miss})
+    data = pd.DataFrame(rows)
+    fig, ax = plt.subplots(nrows=1, ncols=4, figsize=(24, 8), constrained_layout=True)
+    wt_hit = data[data["Genotype"] == "WT"]["EI_hit"]
+    wt_hit_un = wt_hit[np.isfinite(wt_hit)].values
+    ko_hit = data[data["Genotype"] == "KO-Hypo"]["EI_hit"]
+    ko_hit_un = ko_hit[np.isfinite(ko_hit)].values
+    wt_miss = data[data["Genotype"] == "WT"]["EI_miss"]
+    wt_miss_un = wt_miss[np.isfinite(wt_miss)].values
+    ko_miss = data[data["Genotype"] == "KO-Hypo"]["EI_miss"]
+    ko_miss_un = ko_miss[np.isfinite(ko_miss)].values
+    wt_hit_paired = wt_hit[(np.isfinite(wt_hit) & np.isfinite(wt_miss))].values
+    wt_miss_paired = wt_miss[(np.isfinite(wt_hit) & np.isfinite(wt_miss))].values
+    ko_hit_paired = ko_hit[(np.isfinite(ko_hit) & np.isfinite(ko_miss))].values
+    ko_miss_paired = ko_miss[(np.isfinite(ko_hit) & np.isfinite(ko_miss))].values
+    ppt.boxplot(ax[0], wt_hit_un, ko_hit_un, paired=False, ylabel="E:I ratio", ylim=[], title="Hit trials", colors=[ppt.wt_color, ppt.hypo_color], det_marker=False)
+    ppt.boxplot(ax[1], wt_miss_un, ko_miss_un, paired=False, ylabel="E:I ratio", ylim=[], title="Miss trials", colors=[ppt.wt_light_color, ppt.hypo_light_color], det_marker=False)
+    ppt.boxplot(ax[2], wt_hit_paired, wt_miss_paired, paired=True, ylabel="E:I ratio", ylim=[], title="WT", colors=[ppt.wt_color, ppt.wt_light_color], det_marker=True)
+    ppt.boxplot(ax[3], ko_hit_paired, ko_miss_paired, paired=True, ylabel="E:I ratio", ylim=[], title="KO-Hypo", colors=[ppt.hypo_color, ppt.hypo_light_color], det_marker=True)
+    fig.suptitle(f"E:I ratio comparison between genotypes\n defined as % activated EXC/{I_label}", fontsize=12)
+    fig.canvas.manager.set_window_title(f"EI_comparison")
+    plt.show()
+    return data
+
+def correlation_gaba_act_pyr_inh(recs):
+    """Correlates the number of activated GABAergic neurons with the number of inhibited Pyramidal neurons"""
+    color_dict = {"WT": ppt.wt_color, "KO-Hypo": ppt.hypo_color, "KO": ppt.ko_color}
+    rows = []
+    for rec in recs:
+        n_exc = rec.zscore_exc.shape[0]
+        n_inh = rec.zscore_inh.shape[0]
+        threshold_stim_vector = rec.stim_ampl == rec.session_threshold
+        pyr_inh = (np.mean(np.count_nonzero(rec.matrices["EXC"]["Responsivity"][:, threshold_stim_vector] == -1, axis=0)) / n_exc) * 100
+        gaba_act = (np.mean(np.count_nonzero(rec.matrices["INH"]["Responsivity"][:, threshold_stim_vector] == 1, axis=0)) / n_inh) * 100
+        rows.append({"ID": rec.filename, "Genotype": rec.genotype, "pyr_inh": pyr_inh, "gaba_act": gaba_act})
+    data = pd.DataFrame(rows)
+    fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(18, 6), constrained_layout=True)
+    for col, geno in enumerate(data["Genotype"].unique()):
+        x = data[data["Genotype"] == geno]["gaba_act"]
+        y = data[data["Genotype"] == geno]["pyr_inh"]
+        results = dict(linregress(x, y)._asdict())
+        r2 = results["rvalue"] ** 2
+        line = results["slope"] * x + results["intercept"]
+        # Plot the data points and regression line
+        ax[col].plot(x, line, color=color_dict[geno], lw=2)
+        ax[col].scatter(x, y, color=color_dict[geno], alpha=0.7, s=10, marker="+")
+        ax[col].text(0.05, 0.95, f"$r^2 = {r2:.3f}$\np-value = {results["pvalue"]:.3f}", transform=ax[col].transAxes, fontsize=8,
+                verticalalignment="top", color="black")
+        ax[col].set_title(geno, color=color_dict[geno])
+        ax[col].set_xlabel("% activated GABAergic neurons", fontsize=8)
+        ax[col].set_ylabel("% inhibited Pyramidal neurons", fontsize=8)
+    fig.suptitle("Correlation of the mean percentage of activated GABAergic interneurons with the number of inhibited Pyramidal neurons for threshold stimuli", fontsize=12)
+    fig.canvas.manager.set_window_title(f"Correlation_nb_neurons_inhibition")
+    plt.show()
+    return data
+
 
 # endregion ============================================================================================================
 # region ========================================== Noise ==============================================================
@@ -590,10 +671,15 @@ def baseline_and_SNR(recruitment_df):
 
 
 if __name__ == '__main__':
+    BMS_analysis = True
     # region ====== Initialisation of recs instances ======
-    directory = "C:/Users/cvandromme/Desktop/Data/"
-    roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
-    server_address = "Z:/Current_members/Ourania_Semelidou/2p/Figures_paper/"
+    if BMS_analysis:
+        directory = "C:/Users/cvandromme/Desktop/Tactile_detection/Data_DMSO_BMS/"
+        roi_path = "C:/Users/cvandromme/Desktop/Tactile_detection/Fmko_bms&dmso_info.xlsx"
+    else:
+        directory = "C:/Users/cvandromme/Desktop/Tactile_detection/Data/"
+        roi_path = "C:/Users/cvandromme/Desktop/Tactile_detection/FmKO_ROIs&inhibitory.xlsx"
+    server_address = "Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/Figures_april_2025/noise_assessment/"
     roi_info = pd.read_excel(roi_path)
     files = os.listdir(directory)
     files_ = [file for file in files if file.endswith("synchro")]
@@ -603,50 +689,64 @@ if __name__ == '__main__':
     workers = cpu_count()
     pool = pool.ThreadPool(processes=workers)
     async_results = [pool.apply_async(opening_rec, args=(file, i)) for i, file in enumerate(files_)]
-    recs = {ar.get().filename: ar.get() for ar in async_results}
+    if BMS_analysis:
+        recs = {f"{ar.get().filename}-{ar.get().genotype.split("-")[1]}": ar.get() for ar in async_results}
+    else:
+        recs = {ar.get().filename: ar.get() for ar in async_results}
     # endregion
     # Dropping 5886 from the noise assessment analysis because its computed threshold is 3 (10% hit rate for 2µm and 90% for 4µm)
-    excluded_rec = recs.pop(5886)
+    if not BMS_analysis:
+        excluded_rec = recs.pop(5886)
     # region ====== Comparison of threshold to session threshold ======
-    # rows = []
-    # for rec in recs.values():
-    #     rows.append({"ID": rec.filename, "Genotype": rec.genotype, "threshold": rec.threshold, "session_threshold": rec.session_threshold, "session_x0": rec.x0_psy})
-    # session_threshold = pd.DataFrame(rows)
-    #
-    # from percephone.utils.math_formulas import sigmoid_fit
-    # fig, ax = plt.subplots(nrows=5, ncols=6, figsize=(20, 12), constrained_layout=True)
-    # axs = ax.flatten()
-    # for i, rec in enumerate(recs.values()):
-    #     axs[i].set_title(f"{rec.filename} - {rec.threshold}/{rec.session_threshold}({rec.x0_psy:.2f})")
-    #     axs[i].set_ylim(0, 1)
-    #     axs[i].scatter(np.arange(start=2, stop=13, step=2), rec.hit_rates[1:])
-    #     x, y, x0, k = sigmoid_fit(np.arange(start=0, stop=13, step=2), rec.hit_rates)
-    #     axs[i].plot(x, y, color='red')
-    # plt.show()
+    rows = []
+    for rec in recs.values():
+        rows.append({"ID": rec.filename, "Genotype": rec.genotype, "threshold": rec.threshold, "session_threshold": rec.session_threshold, "session_x0": rec.x0_psy})
+    session_threshold = pd.DataFrame(rows)
+
+    from percephone.utils.math_formulas import sigmoid_fit
+    fig, ax = plt.subplots(nrows=5, ncols=6, figsize=(20, 12), constrained_layout=True)
+    axs = ax.flatten()
+    for i, rec in enumerate(recs.values()):
+        axs[i].set_title(f"{rec.filename} {rec.genotype}- {rec.threshold}/{rec.session_threshold}({rec.x0_psy:.2f})", fontsize=12)
+        axs[i].set_ylim(0, 1)
+        axs[i].scatter(np.arange(start=2, stop=13, step=2), rec.hit_rates[1:], s=5)
+        if rec.filename == 7554 and rec.genotype == "KO-DMSO":
+            x, y, x0, k = sigmoid_fit(np.arange(start=0, stop=13, step=2), rec.hit_rates, p0=[4.0, 1.0])
+        else:
+            x, y, x0, k = sigmoid_fit(np.arange(start=0, stop=13, step=2), rec.hit_rates)
+        axs[i].plot(x, y, color='red', lw=2, alpha=0.75)
+    plt.show()
     # endregion
+
     # region ====== TBT variability ======
     # recruitement_df = get_features(recs.values(), amp_delay=False)
     # activity_long_df = get_mean_trial_activity_df(recs.values(), zscore=True)
-    activity_long_dff = get_mean_trial_activity_df(recs.values(), zscore=False)
+    # activity_long_dff = get_mean_trial_activity_df(recs.values(), zscore=False)
     # prestim_df = prestim_activated_neurons(filtered_activity_df)
     # prestim_vector_df = prestim_act_vector(activity_long_df, metric="Stim_mean", hit_activated_only=False)
     # prestim_vector_dff = prestim_act_vector(activity_long_dff, metric="Diff_mean", hit_activated_only=True)
     # tbt_recr_var_df = compare_tbt_var_per_amp(recruitement_df)
     # pca_df = pca(activity_long_df)
     # endregion
+
     # region ====== Pre-stimulus ======
-    filtered_activity_df = filter_stim_recruited_neurons(activity_long_dff[activity_long_dff["ID"] != 4456])
+    # filtered_activity_df = filter_stim_recruited_neurons(activity_long_dff[activity_long_dff["ID"] != 4456])
     # filtered_activity_df = filter_stim_recruited_neurons(activity_long_dff)
-    grouped_comp, gp_hit, gp_miss = prestim_comp(filtered_activity_df)
-    snr_data = snr_comp(filtered_activity_df)
-    snr_wt, snr_hypo = compare_to_wt_threshold(filtered_activity_df)
-    prestim_act_df = prestim_influence_neuron_activation(filtered_activity_df)
+    # grouped_comp, gp_hit, gp_miss = prestim_comp(filtered_activity_df)
+    # snr_data = snr_comp(filtered_activity_df)
+    # snr_wt, snr_hypo = compare_to_wt_threshold(filtered_activity_df)
+    # prestim_act_df = prestim_influence_neuron_activation(filtered_activity_df)
     # endregion
+
     # region ====== E/I Ratio ======
     # ei_df = get_ei_ratio_df(recs.values())
     # ei_behavior_df = correlate_behavior(ei_df, column="EI_ratio_cste")
     # ei_comp_df = compare_ei_ratio(ei_df, column="EI_ratio_norm")
+
+    # ei_data = population_EI_ratio(recs.values(), pyr_inhibition=True)
+    # inh_corr_data = correlation_gaba_act_pyr_inh(recs.values())
     # endregion
+
     # region ====== Baseline ======
     # baseline_df, hit_df, miss_df, hit_snr, miss_snr = baseline_and_SNR(recruitement_df)
     # endregion

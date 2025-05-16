@@ -6,6 +6,7 @@ import pingouin as pg
 import scipy.stats as ss
 from multiprocessing import cpu_count, pool
 from matplotlib import pyplot as plt
+from scipy.signal import savgol_filter
 from sklearn.decomposition import PCA
 from statsmodels.formula.api import ols
 from tqdm import tqdm
@@ -116,7 +117,9 @@ def get_sub_supra_threshold(data, behavior_filter=None, genotype="WT", compariso
 def compare_sub_supra_within(data, behavior_filter=None, genotype="WT", comparison="sub"):
     threshold_trials, non_threshold_trials = get_sub_supra_threshold(data, behavior_filter=behavior_filter, genotype=genotype, comparison=comparison)
     colors_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color],
-                   "KO": [ppt.ko_color, ppt.ko_light_color]}
+                   "KO": [ppt.ko_color, ppt.ko_light_color],
+                   "WT-DMSO": [ppt.wt_color, ppt.wt_light_color], "WT-BMS": [ppt.wt_bms_color, ppt.wt_bms_light_color],
+                   "KO-DMSO": [ppt.all_ko_color, ppt.all_ko_light_color], "KO-BMS": [ppt.all_ko_bms_color, ppt.all_ko_bms_light_color]}
     # Asserting that the match between threshold and non-threshold trials for each animal
     common_IDs = set(threshold_trials["ID"]).intersection(non_threshold_trials["ID"])
     threshold_trials = threshold_trials[threshold_trials["ID"].isin(common_IDs)]
@@ -166,33 +169,75 @@ def compare_sub_supra_between(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo
     return data_gp1, data_gp2
 
 
-def compare_det_undet(data, genotype="WT", amplitude="all"):
+def compare_det_undet(data_df, genotype="WT", amplitude="all"):
     colors_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color],
                    "KO": [ppt.ko_color, ppt.ko_light_color],
-                   "WT-DMSO": [ppt.wt_color, ppt.wt_light_color], "KO-DMSO": [ppt.hypo_color, ppt.hypo_light_color],
-                   "WT-BMS": [ppt.wt_bms_color, ppt.wt_bms_light_color], "KO-BMS": [ppt.all_ko_bms_color, ppt.all_ko_bms_light_color]}
+                   "WT-DMSO": [ppt.wt_color, ppt.wt_light_color], "KO-DMSO": [ppt.all_ko_color, ppt.all_ko_light_color],
+                   "WT-BMS": [ppt.wt_bms_color, ppt.wt_bms_light_color], "KO-BMS": [ppt.all_ko_bms_color, ppt.all_ko_bms_light_color],
+                   "DMSO_det": [ppt.wt_color, ppt.all_ko_color], "DMSO_undet": [ppt.wt_light_color, ppt.all_ko_light_color],
+                   "BMS_det": [ppt.wt_bms_color, ppt.all_ko_bms_color], "BMS_undet": [ppt.wt_bms_light_color, ppt.all_ko_bms_light_color]}
     grouping_cols = ["Genotype", "ID", "behavior"]
+    data = data_df.copy()
+    data["rec_EXC_perc"] = data["act_EXC_perc"] + data["inh_EXC_perc"]
+    data["rec_INH_perc"] = data["act_INH_perc"] + data["inh_INH_perc"]
     # Filtering the amplitude
-    genotype_data = data[data["Genotype"] == genotype]
-    ampl_data = filter_amplitude(genotype_data, amplitude=amplitude, no_go=False).groupby(grouping_cols, as_index=False).mean()
-    det_data = ampl_data[ampl_data["behavior"] == True]
-    undet_data = ampl_data[ampl_data["behavior"] == False]
+    if genotype[-3:] == "det":
+        condition = genotype.split("_")[0]
+        detection = genotype.split("_")[1]
+        wt_data = data[data["Genotype"] == f"WT-{condition}"]
+        ko_data = data[data["Genotype"] == f"KO-{condition}"]
+        wt_ampl_data = filter_amplitude(wt_data, amplitude=amplitude, no_go=False).groupby(grouping_cols, as_index=False).mean()
+        ko_ampl_data = filter_amplitude(ko_data, amplitude=amplitude, no_go=False).groupby(grouping_cols, as_index=False).mean()
+        if detection == "det":
+            gp1 = wt_ampl_data[wt_ampl_data["behavior"] == True]
+            gp2 = ko_ampl_data[ko_ampl_data["behavior"] == True]
+            trials = "detected"
+        else:
+            gp1 = wt_ampl_data[wt_ampl_data["behavior"] == False]
+            gp2 = ko_ampl_data[ko_ampl_data["behavior"] == False]
+            trials = "undetected"
+        det_marker = False
+        paired = False
+        suptitle = f"Comparison of {trials} trials in {condition} conditions between WT and KO"
+    else:
+        genotype_data = data[data["Genotype"] == genotype]
+        ampl_data = filter_amplitude(genotype_data, amplitude=amplitude, no_go=False).groupby(grouping_cols, as_index=False).mean()
+        gp1 = ampl_data[ampl_data["behavior"] == True].copy()
+        gp2 = ampl_data[ampl_data["behavior"] == False].copy()
+        # keep only matching IDs
+        common_ids = np.intersect1d(gp1["ID"].values, gp2["ID"].values)
+        gp1 = gp1[gp1["ID"].isin(common_ids)].sort_values("ID")
+        gp2 = gp2[gp2["ID"].isin(common_ids)].sort_values("ID")
+        assert np.all(gp1.ID.values == gp2.ID.values), f"The IDs do not match"
+        det_marker = True
+        paired = True
+        suptitle = f"Comparison in {genotype} of detected trials and undetected trials"
     # Plotting the comparisons
     not_variables = ["ID", "Genotype", "behavior", "amplitude", "threshold", "bounded_x0"]
     variables = [col for col in data.columns if col not in not_variables]
-    fig, axes = plt.subplots(nrows=3, ncols=4, figsize=(24, 24), constrained_layout=True)
+    fig, axes = plt.subplots(nrows=4, ncols=4, figsize=(24, 32), constrained_layout=True)
     axes_flat = axes.flatten()
-    for variable, ax in zip(variables, axes_flat):
-        ppt.boxplot(ax, det_data[variable], undet_data[variable], ylabel=variable, paired=False, title="", ylim=[],
-                    colors=colors_dict[genotype], det_marker=True, force_markers_identity=False)
-    fig.suptitle(f"Comparison in {genotype} of detected trials and undetected trials"
-                 f"\n[amplitude filter={amplitude}]", fontsize=20)
+    for i, (variable, ax) in enumerate(zip(variables, axes_flat)):
+        ylim = [-10, 60] if i < 4 else ([-3, 5] if i < 8 else ([0, 15] if i < 12 else [-10, 60]))
+        if paired:
+            na_filter = (~np.isnan(gp1[variable].values) & ~np.isnan(gp2[variable].values))
+            gp1_plot = gp1[variable].values[na_filter]
+            gp2_plot = gp2[variable].values[na_filter]
+        else:
+            gp1_plot = gp1[variable].values
+            gp2_plot = gp2[variable].values
+        ppt.boxplot(ax, gp1_plot, gp2_plot, ylabel=variable, paired=paired, title="", ylim=ylim,
+                    colors=colors_dict[genotype], det_marker=det_marker, force_markers_identity=False)
+    used = len(variables)
+    for extra_ax in axes_flat[used:]:
+        extra_ax.set_axis_off()
+    fig.suptitle(f"{suptitle}\n[amplitude filter={amplitude}]", fontsize=15)
     title = f"comp_{genotype}_det_undet_{amplitude}"
     fig.canvas.manager.set_window_title(title)
-    if save_fig:
-        plt.savefig(f"{server_address}Threshold_analysis/{title}.pdf")
+    # if save_fig:
+    # plt.savefig(f"{server_address}stimulus_encoding/{title}.pdf")
     plt.show()
-    return det_data, undet_data
+    return gp1, gp2
 
 
 def group_comp_param(recs, parameter, ko_hypo_only=False, stim_ampl="all", ylim=[]):
@@ -417,7 +462,7 @@ def nogo_fa_cr(recs):
     return gp_data
 
 
-def delta_hit_miss_comp(feature_df, threshold_only=False, wt_threshold=False):
+def delta_hit_miss_comp(feature_df, threshold_only=False, wt_threshold=False, condition=None):
     """
     Compares the delta in recruited neurons (hit-miss) between genotypes.
 
@@ -429,6 +474,18 @@ def delta_hit_miss_comp(feature_df, threshold_only=False, wt_threshold=False):
     -------
 
     """
+    if condition is None:
+        wt_geno = "WT"
+        ko_geno = "KO-Hypo"
+        colors = [ppt.wt_color, ppt.hypo_color]
+    elif condition == "DMSO":
+        wt_geno = "WT-DMSO"
+        ko_geno = "KO-DMSO"
+        colors = [ppt.wt_color, ppt.all_ko_color]
+    elif condition == "BMS":
+        wt_geno = "WT-BMS"
+        ko_geno = "KO-BMS"
+        colors = [ppt.wt_bms_color, ppt.all_ko_bms_color]
     # Filtering out no go trials
     feature_df["rec_EXC_perc"] = feature_df["act_EXC_perc"] + feature_df["inh_EXC_perc"]
     feature_df["rec_INH_perc"] = feature_df["act_INH_perc"] + feature_df["inh_INH_perc"]
@@ -443,6 +500,7 @@ def delta_hit_miss_comp(feature_df, threshold_only=False, wt_threshold=False):
     miss = data[data["behavior"] == False]
     nogo = feature_df[feature_df["amplitude"] == 0]
     metrics = ['act_EXC_perc', 'inh_EXC_perc', 'rec_EXC_perc', 'act_INH_perc', 'inh_INH_perc', 'rec_INH_perc']
+    # metrics = ['act_EXC_amp', 'inh_EXC_amp', 'act_INH_amp', 'inh_INH_amp']
     def mean_by_group(sub, label):
         gp = sub.groupby(['ID', 'Genotype'])[metrics].mean().add_suffix(f'_{label}')
         return gp
@@ -456,42 +514,26 @@ def delta_hit_miss_comp(feature_df, threshold_only=False, wt_threshold=False):
         delta[f'Δ{m}_nogo'] = joined[f'{m}_hit'] - joined[f'{m}_nogo']
     delta = delta.reset_index()
     fig, axes = plt.subplots(2, 6, figsize=(36, 16), constrained_layout=True)
+    # fig, axes = plt.subplots(2, 4, figsize=(24, 16), constrained_layout=True)
     for col_idx, m in enumerate(metrics):
         ax1 = axes[0, col_idx]
         ax2 = axes[1, col_idx]
-        wt = delta[delta['Genotype'] == "WT"][f'Δ{m}']
-        hypo = delta[delta['Genotype'] == "KO-Hypo"][f'Δ{m}']
-        wt_nogo = delta[delta['Genotype'] == "WT"][f'Δ{m}_nogo']
-        hypo_nogo = delta[delta['Genotype'] == "KO-Hypo"][f'Δ{m}_nogo']
-        ppt.boxplot(ax1, wt, hypo, ylabel=m, title='Δ Hit–Miss',
-                    colors=[ppt.wt_color, ppt.hypo_color], paired=False, ylim=[-10, 50])
-        ppt.boxplot(ax2, wt_nogo, hypo_nogo, ylabel=m, title='Δ Hit–NoGo',
-                    colors=[ppt.wt_color, ppt.hypo_color], paired=False, ylim=[-20, 70])
-    # # Retrieving the mean recruitment during hits and miss for each animal and computing the delta
-    # gp_data = data.drop(columns=["threshold", "bounded_x0", "amplitude"]).groupby(["ID", "Genotype", "behavior"], as_index=False).mean()
-    # gp_nogo = nogo.drop(columns=["threshold", "bounded_x0", "amplitude", "behavior"]).groupby(["ID", "Genotype"], as_index=False).mean().set_index("ID")
-    # hit_data = gp_data[gp_data["behavior"] == True].copy().drop(columns=["behavior", "Genotype"]).set_index("ID")
-    # # nogo_data = gp_nogo.drop(columns=["behavior", "Genotype"]).set_index("ID")
-    # delta_data = hit_data - gp_data[gp_data["behavior"] == False].drop(columns=["behavior", "Genotype"]).set_index("ID")
-    # delta_data = delta_data.merge(gp_data[["ID", "Genotype"]].drop_duplicates(), how="left", left_index=True, right_on="ID")
-    # delta_nogo_data = hit_data - gp_nogo.drop(columns=["Genotype"])
-    # delta_nogo_data = delta_nogo_data.merge(gp_nogo[["Genotype"]], how="left", left_index=True, right_index=True)
-    # fig, ax = plt.subplots(nrows=2, ncols=6, figsize=(36, 16), constrained_layout=True)
-    # for col, metric in enumerate(["act_EXC_perc", "inh_EXC_perc", "rec_EXC_perc", "act_INH_perc", "inh_INH_perc", "rec_INH_perc"]):
-    #     ppt.boxplot(ax[0, col], delta_data[delta_data["Genotype"] == "WT"][metric].values,
-    #                 delta_data[delta_data["Genotype"] == "KO-Hypo"][metric].values,
-    #                 ylabel=metric,
-    #                 paired=False, title="Δ Hit-Miss", ylim=[-10, 50],
-    #                 colors=[ppt.wt_color, ppt.hypo_color])
-    #     ppt.boxplot(ax[1, col], delta_nogo_data[delta_nogo_data["Genotype"] == "WT"][metric].values,
-    #                 delta_nogo_data[delta_nogo_data["Genotype"] == "KO-Hypo"][metric].values,
-    #                 ylabel=metric,
-    #                 paired=False, title="Δ Hit-NoGo", ylim=[-20, 70],
-    #                 colors=[ppt.wt_color, ppt.hypo_color])
-    fig.suptitle(f"Delta in recruitment of neurons (WT vs. KO-Hypo)\n[Only threshold={threshold_only} (WT={wt_threshold})]")
-    fig.canvas.manager.set_window_title(f"Recruitment Delta [threshold={threshold_only}_WT={wt_threshold}]")
-    plt.show()
-    # return delta_data, delta_nogo_data
+        wt = delta[delta['Genotype'] == wt_geno][f'Δ{m}']
+        ko = delta[delta['Genotype'] == ko_geno][f'Δ{m}']
+        wt_nogo = delta[delta['Genotype'] == wt_geno][f'Δ{m}_nogo']
+        ko_nogo = delta[delta['Genotype'] == ko_geno][f'Δ{m}_nogo']
+        ppt.boxplot(ax1, wt, ko, ylabel=m, title='Δ Hit–Miss',
+                    colors=colors, paired=False, ylim=[-10, 50])
+                    # colors=[ppt.wt_color, ppt.hypo_color], paired=False, ylim=[-4, 4])
+        ppt.boxplot(ax2, wt_nogo, ko_nogo, ylabel=m, title='Δ Hit–NoGo',
+                    colors=colors, paired=False, ylim=[-30, 70])
+                    # colors=[ppt.wt_color, ppt.hypo_color], paired=False, ylim=[-4, 4])
+    fig.suptitle(f"Delta in recruitment of neurons ({wt_geno} vs. {ko_geno})\n[Only threshold={threshold_only} (WT={wt_threshold})]")
+    # fig.suptitle(f"Delta in peak delay of neurons (WT vs. KO-Hypo)\n[Only threshold={threshold_only} (WT={wt_threshold})]")
+    fig.canvas.manager.set_window_title(f"Recruitment Delta (cond={condition})[threshold={threshold_only}_WT={wt_threshold}]")
+    # fig.canvas.manager.set_window_title(f"Peak delay Delta [threshold={threshold_only}_WT={wt_threshold}]")
+    plt.savefig(f"{server_address}stimulus_encoding/delta_{condition}_thre={threshold_only}_wt={wt_threshold}.pdf")
+    # plt.show()
     return delta
 
 # endregion ============================================================================================================
@@ -513,7 +555,7 @@ def nb_neurons(recs):
             ylim = [0, 100] if metric == "perc" else [0, 150]
             ppt.boxplot(ax[i, j], wt, ko, ylabel=f"{n_type} neurons ({metric})", paired=False, title="", ylim=ylim,
                         colors=[ppt.wt_color, ppt.all_ko_color], det_marker=False, force_markers_identity=False)
-    fig.suptitle("Number and percentage of neurons in the field of view", fontsize=10)
+    fig.suptitle("Comparison between WT and Fmr1KO of the number and percentage of neurons in the field of view", fontsize=10)
     fig.canvas.manager.set_window_title("Nb neurons FOV")
     plt.show()
     return data
@@ -874,6 +916,49 @@ def plot_neuron_perc_amp(recs, pattern="recruited", detected_trials=True, undete
     plt.show()
     return results
 
+def plot_response_variance(features_df, variable="act_EXC_perc"):
+    """Plot the variance in the number of activated pyramidal neurons according to the amplitude of stimulation for the 3 genotypes"""
+    color_dict = {"WT": ppt.wt_color, "KO": ppt.ko_color, "KO-Hypo": ppt.hypo_color}
+    gp_data = features_df.drop(columns=["bounded_x0", "behavior"]).groupby(["ID", "Genotype", "threshold", "amplitude"], as_index=False).std()
+    rows = []
+    for rec_id in gp_data["ID"].unique():
+        rec_data = gp_data[gp_data["ID"] == rec_id]
+        threshold = rec_data.threshold.values[0]
+        var_list = []
+        for diff_to_threshold in np.arange(-10, 11, 2):
+            amp = threshold + diff_to_threshold
+            if 0 < amp <=12:
+                var_list.append(rec_data[rec_data.amplitude == amp][variable].values[0])
+            else:
+                var_list.append(np.nan)
+        rows.append({"ID": rec_id, "Genotype": rec_data.Genotype.values[0], "Threshold": threshold, "Variance": var_list})
+    var_data = pd.DataFrame(rows)
+    var_data["Relative_Variance"] = var_data["Variance"].apply(lambda lst: np.array(lst, dtype=float)).apply(lambda arr: arr / np.nanmax(arr))
+    # Plotting
+    fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(20, 10), constrained_layout=True)
+    for _, rec_row in var_data.iterrows():
+        ax[0].scatter(np.arange(-10, 11, 2), rec_row["Variance"], color=color_dict[rec_row["Genotype"]], lw=2, alpha=0.5, s=5)
+        ax[0].plot(np.arange(-10, 11, 2), rec_row["Variance"], color=color_dict[rec_row["Genotype"]], lw=2, alpha=0.5)
+        ax[1].scatter(np.arange(-10, 11, 2), rec_row["Relative_Variance"], color=color_dict[rec_row["Genotype"]], lw=2, alpha=0.5, s=5)
+        ax[1].plot(np.arange(-10, 11, 2), rec_row["Relative_Variance"], color=color_dict[rec_row["Genotype"]], lw=2, alpha=0.5)
+    for ax_id in range(2):
+        ax[ax_id].set_xlabel("Amplitude difference to threshold (in µm)", fontsize=10)
+        ax[ax_id].set_xticks(np.arange(-10, 11, 2))
+    ax[0].set_ylabel(f"Std in {variable}", fontsize=10)
+    ax[1].set_ylabel(f"Relative Std in {variable}", fontsize=10)
+    # Plotting the mean curves per genotype
+    for geno in var_data.Genotype.unique():
+        geno_subset = var_data[var_data["Genotype"] == geno]
+        var_array = np.stack(geno_subset["Variance"].values)
+        rel_var_array = np.stack(geno_subset["Relative_Variance"].values)
+        mean_var = np.nanmean(var_array, axis=0)
+        rel_mean_var = np.nanmean(rel_var_array, axis=0)
+        ax[0].plot(np.arange(-10, 11, 2), mean_var, color=color_dict[geno], lw=4, alpha=0.75)
+        ax[1].plot(np.arange(-10, 11, 2), rel_mean_var, color=color_dict[geno], lw=4, alpha=0.75)
+    fig.suptitle(f"Variance in {variable} across amplitude of stimulation", fontsize=12)
+    fig.canvas.manager.set_window_title(f"Var_{variable}_ampl")
+    plt.show()
+    return var_data
 
 # endregion ============================================================================================================
 # region ===================================== Neuronal clusters =======================================================
@@ -972,19 +1057,23 @@ def hit_tuned_neurons(recs, normalize=True):
         else:
             nb_resp_exc = 1
             nb_resp_inh = 1
-        exc_activated = rec.hit_tuned_exc.tolist().count(1)/nb_resp_exc
-        exc_inhibited = rec.hit_tuned_exc.tolist().count(-1)/nb_resp_exc
-        inh_activated = rec.hit_tuned_inh.tolist().count(1)/nb_resp_inh
-        inh_inhibited = rec.hit_tuned_inh.tolist().count(-1)/nb_resp_inh
+        exc_activated_rec = rec.hit_tuned_exc.tolist().count(1)/nb_resp_exc
+        exc_inhibited_rec = rec.hit_tuned_exc.tolist().count(-1)/nb_resp_exc
+        inh_activated_rec = rec.hit_tuned_inh.tolist().count(1)/nb_resp_inh
+        inh_inhibited_rec = rec.hit_tuned_inh.tolist().count(-1)/nb_resp_inh
         nb_exc = rec.zscore_exc.shape[0]
         nb_inh = rec.zscore_inh.shape[0]
+        exc_activated_tot = rec.hit_tuned_exc.tolist().count(1)/nb_exc
+        exc_inhibited_tot = rec.hit_tuned_exc.tolist().count(-1)/nb_exc
+        inh_activated_tot = rec.hit_tuned_inh.tolist().count(1)/nb_inh
+        inh_inhibited_tot = rec.hit_tuned_inh.tolist().count(-1)/nb_inh
         print(f"EXC: {rec.hit_tuned_exc.tolist().count(1)} act {rec.hit_tuned_exc.tolist().count(-1)} inh / {nb_resp_exc} / {nb_exc}")
         print(f"INH: {rec.hit_tuned_inh.tolist().count(1)} act {rec.hit_tuned_inh.tolist().count(-1)} inh / {nb_resp_inh} / {nb_inh}")
         rows.append({"Genotype": rec.genotype, "ID": rec.filename,
-                     "exc_activated": exc_activated, "exc_inhibited": exc_inhibited,
-                     "inh_activated": inh_activated, "inh_inhibited": inh_inhibited,
-                     "exc_activated_perc": exc_activated/nb_exc, "exc_inhibited_perc": exc_inhibited/nb_exc,
-                     "inh_activated_perc": inh_activated/nb_inh, "inh_inhibited_perc": inh_inhibited/nb_inh})
+                     "exc_activated": exc_activated_rec, "exc_inhibited": exc_inhibited_rec,
+                     "inh_activated": inh_activated_rec, "inh_inhibited": inh_inhibited_rec,
+                     "exc_activated_perc": exc_activated_tot, "exc_inhibited_perc": exc_inhibited_tot,
+                     "inh_activated_perc": inh_activated_tot, "inh_inhibited_perc": inh_inhibited_tot})
     data = pd.DataFrame(rows)
     fig, ax = plt.subplots(nrows=4, ncols=4, figsize=(24, 32), constrained_layout=True)
     for col_id, cluster in enumerate(["exc_activated", "exc_inhibited", "inh_activated", "inh_inhibited"]):
@@ -1088,11 +1177,11 @@ if __name__ == '__main__':
     BMS_analysis = False
     ### Initialisation of recs instances ###
     if BMS_analysis:
-        directory = "C:/Users/cvandromme/Desktop/Data_DMSO_BMS/"
-        roi_path = "C:/Users/cvandromme/Desktop/Fmko_bms&dmso_info.xlsx"
+        directory = "C:/Users/cvandromme/Desktop/Tactile_detection/Data_DMSO_BMS/"
+        roi_path = "C:/Users/cvandromme/Desktop/Tactile_detection/Fmko_bms&dmso_info.xlsx"
     else:
-        directory = "C:/Users/cvandromme/Desktop/Data_without/"
-        roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
+        directory = "C:/Users/cvandromme/Desktop/Tactile_detection/Data/"
+        roi_path = "C:/Users/cvandromme/Desktop/Tactile_detection/FmKO_ROIs&inhibitory.xlsx"
     server_address = "Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/Figures_april_2025/"
     roi_info = pd.read_excel(roi_path)
     files = os.listdir(directory)
@@ -1120,21 +1209,23 @@ if __name__ == '__main__':
     # ====== Response features ======
 
     for rec in recs.values():
-        # rec.responsivity()
-        # rec.peak_delay_amp()
-        rec.auc()
-        rec.hit_tuned()
-        rec.amp_tuned()
+        rec.peak_delay_amp()
+        # rec.auc()
+        # rec.hit_tuned()
+        # rec.amp_tuned()
     full_data = get_features(recs.values())
-    data = full_data[full_data["ID"] != 5886]
+    if not BMS_analysis:
+        data = full_data[full_data["ID"] != 5886]
+    else:
+        data = full_data
     #   --- Within ---
-    compare_sub_supra_within(data, behavior_filter=False, genotype="KO", comparison="all_sub")
+    # compare_sub_supra_within(data, behavior_filter=False, genotype="KO", comparison="all_sub")
     # for filter in [None, True, False]:
     #     for gen in ["KO", "KO-Hypo", "WT"]:
     #         for comp in ["sub", "all_sub", "supra", "all_supra"]:
     #             compare_sub_supra_within(data, behavior_filter=filter, genotype=gen, comparison=comp)
     #   --- Between ---
-    wt, hypo = compare_sub_supra_between(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo", gp1_amps="supra", gp2_amps="supra", colors=[ppt.wt_color, ppt.hypo_color])
+    # wt, hypo = compare_sub_supra_between(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo", gp1_amps="supra", gp2_amps="supra", colors=[ppt.wt_color, ppt.hypo_color])
     # --- Hit vs. Miss ---
     det, undet = compare_det_undet(data, genotype="KO-Hypo", amplitude="all_supra") # /!\ full_data for all amp and data for threshold analysis
 
@@ -1146,8 +1237,8 @@ if __name__ == '__main__':
     #                                homogeneity=[False, True])
 
     # nogo_df = nogo_fa_cr(recs.values())
-    # delta_df, delta_nogo_df = delta_hit_miss_comp(data, threshold_only=True, wt_threshold=True)
-    # delta_df = delta_hit_miss_comp(data, threshold_only=True, wt_threshold=True)
+    # delta_df, delta_nogo_df = delta_hit_miss_comp(data, threshold_only=False, wt_threshold=False)
+    # delta_df = delta_hit_miss_comp(full_data, threshold_only=False, wt_threshold=False, condition="BMS") #/!\ full_data for all amp and data for threshold analysis
 
 
     # ====== Responsivity ======
@@ -1156,8 +1247,8 @@ if __name__ == '__main__':
     # plot_neuron_frac_det_undet(pattern=-1, ko_hypo_only=True, stim_ampl="session_threshold", no_go_normalize=True, ylim=[0, 60])
     # resp_contrast(pattern="recruited", stim_ampl="session_threshold", method="delta", ylim=[-10, 30])
     #
-    results = plot_neuron_perc_amp(recs.values(), pattern="activated", detected_trials=True, undetected_trials=True, ylim=[0, 30],
-                                   transformation="yeojohnson", normality=[False, False], homogeneity=[False, False])
+    # results = plot_neuron_perc_amp(recs.values(), pattern="activated", detected_trials=True, undetected_trials=True, ylim=[0, 30],
+    #                                transformation="yeojohnson", normality=[False, False], homogeneity=[False, False])
     # post_EXC = results["post_EXC"]
     # post_EXC_btw = post_EXC["between"]
     # post_INH = results["post_INH"]
@@ -1171,7 +1262,7 @@ if __name__ == '__main__':
     #     rows.append({"Genotype": rec.genotype, "ID": rec.filename, "EXC_classif": rec.hit_tuned_exc, "INH_classif": rec.hit_tuned_inh,})
     # result = pd.DataFrame(rows)
     #
-    # hit_tuned_df = hit_tuned_neurons(recs, normalize=False)
+    # hit_tuned_df = hit_tuned_neurons(recs, normalize=True)
     # consistency_df = neurons_hit_consistency(recs)
     # fig, ax = plt.subplots(figsize=(8, 2), constrained_layout=True)
     # im = ax.imshow(np.vstack([recs[7553].hit_tuned_exc, recs[7553].amp_tuned_exc]), cmap="inferno", aspect='auto', interpolation='nearest')
@@ -1179,4 +1270,4 @@ if __name__ == '__main__':
     # plt.show()
 
     # tuned_df = plot_hit_amp_tuned(recs.values())
-
+    # var_df = plot_response_variance(full_data, variable="act_EXC_perc")
