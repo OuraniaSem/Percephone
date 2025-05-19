@@ -208,6 +208,7 @@ class Recording:
         np.save(self.input_path + "matrice_resp_exc.npy", self.matrices["EXC"]["Responsivity"])
         np.save(self.input_path + "matrice_resp_inh.npy", self.matrices["INH"]["Responsivity"])
 
+
     def hit_tuned(self):
         self.hit_tuned_exc = classify_neurons(self, n_type="EXC", seed=42, n_shuffles=5000, zscore=False)
         self.hit_tuned_inh = classify_neurons(self, n_type="INH", seed=42, n_shuffles=5000, zscore=False)
@@ -776,7 +777,6 @@ class RecordingAmplDet(Recording):
         filtered_para_mat = np.where(resp_mat == pattern, para_mat, np.nan)
         return np.nanmean(filtered_para_mat, axis=0)
 
-
     def get_estimated_activity(self, zscore=True, n_type="EXC", estimator="mean", real_duration=True):
         assert n_type in ["EXC", "INH"], "Please provide a valid neuron type (EXC or INH)"
         if zscore:
@@ -791,6 +791,19 @@ class RecordingAmplDet(Recording):
                 data = neuron[trial_start : trial_start + int(trial_duration)]
                 est_act_mat[n_id, trial_id] = data.mean() if estimator == "mean" else (data.std() if estimator == "std" else np.nan)
         return est_act_mat
+
+    def reliable_responders(self):
+        """Defines which neurons are considered as reliable responders. Here we choose to consider every neuron that is
+        recruited in more than 5 detected trials."""
+        resp_exc = self.matrices['EXC']["Responsivity"][:, self.detected_stim]
+        resp_inh = self.matrices['INH']["Responsivity"][:, self.detected_stim]
+        self.reliable_exc = np.argwhere(np.count_nonzero(resp_exc != 0, axis=1) > 5).flatten()
+        self.reliable_inh = np.argwhere(np.count_nonzero(resp_inh != 0, axis=1) > 5).flatten()
+        self.reliable_act_exc = np.argwhere(np.count_nonzero(resp_exc == 1, axis=1) > 5).flatten()
+        self.reliable_inh_exc = np.argwhere(np.count_nonzero(resp_exc == -1, axis=1) > 5).flatten()
+        self.reliable_act_inh = np.argwhere(np.count_nonzero(resp_inh == 1, axis=1) > 5).flatten()
+        self.reliable_inh_inh = np.argwhere(np.count_nonzero(resp_inh == -1, axis=1) > 5).flatten()
+
 
 if __name__ == '__main__':
     import percephone.plts.heatmap as hm

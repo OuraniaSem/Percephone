@@ -124,6 +124,108 @@ def compare_tbt_var_per_amp(recruitment_df):
     return hit
 
 
+def filter_reliable(mean_activity_df, recs, pattern="resp", get_non_reliable=False):
+    """Filter the mean activity DataFrame to keep only the reliably responding neurons"""
+    df = mean_activity_df.copy()
+    for rec in recs:
+        rec.reliable_responders()
+        # Retrieving the lis corresponding to the pattern
+        pattern_dict = {"resp": [rec.reliable_exc, rec.reliable_inh],
+                        "act": [rec.reliable_act_exc, rec.reliable_act_inh],
+                        "inh": [rec.reliable_inh_exc, rec.reliable_inh_inh]}
+        # Creating a combined list of reliable responders neurons
+        rec.reliable_responders()
+        reliable_exc = [f"EXC_{i}" for i in pattern_dict[pattern][0]]
+        reliable_inh = [f"INH_{i}" for i in pattern_dict[pattern][1]]
+        reliable = reliable_exc + reliable_inh
+        # Filtering out the non-reliable neurons
+        if get_non_reliable:
+            df = df[~((df["ID"] == rec.filename) & (df["Neuron"].isin(reliable)))].reset_index(drop=True)
+        else:
+            df = df[~((df["ID"] == rec.filename) & ~(df["Neuron"].isin(reliable)))].reset_index(drop=True)
+    return df
+
+def compare_nb_reliable_responders(recs):
+    rows = []
+    for rec in recs:
+        rec.reliable_responders()
+        rows.append({"ID": rec.filename, "Genotype": rec.genotype,
+                     "Nb_reliably_act": len(rec.reliable_act_exc), "Nb_reliably_inh": len(rec.reliable_inh_exc)})
+    data = pd.DataFrame(rows)
+    fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(12, 8), constrained_layout=True)
+    for col, pattern in enumerate(["Nb_reliably_act", "Nb_reliably_inh"]):
+        ppt.boxplot(ax[col], data[data["Genotype"] == "WT"][pattern].values,
+                    data[data["Genotype"] == "KO-Hypo"][pattern].values,
+                    ylabel="Nb reliable responders", paired=False, title=pattern, ylim=[0, 80],
+                    colors=[ppt.wt_color, ppt.hypo_color], det_marker=False, force_markers_identity=False)
+    fig.suptitle("Comparison of the number of EXC reliable responders between genotypes", fontsize=14)
+    fig.canvas.manager.set_window_title("Nb_reliable_comp")
+    plt.show()
+    return data
+
+def compare_threshold_trials_cosine_similarity(mean_activity_df, include_gaba=False, title_precision=""):
+    """Compares the mean cosine similarity between each pairs of threshold trials between genotypes, considering each
+    behavioral label independently. Are threshold trials more similar in WT compared to KO-Hypo ?"""
+    rows = []
+    for rec_id in mean_activity_df.ID.unique():
+        # Selecting the threshold trials
+        rec_data = mean_activity_df[(mean_activity_df["ID"] == rec_id) & (mean_activity_df["Amplitude"] == mean_activity_df["Threshold"])].sort_values(by=["Trial", "Neuron"]).copy()
+        row = {"ID": rec_id, "Genotype": rec_data.Genotype.values[0]}
+        if not include_gaba:
+            rec_data = rec_data[rec_data["Neuron"].str.startswith("EXC")]
+        # Splitting hit and miss data
+        miss_data = rec_data[rec_data["Behavior"] == False]
+        hit_data = rec_data[rec_data["Behavior"] == True]
+        # Computing cosine similarity (resp and zscore) between pairs of trials of the same behavioral label
+        for behavior_label, behavior_data in zip(["Miss", "Hit"], [miss_data, hit_data]):
+            for metric in ["Resp", "Stim_mean", "Prestim_mean"]:
+                matrix = []
+                for trial in behavior_data.Trial.unique():
+                    matrix.append(behavior_data[behavior_data["Trial"] == trial][metric].values)
+                matrix = np.array(matrix)
+                cos_sim_mat = cosine_similarity(matrix)
+                mean_cos_sim = cos_sim_mat[~np.eye(cos_sim_mat.shape[0], dtype=bool)].mean()
+                row[f"{metric}_{behavior_label}"] = mean_cos_sim
+        rows.append(row)
+    data = pd.DataFrame(rows)
+    # Plotting the comparisons
+    fig, ax = plt.subplots(nrows=1, ncols=4, figsize=(24, 8), constrained_layout=True)
+    colors = {"Miss": [ppt.wt_light_color, ppt.hypo_light_color], "Hit": [ppt.wt_color, ppt.hypo_color]}
+    for col, param in enumerate(["Resp_Miss", "Stim_mean_Miss", "Resp_Hit", "Stim_mean_Hit"]):
+        behavior = param.split("_")[-1]
+        ppt.boxplot(ax[col], data[data["Genotype"] == "WT"][param].values, data[data["Genotype"] == "KO-Hypo"][param].values,
+                    ylabel="Mean cosine similarity", paired=False, title=param, ylim=[], colors=colors[behavior], det_marker=False,
+                    force_markers_identity=False)
+    fig.suptitle(f"Comparison of the mean cosine similarity between pairs of threshold trials"
+                 f"\n[GABAergic interneurons included = {include_gaba}]"
+                 f"\n{title_precision}", fontsize=14)
+    fig.canvas.manager.set_window_title(f"Cosine_sim_comp_gaba={include_gaba}_{title_precision}")
+    # Plotting the correlation
+    fig_corr, ax_corr = plt.subplots(nrows=1, ncols=1, figsize=(8, 8), constrained_layout=True)
+    colors_corr = {"WT": ppt.wt_color, "KO-Hypo": ppt.hypo_color}
+    for y_legend, geno in zip([0.95, 0.85], ["WT", "KO-Hypo"]):
+        x = data[data["Genotype"] == geno]["Prestim_mean_Hit"].values
+        y = data[data["Genotype"] == geno]["Stim_mean_Hit"].values
+        x = x[~np.isnan(x)]
+        y = y[~np.isnan(y)]
+        results = dict(linregress(x, y)._asdict())
+        r2 = results["rvalue"] ** 2
+        line = results["slope"] * x + results["intercept"]
+        # Plot the data points and regression line
+        ax_corr.scatter(x, y, color=colors_corr[geno], alpha=0.7, s=10, marker="+")
+        ax_corr.plot(x, line, color=colors_corr[geno], lw=2)
+        ax_corr.text(0.05, y_legend, f"$r^2 = {r2:.3f}$\np-value = {results["pvalue"]:.3f}", transform=ax_corr.transAxes,
+                     fontsize=8, verticalalignment="top", color=colors_corr[geno])
+    ax_corr.set_xlabel("Prestim cosine sim", fontsize=12)
+    ax_corr.set_ylabel("Stim cosine stim", fontsize=12)
+    fig_corr.suptitle(f"Cosine similarity between pre-stimulus and stimulus for hit trials"
+                      f"\n[GABAergic interneurons included = {include_gaba}]"
+                      f"\n{title_precision}", fontsize=14)
+    fig_corr.canvas.manager.set_window_title(f"Corr_cosine_sim_gaba={include_gaba}_{title_precision}")
+    plt.show()
+    return data
+
+
 # endregion ============================================================================================================
 # region ======================================== Pre-stimulus =========================================================
 
@@ -671,7 +773,7 @@ def baseline_and_SNR(recruitment_df):
 
 
 if __name__ == '__main__':
-    BMS_analysis = True
+    BMS_analysis = False
     # region ====== Initialisation of recs instances ======
     if BMS_analysis:
         directory = "C:/Users/cvandromme/Desktop/Tactile_detection/Data_DMSO_BMS/"
@@ -720,13 +822,21 @@ if __name__ == '__main__':
 
     # region ====== TBT variability ======
     # recruitement_df = get_features(recs.values(), amp_delay=False)
-    # activity_long_df = get_mean_trial_activity_df(recs.values(), zscore=True)
+    activity_long_df = get_mean_trial_activity_df(recs.values(), zscore=True)
     # activity_long_dff = get_mean_trial_activity_df(recs.values(), zscore=False)
     # prestim_df = prestim_activated_neurons(filtered_activity_df)
     # prestim_vector_df = prestim_act_vector(activity_long_df, metric="Stim_mean", hit_activated_only=False)
     # prestim_vector_dff = prestim_act_vector(activity_long_dff, metric="Diff_mean", hit_activated_only=True)
     # tbt_recr_var_df = compare_tbt_var_per_amp(recruitement_df)
     # pca_df = pca(activity_long_df)
+
+    nb_reliable_df = compare_nb_reliable_responders(recs.values())
+    reliable_activity_df = filter_reliable(activity_long_df[~activity_long_df["ID"].isin([6606, 6611])], recs.values(),
+                                           pattern="act", get_non_reliable=False)
+    non_reliable_activity_df = filter_reliable(activity_long_df[~activity_long_df["ID"].isin([6606, 6611])], recs.values(),
+                                               pattern="act", get_non_reliable=True)
+    cosine_sim_df = compare_threshold_trials_cosine_similarity(reliable_activity_df, include_gaba=False,
+                                                               title_precision="Reliably activated neurons")
     # endregion
 
     # region ====== Pre-stimulus ======

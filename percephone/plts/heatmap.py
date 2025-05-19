@@ -545,11 +545,11 @@ if __name__ == '__main__':
     plot_normal_heatmap = True
     if user == "Célien":
         if BMS_analysis:
-            directory = "C:/Users/cvandromme/Desktop/Data_DMSO_BMS/"
-            roi_path = "C:/Users/cvandromme/Desktop/Fmko_bms&dmso_info.xlsx"
+            directory = "C:/Users/cvandromme/Desktop/Tactile_detection/Data_DMSO_BMS/"
+            roi_path = "C:/Users/cvandromme/Desktop/Tactile_detection/Fmko_bms&dmso_info.xlsx"
         else:
-            directory = "C:/Users/cvandromme/Desktop/Data/"
-            roi_path = "C:/Users/cvandromme/Desktop/FmKO_ROIs&inhibitory.xlsx"
+            directory = "C:/Users/cvandromme/Desktop/Tactile_detection/Data/"
+            roi_path = "C:/Users/cvandromme/Desktop/Tactile_detection/FmKO_ROIs&inhibitory.xlsx"
         server_address = "Z:/Current_members/Ourania_Semelidou/2p/Figures_paper/"
     elif user == "Théo":
         directory = "/datas/Théo/Projects/Percephone/data/Amplitude_Detection/loop_format_tau_02/"
@@ -574,7 +574,7 @@ if __name__ == '__main__':
                     interactive_heatmap(rec, rec.zscore_exc)
 
     else:
-        rec_directory = "C:/Users/cvandromme/Desktop/Data_without/20241206_7554_00_synchro/"
+        rec_directory = "C:/Users/cvandromme/Desktop/Tactile_detection/Data/20231104_5873_04_synchro/"
         rec = RecordingAmplDet(rec_directory, 0, roi_path, cache=True, correction=False)
         # rec.responsivity()
         # rec.peak_delay_amp()
