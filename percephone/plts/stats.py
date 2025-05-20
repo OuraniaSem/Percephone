@@ -642,7 +642,7 @@ def curveplot(ax, data, between="Genotype", within="Trial", variable=None,
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
     ax.set_xticks(measurements)
-    ax.tick_params(axis='both', labelsize=10)
+    ax.tick_params(axis='both', labelsize=35)
     ax.spines[['right', 'top', ]].set_visible(False)
     # Setting the ylim
     min_data = np.nanmin(data[variable])

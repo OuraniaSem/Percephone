@@ -16,7 +16,7 @@ import percephone.plts.stats as ppt
 # endregion ============================================================================================================
 # region ======================================== Response features ====================================================
 
-def get_features(recs, amp_delay=True):
+def get_features(recs, amp_delay=True, auc=False):
     """
     Get the neuronal percentage of recruited neurons for both neuron type for all trials for all recordings and build a
     DataFrame.
@@ -54,6 +54,13 @@ def get_features(recs, amp_delay=True):
             "inh_EXC_delay": rec.get_mean_param(pattern=-1, n_type="EXC", parameter="Peak_delay"),
             "act_INH_delay": rec.get_mean_param(pattern=1, n_type="INH", parameter="Peak_delay"),
             "inh_INH_delay": rec.get_mean_param(pattern=-1, n_type="INH", parameter="Peak_delay")})
+        if auc:
+            feature_vectors.update({
+            # Mean peak amplitude for responsive neurons
+            "act_EXC_auc": rec.get_mean_param(pattern=1, n_type="EXC", parameter="AUC"),
+            "inh_EXC_auc": rec.get_mean_param(pattern=-1, n_type="EXC", parameter="AUC"),
+            "act_INH_auc": rec.get_mean_param(pattern=1, n_type="INH", parameter="AUC"),
+            "inh_INH_auc": rec.get_mean_param(pattern=-1, n_type="INH", parameter="AUC")})
         nb_trials = len(feature_vectors["behavior"])
         for trial_id in range(nb_trials):
             row = {"ID": rec.filename, "Genotype": rec.genotype, "threshold": rec.session_threshold, "bounded_x0": rec.bounded_x0}
@@ -863,7 +870,8 @@ def resp_contrast(pattern="recruited", stim_ampl="all", method="ratio", ylim=[])
 
 
 def plot_neuron_perc_amp(recs, pattern="recruited", detected_trials=True, undetected_trials=True, nogo_norm=False, ylim=[],
-                         transformation=None, normality=[False, False], homogeneity=[False, False]):
+                         transformation=None, normality=[False, False], homogeneity=[False, False], qq_show=True,
+                         colors=["#c57c9a", "firebrick", "#326993"]):
     pat_dict = {"recruited": 0, "activated": 1, "inhibited": -1}
     assert pattern in pat_dict.keys()
     assert detected_trials or undetected_trials
@@ -874,6 +882,10 @@ def plot_neuron_perc_amp(recs, pattern="recruited", detected_trials=True, undete
     for i, n_type in enumerate(["EXC", "INH"]):
         rows = []
         for rec in recs:
+            if rec.genotype != "KO-Hypo" and len(rec.genotype.split("-")) > 1:    # Handling the case of DMSO-BMS analysis
+                rec_id = f"{rec.filename}-{rec.genotype.split('-')[1]}"
+            else:
+                rec_id = rec.filename
             # Computing the total number of neurons
             total_n = rec.zscore_exc.shape[0] if n_type == "EXC" else rec.zscore_inh.shape[0]
             # Retrieving the responsivity matrix
@@ -898,14 +910,14 @@ def plot_neuron_perc_amp(recs, pattern="recruited", detected_trials=True, undete
                     recruited_det -= recruited_no_go
                     recruited_det = 0 if recruited_det < 0 else recruited_det
                 perc_n_det = (recruited_det / total_n) * 100
-                row = {"ID": rec.filename, "Genotype": rec.genotype, "Amplitude": amp, f"perc_{n_type}": perc_n_det}
+                row = {"ID": rec_id, "Genotype": rec.genotype, "Amplitude": amp, f"perc_{n_type}": perc_n_det}
                 rows.append(row)
         data = pd.DataFrame(rows)
         data_nan = data.fillna(0)
         test, post_hoc = ppt.curveplot(ax[i], data_nan, between="Genotype", within="Amplitude", variable=f"perc_{n_type}",
                                        title=f"Percentage of {pattern} {n_type} neurons", data_points=False,
-                                       ylabel=None, xlabel=None, ylim=[0, 30], colors=["#c57c9a", "firebrick", "#326993"],
-                                       id_display=True, legend_display=False, qq_show=True, transformation=transformation, consider_normality=normality[i],
+                                       ylabel=None, xlabel=None, ylim=ylim, colors=colors,
+                                       id_display=True, legend_display=False, qq_show=qq_show, transformation=transformation, consider_normality=normality[i],
                                        consider_homogeneity=homogeneity[i])
         results[f"data_{n_type}"] = data_nan
         results[f"test_{n_type}"] = test
@@ -989,6 +1001,7 @@ def get_concat_act(rec, n_type="EXC", zscore=True, pre_stim=False):
         frames_trials.append(activity[:, time:time + duration])
     return np.concatenate(frames_trials, axis=1)
 
+
 def pca_neurons(recs, n_type="EXC", min_trials=5, pre_stim=False):
     """
     Try to cluster neurons based on their activity.
@@ -1034,6 +1047,7 @@ def pca_neurons(recs, n_type="EXC", min_trials=5, pre_stim=False):
     fig.canvas.manager.set_window_title("PCA neuron act")
     plt.show()
     return pd.DataFrame(rows)
+
 
 def hit_tuned_neurons(recs, normalize=True):
     """
@@ -1174,7 +1188,7 @@ def neurons_hit_consistency(recs):
 # endregion ============================================================================================================
 
 if __name__ == '__main__':
-    BMS_analysis = False
+    BMS_analysis = True
     ### Initialisation of recs instances ###
     if BMS_analysis:
         directory = "C:/Users/cvandromme/Desktop/Tactile_detection/Data_DMSO_BMS/"
@@ -1213,21 +1227,21 @@ if __name__ == '__main__':
         # rec.auc()
         # rec.hit_tuned()
         # rec.amp_tuned()
-    full_data = get_features(recs.values())
+    full_data = get_features(recs.values(), amp_delay=True, auc=False)
     if not BMS_analysis:
-        data = full_data[full_data["ID"] != 5886]
+        data = full_data[full_data["ID"] != 5886] #(threshold == 3)
     else:
         data = full_data
     #   --- Within ---
-    # compare_sub_supra_within(data, behavior_filter=False, genotype="KO", comparison="all_sub")
+    # compare_sub_supra_within(data, behavior_filter=None, genotype="KO-Hypo", comparison="all_sub")
     # for filter in [None, True, False]:
     #     for gen in ["KO", "KO-Hypo", "WT"]:
     #         for comp in ["sub", "all_sub", "supra", "all_supra"]:
     #             compare_sub_supra_within(data, behavior_filter=filter, genotype=gen, comparison=comp)
     #   --- Between ---
-    # wt, hypo = compare_sub_supra_between(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo", gp1_amps="supra", gp2_amps="supra", colors=[ppt.wt_color, ppt.hypo_color])
+    # wt, hypo = compare_sub_supra_between(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo", gp1_amps="threshold", gp2_amps="threshold", colors=[ppt.wt_color, ppt.hypo_color])
     # --- Hit vs. Miss ---
-    det, undet = compare_det_undet(data, genotype="KO-Hypo", amplitude="all_supra") # /!\ full_data for all amp and data for threshold analysis
+    # det, undet = compare_det_undet(full_data, genotype="WT", amplitude="supra") # /!\ full_data for all amp and data for threshold analysis
 
     # mean_det = np.mean(det.drop(columns="Genotype"), axis=0)
     # mean_undet = np.mean(undet.drop(columns="Genotype"), axis=0)
@@ -1247,12 +1261,24 @@ if __name__ == '__main__':
     # plot_neuron_frac_det_undet(pattern=-1, ko_hypo_only=True, stim_ampl="session_threshold", no_go_normalize=True, ylim=[0, 60])
     # resp_contrast(pattern="recruited", stim_ampl="session_threshold", method="delta", ylim=[-10, 30])
     #
-    # results = plot_neuron_perc_amp(recs.values(), pattern="activated", detected_trials=True, undetected_trials=True, ylim=[0, 30],
-    #                                transformation="yeojohnson", normality=[False, False], homogeneity=[False, False])
-    # post_EXC = results["post_EXC"]
-    # post_EXC_btw = post_EXC["between"]
-    # post_INH = results["post_INH"]
-    # post_INH_btw = post_INH["between"]
+    results = plot_neuron_perc_amp(recs.values(), pattern="recruited", detected_trials=True, undetected_trials=True, ylim=[0, 45],
+                                   transformation="yeojohnson", normality=[False, False], homogeneity=[True, True], qq_show=False,
+                                   colors=[ppt.all_ko_bms_color, ppt.all_ko_color, ppt.wt_bms_color, ppt.wt_color])
+    # To save the results from ampcurv:
+    # test_exc = results['test_EXC']
+    # post_exc = results["post_EXC"]
+    # post_exc_wt = post_exc["WT"]
+    # post_exc_hypo = post_exc["KO-Hypo"]
+    # post_exc_ko = post_exc["KO"]
+    # post_exc_btw = post_exc["between"]
+    # data_exc = results["data_EXC"]
+    # data_inh = results["data_INH"]
+    # test_inh = results['test_INH']
+    # post_inh = results["post_INH"]
+    # post_inh_btw = post_inh["between"]
+    # post_inh_wt = post_inh["WT"]
+    # post_inh_hypo = post_inh["KO-Hypo"]
+    # post_inh_ko = post_inh["KO"]
 
     # concat_act = get_concat_act(recs[4445], n_type="EXC", zscore=True)
     # neuron_pca_df = pca_neurons(recs.values(), pre_stim=False, min_trials=5)
@@ -1270,4 +1296,5 @@ if __name__ == '__main__':
     # plt.show()
 
     # tuned_df = plot_hit_amp_tuned(recs.values())
-    # var_df = plot_response_variance(full_data, variable="act_EXC_perc")
+    # var_df = plot_response_variance(full_data, variable="act_EXC_delay")
+

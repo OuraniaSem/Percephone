@@ -165,12 +165,25 @@ def compare_nb_reliable_responders(recs):
 
 def compare_threshold_trials_cosine_similarity(mean_activity_df, include_gaba=False, title_precision=""):
     """Compares the mean cosine similarity between each pairs of threshold trials between genotypes, considering each
-    behavioral label independently. Are threshold trials more similar in WT compared to KO-Hypo ?"""
+    behavioral label independently. Mean cosine similarity across trials represents how reliably the same population of
+    neurons participates (and in which direction) across detected (or all) trials. Are threshold trials more
+    similar in WT compared to KO-Hypo ?"""
     rows = []
-    for rec_id in mean_activity_df.ID.unique():
+    # Defining the figures for the matrices plotting
+    fig_Resp_Hit, axs_Resp_Hit = plt.subplots(nrows=4, ncols=6, figsize=(24, 16), constrained_layout=True)
+    fig_Resp_Miss, axs_Resp_Miss = plt.subplots(nrows=4, ncols=6, figsize=(24, 16), constrained_layout=True)
+    fig_Stim_mean_Hit, axs_Stim_mean_Hit = plt.subplots(nrows=4, ncols=6, figsize=(24, 16), constrained_layout=True)
+    fig_Stim_mean_Miss, axs_Stim_mean_Miss = plt.subplots(nrows=4, ncols=6, figsize=(24, 16), constrained_layout=True)
+    ax_Resp_Hit = axs_Resp_Hit.flatten()
+    ax_Resp_Miss = axs_Resp_Miss.flatten()
+    ax_Stim_mean_Hit = axs_Stim_mean_Hit.flatten()
+    ax_Stim_mean_Miss = axs_Stim_mean_Miss.flatten()
+    fig_dict = {"Stim_mean_Hit": ax_Stim_mean_Hit, "Stim_mean_Miss": ax_Stim_mean_Miss, "Resp_Hit": ax_Resp_Hit, "Resp_Miss": ax_Resp_Miss}
+    for i, rec_id in enumerate(mean_activity_df.ID.unique()):
         # Selecting the threshold trials
         rec_data = mean_activity_df[(mean_activity_df["ID"] == rec_id) & (mean_activity_df["Amplitude"] == mean_activity_df["Threshold"])].sort_values(by=["Trial", "Neuron"]).copy()
-        row = {"ID": rec_id, "Genotype": rec_data.Genotype.values[0]}
+        genotype = rec_data.Genotype.values[0]
+        row = {"ID": rec_id, "Genotype": genotype}
         if not include_gaba:
             rec_data = rec_data[rec_data["Neuron"].str.startswith("EXC")]
         # Splitting hit and miss data
@@ -186,12 +199,31 @@ def compare_threshold_trials_cosine_similarity(mean_activity_df, include_gaba=Fa
                 cos_sim_mat = cosine_similarity(matrix)
                 mean_cos_sim = cos_sim_mat[~np.eye(cos_sim_mat.shape[0], dtype=bool)].mean()
                 row[f"{metric}_{behavior_label}"] = mean_cos_sim
+                if metric != "Prestim_mean":
+                    # Retrieving the axes corresponding to the metrics to plot and plotting the rec matrix
+                    ax = fig_dict[f"{metric}_{behavior_label}"]
+                    ax[i].imshow(cos_sim_mat, cmap="seismic", vmin=-1, vmax=+1, interpolation="none")
+                    ax[i].set_xlabel("Trial i")
+                    ax[i].set_ylabel("Trial j")
+                    ax[i].set_title(f"{rec_id} - {genotype}")
         rows.append(row)
     data = pd.DataFrame(rows)
+    # Plotting the figures with the individual matrices
+    fig_Resp_Hit.suptitle("Cosine similarity of responsivity between pairs of Hit threshold trials")
+    fig_Resp_Hit.canvas.manager.set_window_title("Cos_sim_mat_resp_hit")
+    fig_Resp_Miss.suptitle("Cosine similarity of responsivity between pairs of Miss threshold trials")
+    fig_Resp_Miss.canvas.manager.set_window_title("Cos_sim_mat_resp_miss")
+    fig_Stim_mean_Hit.suptitle("Cosine similarity of mean zscore between pairs of Hit threshold trials")
+    fig_Stim_mean_Hit.canvas.manager.set_window_title("Cos_sim_mat_zscore_hit")
+    fig_Stim_mean_Miss.suptitle("Cosine similarity of mean zscore between pairs of Miss threshold trials")
+    fig_Stim_mean_Miss.canvas.manager.set_window_title("Cos_sim_mat_zscore_miss")
+    data["Resp_Delta"] = data["Resp_Hit"] - data["Resp_Miss"]
+    data["Stim_mean_Delta"] = data["Stim_mean_Hit"] - data["Stim_mean_Miss"]
     # Plotting the comparisons
-    fig, ax = plt.subplots(nrows=1, ncols=4, figsize=(24, 8), constrained_layout=True)
-    colors = {"Miss": [ppt.wt_light_color, ppt.hypo_light_color], "Hit": [ppt.wt_color, ppt.hypo_color]}
-    for col, param in enumerate(["Resp_Miss", "Stim_mean_Miss", "Resp_Hit", "Stim_mean_Hit"]):
+    fig, axs = plt.subplots(nrows=2, ncols=3, figsize=(18, 16), constrained_layout=True)
+    ax = axs.flatten()
+    colors = {"Miss": [ppt.wt_light_color, ppt.hypo_light_color], "Hit": [ppt.wt_color, ppt.hypo_color], "Delta": [ppt.wt_color, ppt.hypo_color]}
+    for col, param in enumerate(["Resp_Miss", "Resp_Hit", "Resp_Delta", "Stim_mean_Miss", "Stim_mean_Hit", "Stim_mean_Delta"]):
         behavior = param.split("_")[-1]
         ppt.boxplot(ax[col], data[data["Genotype"] == "WT"][param].values, data[data["Genotype"] == "KO-Hypo"][param].values,
                     ylabel="Mean cosine similarity", paired=False, title=param, ylim=[], colors=colors[behavior], det_marker=False,
@@ -830,13 +862,13 @@ if __name__ == '__main__':
     # tbt_recr_var_df = compare_tbt_var_per_amp(recruitement_df)
     # pca_df = pca(activity_long_df)
 
-    nb_reliable_df = compare_nb_reliable_responders(recs.values())
+    # nb_reliable_df = compare_nb_reliable_responders(recs.values())
     reliable_activity_df = filter_reliable(activity_long_df[~activity_long_df["ID"].isin([6606, 6611])], recs.values(),
-                                           pattern="act", get_non_reliable=False)
+                                           pattern="act", get_non_reliable=False) #6606 and 6611 only 1 reliable EXC
     non_reliable_activity_df = filter_reliable(activity_long_df[~activity_long_df["ID"].isin([6606, 6611])], recs.values(),
                                                pattern="act", get_non_reliable=True)
-    cosine_sim_df = compare_threshold_trials_cosine_similarity(reliable_activity_df, include_gaba=False,
-                                                               title_precision="Reliably activated neurons")
+    cosine_sim_df = compare_threshold_trials_cosine_similarity(activity_long_df, include_gaba=False,
+                                                               title_precision="All neurons")
     # endregion
 
     # region ====== Pre-stimulus ======
