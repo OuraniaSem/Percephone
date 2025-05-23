@@ -481,17 +481,17 @@ def ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
     plt.show()
 
 
-def resp_heatmap(rec, n_type="EXC"):
 
-    data = rec.matrices[n_type]["Responsivity"]
-
+def resp_heatmap_save(rec, n_type="EXC"):
+    # Defining the sorted stim array
     det_ampl = rec.stim_ampl[rec.detected_stim]
     undet_ampl = rec.stim_ampl[np.invert(rec.detected_stim)]
+    stim_array = np.array(sorted(det_ampl) + sorted(undet_ampl))
+    # Arranging the responsivity
+    data = rec.matrices[n_type]["Responsivity"]
     det_resp = data[:, rec.detected_stim]
     undet_resp = data[:, np.invert(rec.detected_stim)]
-
-    stim_array = np.array(sorted(det_ampl) + sorted(undet_ampl))
-
+    # Sorting the responsivity of trials
     ordered_data = np.empty((data.shape[0], 0))
     for amp in sorted(set(det_ampl)):
         for index, stim_ampl in enumerate(det_ampl):
@@ -501,33 +501,97 @@ def resp_heatmap(rec, n_type="EXC"):
         for index, stim_ampl in enumerate(undet_ampl):
             if stim_ampl == amp:
                 ordered_data = np.column_stack((ordered_data, undet_resp[:, index]))
-
-    # figure global parameters
-    fig, ax = plt.subplots(1, 1, figsize=(18, 10))
+    # Defining the figure global parameters
+    fig, ax = plt.subplots(1, 1, figsize=(18, 20), constrained_layout=False)
     divider = make_axes_locatable(ax)
-    tax1 = divider.append_axes('top', size='10%', pad=0.1, sharex=ax)
-    cax = divider.append_axes('right', size='2%', pad=0.1)
+    stim_sub_ax = divider.append_axes('top', size='10%', pad=0.1, sharex=ax)
+    color_sub_ax = divider.append_axes('right', size='2%', pad=0.1)
     cmap = "inferno"
     extent = [0, data.shape[1], data.shape[0] - 0.5, -0.5]
-
-
-    tax1.imshow(stim_array.reshape(1, -1), cmap=cmap, aspect='auto', interpolation='none', extent=extent)
-    tax1.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
-
-
+    # Plotting the stimulation amplitudes
+    stim_sub_ax.imshow(stim_array.reshape(1, -1), cmap=cmap, aspect='auto', interpolation='none', extent=extent)
+    stim_sub_ax.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
+    # Plotting the responsivity heatmap
     Z = linkage(ordered_data, 'ward', optimal_ordering=True)
     dn_exc = dendrogram(Z, no_plot=True, count_sort="ascending")
     im = ax.imshow(ordered_data[dn_exc['leaves']], cmap=cmap, interpolation='none', aspect='auto',
                    vmin=-1,
                    vmax=1, extent=extent)
-
-    # color scale parameters
-    cbar = plt.colorbar(im, cax=cax)
+    # Plotting the color scale
+    cbar = plt.colorbar(im, cax=color_sub_ax)
+    cbar.set_ticks([-1, 0, 1])
     cbar.ax.tick_params(which='both', width=4)
     cbar.set_label("Responsivity")
+    # Defining the figure global parameters
     ax.set_ylabel("Neurons")
     ax.set_xlabel("Trials")
-    tax1.set_title(f"{rec.filename} ({rec.genotype}) - {rec.threshold}")
+    fig.suptitle(f"{rec.filename} ({rec.genotype})\nThreshold → Global:{rec.threshold} / Session:{rec.session_threshold}", fontsize=20)
+    plt.tight_layout()
+    plt.show()
+
+
+def resp_heatmap(rec, n_type="EXC"):
+    resp_mat = rec.matrices[n_type]["Responsivity"]
+    # Defining the sorted stim array
+    det_ampl = rec.stim_ampl[rec.detected_stim]
+    undet_ampl = rec.stim_ampl[np.invert(rec.detected_stim)]
+    stim_array = np.array(sorted(det_ampl) + sorted(undet_ampl))
+    # Arranging the responsivity
+    data = resp_mat
+    det_resp = data[:, rec.detected_stim]
+    undet_resp = data[:, np.invert(rec.detected_stim)]
+    # Arranging the responsivity as nb of neurons
+    nb_data = np.empty_like(resp_mat)
+    for j in range(resp_mat.shape[1]):
+        col = resp_mat[:, j]
+        n1 = np.count_nonzero(col == 1)
+        nm1 = np.count_nonzero(col == -1)
+        n0 = np.count_nonzero(col == 0)
+        # build the new column in the desired order
+        newcol = np.concatenate([np.zeros(n0, dtype=int), -np.ones(nm1, dtype=int), np.ones(n1, dtype=int)])
+        nb_data[:, j] = newcol
+    nb_det_resp = nb_data[:, rec.detected_stim]
+    nb_undet_resp = nb_data[:, np.invert(rec.detected_stim)]
+    # Sorting the responsivity of trials
+    ordered_data = np.empty((data.shape[0], 0))
+    ordered_nb = np.empty((nb_data.shape[0], 0))
+    for amp in sorted(set(det_ampl)):
+        for index, stim_ampl in enumerate(det_ampl):
+            if stim_ampl == amp:
+                ordered_data = np.column_stack((ordered_data, det_resp[:, index]))
+                ordered_nb = np.column_stack((ordered_nb, nb_det_resp[:, index]))
+    for amp in sorted(set(undet_ampl)):
+        for index, stim_ampl in enumerate(undet_ampl):
+            if stim_ampl == amp:
+                ordered_data = np.column_stack((ordered_data, undet_resp[:, index]))
+                ordered_nb = np.column_stack((ordered_nb, nb_undet_resp[:, index]))
+    # Defining the figure global parameters
+    fig, ax = plt.subplots(1, 1, figsize=(18, 20), constrained_layout=False)
+    divider = make_axes_locatable(ax)
+    stim_sub_ax = divider.append_axes('top', size='10%', pad=0.1, sharex=ax)
+    nb_resp_sub_ax = divider.append_axes('bottom', size='20%', pad=0.1, sharex=ax)
+    color_sub_ax = divider.append_axes('right', size='2%', pad=0.1)
+    cmap = "inferno"
+    extent = [0, data.shape[1], data.shape[0] - 0.5, -0.5]
+    # Plotting the stimulation amplitudes
+    stim_sub_ax.imshow(stim_array.reshape(1, -1), cmap=cmap, aspect='auto', interpolation='none', extent=extent)
+    stim_sub_ax.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
+    # Plotting the responsivity heatmap
+    Z = linkage(ordered_data, 'ward', optimal_ordering=True)
+    dn_exc = dendrogram(Z, no_plot=True, count_sort="ascending")
+    im = ax.imshow(ordered_data[dn_exc['leaves']], cmap=cmap, interpolation='none', aspect='auto', vmin=-1, vmax=1, extent=extent)
+    # Plotting the nb of resp heatmap
+    im_resp = nb_resp_sub_ax.imshow(ordered_nb, cmap=cmap, interpolation='none', aspect='auto', vmin=-1, vmax=1, extent=extent)
+    # Plotting the color scale
+    cbar = plt.colorbar(im, cax=color_sub_ax)
+    cbar.set_ticks([-1, 0, 1])
+    cbar.ax.tick_params(which='both', width=4)
+    cbar.set_label("Responsivity")
+    # Defining the figure global parameters
+    ax.set_ylabel("Neurons")
+    ax.set_xlabel("Trials")
+    fig.suptitle(f"{rec.filename} ({rec.genotype})\nThreshold → Global:{rec.threshold} / Session:{rec.session_threshold}", fontsize=20)
+    fig.canvas.manager.set_window_title(f"")
     plt.tight_layout()
     plt.show()
 
@@ -581,7 +645,7 @@ if __name__ == '__main__':
         # rec.auc()
         if plot_ordered_heatmap:
             ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
-                            time_span="stim", window=0.5, estimator=None,
+                            time_span="stim", window=0.5, estimator="Mean",
                             det_sorted=True, amp_sorted=True, det_ordering=False,
                             avg_trials_amp=False, threshold_only=False)
         if plot_responsivity_heatmap:

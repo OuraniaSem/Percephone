@@ -972,6 +972,21 @@ def plot_response_variance(features_df, variable="act_EXC_perc"):
     plt.show()
     return var_data
 
+
+def get_perc_non_recruited_neurons_trials(rec, amplitude_filter=None, n_type="EXC"):
+    resp = rec.matrices[n_type]["Responsivity"]
+    # Filtering the trials of desired amplitude
+    if amplitude_filter == "threshold":
+        amp_filt = rec.stim_ampl == rec.session_threshold
+    elif isinstance(amplitude_filter, int):
+        amp_filt = rec.stim_ampl == amplitude_filter
+    else:
+        amp_filt = True * len(rec.stim_ampl)
+    resp = resp[:, amp_filt]
+    return (np.all(resp == 0, axis=1).sum() / resp.shape[0]) * 100
+
+
+
 # endregion ============================================================================================================
 # region ===================================== Neuronal clusters =======================================================
 
@@ -1188,7 +1203,7 @@ def neurons_hit_consistency(recs):
 # endregion ============================================================================================================
 
 if __name__ == '__main__':
-    BMS_analysis = True
+    BMS_analysis = False
     ### Initialisation of recs instances ###
     if BMS_analysis:
         directory = "C:/Users/cvandromme/Desktop/Tactile_detection/Data_DMSO_BMS/"
@@ -1296,5 +1311,10 @@ if __name__ == '__main__':
     # plt.show()
 
     # tuned_df = plot_hit_amp_tuned(recs.values())
-    # var_df = plot_response_variance(full_data, variable="act_EXC_delay")
+    var_df = plot_response_variance(full_data, variable="act_EXC_perc")
 
+    rows = []
+    for rec in recs.values():
+        perc_non_recr = get_perc_non_recruited_neurons_trials(rec, amplitude_filter="threshold", n_type="EXC")
+        rows.append({"ID": rec.filename, "Genotype": rec.genotype, "Threshold": rec.session_threshold, "Perc_non_recr": perc_non_recr})
+    non_recr_df = pd.DataFrame(rows)
