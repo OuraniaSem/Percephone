@@ -174,15 +174,18 @@ def compare_nb_reliable_responders(recs):
     plt.show()
     return data
 
-def compare_threshold_trials_cosine_similarity(mean_activity_df, include_gaba=False, title_precision=""):
+def compare_threshold_trials_cosine_similarity(mean_activity_df, include_gaba=False, title_precision="",
+                                               amps={"WT": "threshold", "KO-Hypo": "threshold"}, centroid=False, min_nb_trials=2):
     """Compares the mean cosine similarity between each pairs of threshold trials between genotypes, considering each
     behavioral label independently. Mean cosine similarity across trials represents how reliably the same population of
     neurons participates (and in which direction) across detected (or all) trials. Are threshold trials more
     similar in WT compared to KO-Hypo ?"""
+    if "KO" not in amps:
+        amps.update({"KO": "threshold"})
     rows = []
     # Defining the figures for the matrices plotting
-    names = ["Resp_Hit", "Resp_Miss", "Resp_Nogo", "Resp_CR", "Resp_FA",
-             "Stim_mean_Hit", "Stim_mean_Miss", "Stim_mean_Nogo", "Stim_mean_CR", "Stim_mean_FA"]
+    names = ["Resp_All", "Resp_Hit", "Resp_Miss", "Resp_Nogo", #"Resp_CR", "Resp_FA",
+             "Stim_mean_All", "Stim_mean_Hit", "Stim_mean_Miss", "Stim_mean_Nogo"] #, "Stim_mean_CR", "Stim_mean_FA"]
     figs = {}
     axes = {}
     for name in names:
@@ -190,49 +193,90 @@ def compare_threshold_trials_cosine_similarity(mean_activity_df, include_gaba=Fa
         figs[name] = fig
         axes[name] = axs.flatten()
     for i, rec_id in enumerate(mean_activity_df.ID.unique()):
-        # Selecting the threshold trials
-        rec_data = mean_activity_df[(mean_activity_df["ID"] == rec_id) & (mean_activity_df["Amplitude"] == (mean_activity_df["Threshold"] + 2))].sort_values(by=["Trial", "Neuron"]).copy()
-        rec_no_go_data = mean_activity_df[(mean_activity_df["ID"] == rec_id) & (mean_activity_df["Amplitude"] == 0)].sort_values(by=["Trial", "Neuron"]).copy()
+        # Retrieving the data for the recording
+        rec_data = mean_activity_df[mean_activity_df["ID"] == rec_id]
+        rec_12_data = rec_data[rec_data["Amplitude"] == 12].sort_values(by=["Trial", "Neuron"]).copy()
         genotype = rec_data.Genotype.values[0]
         threshold = rec_data.Threshold.values[0]
-        row = {"ID": rec_id, "Genotype": genotype}
+        amplitude = amps[genotype]
+        # Selecting the trials corresponding to the desired amplitude
+        if amplitude == "threshold":
+            rec_data = rec_data[rec_data["Amplitude"] == rec_data["Threshold"]].sort_values(by=["Trial", "Neuron"]).copy()
+        elif amplitude == "sub_threshold":
+            rec_data = rec_data[rec_data["Amplitude"] == (rec_data["Threshold"] - 2)].sort_values(by=["Trial", "Neuron"]).copy()
+        elif amplitude == "supra_threshold":
+            # Skipping the recordings with a threshold of 12 in this case
+            if threshold == 12:
+                print(f"{rec_id}({genotype}) → exclusion (threshold == 12)")
+                continue
+            else:
+                rec_data = rec_data[rec_data["Amplitude"] == (rec_data["Threshold"] + 2)].sort_values(by=["Trial", "Neuron"]).copy()
+        elif amplitude == "wt_threshold":
+            rec_data = rec_data[rec_data["Amplitude"] == 4].sort_values(by=["Trial", "Neuron"]).copy()
+        elif isinstance(amplitude, list):
+            rec_data = rec_data[rec_data["Amplitude"].isin(amplitude)].sort_values(by=["Trial", "Neuron"]).copy()
+        else:
+            raise ValueError("Amplitude must be either 'threshold', 'sub_threshold', 'wt_threshold', or a list")
+        # Selecting the no-go trials
+        rec_no_go_data = mean_activity_df[(mean_activity_df["ID"] == rec_id) & (mean_activity_df["Amplitude"] == 0)].sort_values(by=["Trial", "Neuron"]).copy()
         if not include_gaba:
             rec_data = rec_data[rec_data["Neuron"].str.startswith("EXC")]
             rec_no_go_data = rec_no_go_data[rec_no_go_data["Neuron"].str.startswith("EXC")]
+            rec_12_data = rec_12_data[rec_12_data["Neuron"].str.startswith("EXC")]
         # Splitting hit and miss data
         miss_data = rec_data[rec_data["Behavior"] == False]
         hit_data = rec_data[rec_data["Behavior"] == True]
+        miss_12_data = rec_12_data[rec_12_data["Behavior"] == False]
+        hit_12_data = rec_12_data[rec_12_data["Behavior"] == True]
+        n_hit = len(hit_data.Trial.unique())
+        n_miss = len(miss_data.Trial.unique())
+        hit_rate = n_hit / (n_hit + n_miss)
         nogo_data = rec_no_go_data
-        cr_data = rec_no_go_data[rec_no_go_data["FA"] == False]
-        fa_data = rec_no_go_data[rec_no_go_data["FA"] == True]
+        row = {"ID": rec_id, "Genotype": genotype, "Hit Rate": hit_rate}
+        # cr_data = rec_no_go_data[rec_no_go_data["FA"] == False]
+        # fa_data = rec_no_go_data[rec_no_go_data["FA"] == True]
         # Computing cosine similarity (resp and zscore) between pairs of trials of the same behavioral label
-        for behavior_label, behavior_data in zip(["Miss", "Hit", "Nogo", "CR", "FA"],
-                                                 [miss_data, hit_data, nogo_data, cr_data, fa_data]):
-            if len(behavior_data) > 0:
-                n_trials = len(behavior_data.Trial.unique())
+        for behavior_label, behavior_data in zip(["All", "Miss", "Hit", "Nogo", "12_Miss", "12_Hit"], #, "CR", "FA"],
+                                                 [rec_data, miss_data, hit_data, nogo_data, miss_12_data, hit_12_data]): #, cr_data, fa_data]):
+            n_trials = len(behavior_data.Trial.unique())
+            if n_trials >= min_nb_trials:
                 for metric in ["Resp", "Stim_mean", "Prestim_mean"]:
                     matrix = np.array(behavior_data.pivot(index="Trial", columns="Neuron", values=metric))
 
                     # ========== Cosine similarity computation and grouping ==========
-                    # Computing the cosine similarity matrix between pairs of trials
-                    cos_sim_mat = cosine_similarity(matrix)
-                    mean_dist = cos_sim_mat[~np.eye(n_trials, dtype=bool)].mean()
-                    # Testing another global similarity metric: mean distance of each trial to the centroid trial
-                    centroid = matrix.mean(axis=0).reshape(1, -1)
-                    mean_centroid_cos_sim = cosine_similarity(matrix, centroid).mean()
+                    if centroid:
+                        # Testing another global similarity metric: mean distance of each trial to the centroid trial
+                        centroid = matrix.mean(axis=0).reshape(1, -1)
+                        mean_centroid_cos_sim = cosine_similarity(matrix, centroid).mean()
+                        global_cos_metric = mean_centroid_cos_sim
+                        centroid_str = "(centroid) "
+                    else:
+                        # Computing the cosine similarity matrix between pairs of trials
+                        cos_sim_mat = cosine_similarity(matrix)
+                        mean_dist = cos_sim_mat[~np.eye(n_trials, dtype=bool)].mean()
+                        global_cos_metric = mean_dist
+                        centroid_str = ""
                     # Computing the number of comparison of pairs of trials to normalize with it
                     n_comp = (n_trials ** 2 - n_trials) / 2
 
-                    global_cos_metric = mean_dist
-
                     row[f"{metric}_{behavior_label}"] = global_cos_metric
                     if metric != "Prestim_mean":
-                        # Retrieving the axes corresponding to the metrics to plot and plotting the rec matrix
+                        if behavior_label not in ["12_Miss", "12_Hit"]:
+                            # Retrieving the axes corresponding to the metrics to plot and plotting the rec matrix
+                            ax = axes[f"{metric}_{behavior_label}"]
+                            ax[i].imshow(cos_sim_mat, cmap="seismic", vmin=-1, vmax=+1, interpolation="none")
+                            ax[i].set_xlabel("Trial i", fontsize=10)
+                            ax[i].set_ylabel("Trial j", fontsize=10)
+                            ax[i].set_title(f"{int(rec_id)} - {genotype}({threshold})[{global_cos_metric:.2f}]", fontsize=12)
+            else:
+                if behavior_label not in ["12_Miss", "12_Hit"]:
+                    for metric in ["Resp", "Stim_mean"]:
                         ax = axes[f"{metric}_{behavior_label}"]
-                        ax[i].imshow(cos_sim_mat, cmap="seismic", vmin=-1, vmax=+1, interpolation="none")
-                        ax[i].set_xlabel("Trial i", fontsize=10)
-                        ax[i].set_ylabel("Trial j", fontsize=10)
-                        ax[i].set_title(f"{int(rec_id)} - {genotype}({threshold})[{global_cos_metric:.2f}]", fontsize=12)
+                        ax[i].axis('off')
+                        ax[i].set_title(f"{int(rec_id)} - {genotype}({threshold})", fontsize=12)
+                        ax[i].text(0.5, 0.5, f"Not enough trials ({n_trials})", ha='center', va='center', fontsize=10)
+                    print(f"{rec_id}({genotype}) → Not enough {behavior_label} trials ({n_trials}) to compute cosine similarity")
+                continue
         rows.append(row)
     data = pd.DataFrame(rows)
     # Plotting the figures with the individual matrices
@@ -246,8 +290,9 @@ def compare_threshold_trials_cosine_similarity(mean_activity_df, include_gaba=Fa
         # for ax in axs_flat[:n_used]:
         #     mappable = ax.images[0]
         # fig.colorbar(mappable, ax=axs_flat[:n_used], orientation='vertical', fraction=0.02,pad=0.01)
-        fig.suptitle(f"Cosine similarity of {fig_name} between pairs of threshold trials", fontsize=14)
-        fig.canvas.manager.set_window_title(f"Cos_sim_mat_{fig_name}")
+        fig.suptitle(f"Cosine similarity {centroid_str}of {fig_name} between pairs of trials"
+                     f"\nWT: {amps["WT"]} \nKO-Hypo: {amps["KO-Hypo"]} \nKO: {amps["KO"]}", fontsize=14)
+        fig.canvas.manager.set_window_title(f"Cos_sim_mat_{centroid_str}{fig_name}")
     data["Resp_Delta"] = data["Resp_Hit"] - data["Resp_Miss"]
     data["Stim_mean_Delta"] = data["Stim_mean_Hit"] - data["Stim_mean_Miss"]
     # Plotting the comparisons
@@ -274,32 +319,38 @@ def compare_threshold_trials_cosine_similarity(mean_activity_df, include_gaba=Fa
             ppt.boxplot(ax[2+row, 2*col+1], gp_data[f"{metric}_Miss"].values, gp_data[f"{metric}_Nogo"].values,
                         ylabel="Mean cosine similarity", paired=True, title=f"{metric}→ Miss/Nogo ({genotype})", ylim=[], colors=colors[genotype],
                         det_marker=True, force_markers_identity=False)
-    fig.suptitle(f"Comparison of the mean cosine similarity between pairs of threshold trials"
+            ppt.boxplot(ax[2+row, 4+col], gp_data[f"{metric}_Hit"].values, gp_data[f"{metric}_12_Hit"].values,
+                        ylabel="Mean cosine similarity", paired=True, title=f"{metric}→ Hit/Hit(12µm) ({genotype})", ylim=[], colors=colors[genotype],
+                        det_marker=False, force_markers_identity=False)
+    fig.suptitle(f"Comparison of the mean cosine similarity between pairs of trials {centroid_str}"
+                 f"\nWT: {amps["WT"]} \nKO-Hypo: {amps["KO-Hypo"]} \nKO: {amps["KO"]}"
                  f"\n[GABAergic interneurons included = {include_gaba}]"
                  f"\n{title_precision}", fontsize=14)
     fig.canvas.manager.set_window_title(f"Cosine_sim_comp_gaba={include_gaba}_{title_precision}")
     # Plotting the correlation
-    fig_corr, ax_corr = plt.subplots(nrows=1, ncols=1, figsize=(8, 8), constrained_layout=True)
+    fig_corr, ax_corr = plt.subplots(nrows=1, ncols=2, figsize=(16, 8), constrained_layout=True)
     colors_corr = {"WT": ppt.wt_color, "KO-Hypo": ppt.hypo_color}
-    for y_legend, geno in zip([0.95, 0.85], ["WT", "KO-Hypo"]):
-        x = data[data["Genotype"] == geno]["Prestim_mean_Hit"].values
-        y = data[data["Genotype"] == geno]["Stim_mean_Hit"].values
-        x = x[~np.isnan(x)]
-        y = y[~np.isnan(y)]
-        results = dict(linregress(x, y)._asdict())
-        r2 = results["rvalue"] ** 2
-        line = results["slope"] * x + results["intercept"]
-        # Plot the data points and regression line
-        ax_corr.scatter(x, y, color=colors_corr[geno], alpha=0.7, s=10, marker="+")
-        ax_corr.plot(x, line, color=colors_corr[geno], lw=2)
-        ax_corr.text(0.05, y_legend, f"$r^2 = {r2:.3f}$\np-value = {results["pvalue"]:.3f}", transform=ax_corr.transAxes,
-                     fontsize=8, verticalalignment="top", color=colors_corr[geno])
-    ax_corr.set_xlabel("Prestim cosine sim", fontsize=12)
-    ax_corr.set_ylabel("Stim cosine stim", fontsize=12)
-    fig_corr.suptitle(f"Cosine similarity between pre-stimulus and stimulus for hit trials"
+    for i, x_metric in enumerate(["Prestim_mean_Hit", "Hit Rate"]):
+        for y_legend, geno in zip([0.95, 0.85], ["WT", "KO-Hypo"]):
+            x = data[data["Genotype"] == geno][x_metric].values
+            y = data[data["Genotype"] == geno]["Stim_mean_Hit"].values
+            mask = ~np.isnan(x) & ~np.isnan(y)
+            x = x[mask]
+            y = y[mask]
+            results = dict(linregress(x, y)._asdict())
+            r2 = results["rvalue"] ** 2
+            line = results["slope"] * x + results["intercept"]
+            # Plot the data points and regression line
+            ax_corr[i].scatter(x, y, color=colors_corr[geno], alpha=0.7, s=10, marker="+")
+            ax_corr[i].plot(x, line, color=colors_corr[geno], lw=2)
+            ax_corr[i].text(0.05, y_legend, f"$r^2 = {r2:.3f}$\np-value = {results["pvalue"]:.3f}", transform=ax_corr[i].transAxes,
+                         fontsize=8, verticalalignment="top", color=colors_corr[geno])
+        ax_corr[i].set_xlabel(x_metric, fontsize=12)
+        ax_corr[i].set_ylabel("Stim cosine stim", fontsize=12)
+    fig_corr.suptitle(f"Cosine similarity between pre-stimulus and stimulus for hit trials {centroid_str}"
                       f"\n[GABAergic interneurons included = {include_gaba}]"
                       f"\n{title_precision}", fontsize=14)
-    fig_corr.canvas.manager.set_window_title(f"Corr_cosine_sim_gaba={include_gaba}_{title_precision}")
+    fig_corr.canvas.manager.set_window_title(f"Corr_cosine_sim{centroid_str}_gaba={include_gaba}_{title_precision}")
     plt.show()
     return data
 
@@ -966,8 +1017,11 @@ if __name__ == '__main__':
     #                                                            title_precision="All neurons")
     # cosine_sim_df = compare_threshold_trials_cosine_similarity(no_go_non_recruited_df[~no_go_non_recruited_df["ID"].isin([5873, 4745, 6606, 6601])], include_gaba=False,
     #                                                            title_precision="No-go non recruited neurons")
-    without_12 = activity_long_df[activity_long_df["Threshold"] != 12]
-    cosine_sim_df = compare_threshold_trials_cosine_similarity(without_12, include_gaba=False, title_precision="All neurons")
+    # without_12 = activity_long_df[activity_long_df["Threshold"] != 12]
+    # cosine_sim_df = compare_threshold_trials_cosine_similarity(without_12, include_gaba=False, title_precision="All neurons")
+    cosine_sim_df = compare_threshold_trials_cosine_similarity(activity_long_df, include_gaba=False, title_precision="",
+                                                               amps={"WT": [12], "KO-Hypo": [12]}, centroid=False,
+                                                               min_nb_trials=2)
     # nb_trials_df = compare_nb_trials_wt_ko(activity_long_df)
     # endregion
 
