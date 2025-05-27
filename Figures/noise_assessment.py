@@ -253,8 +253,8 @@ def compare_threshold_trials_cosine_similarity(mean_activity_df, include_gaba=Fa
                     else:
                         # Computing the cosine similarity matrix between pairs of trials
                         cos_sim_mat = cosine_similarity(matrix)
-                        mean_dist = cos_sim_mat[~np.eye(n_trials, dtype=bool)].mean()
-                        global_cos_metric = mean_dist
+                        mean_cos_sim = cos_sim_mat[~np.eye(n_trials, dtype=bool)].mean()
+                        global_cos_metric = mean_cos_sim
                         centroid_str = ""
                     # Computing the number of comparison of pairs of trials to normalize with it
                     n_comp = (n_trials ** 2 - n_trials) / 2
@@ -279,6 +279,7 @@ def compare_threshold_trials_cosine_similarity(mean_activity_df, include_gaba=Fa
                 continue
         rows.append(row)
     data = pd.DataFrame(rows)
+    # data = data.dropna(axis=0, how='any')
     # Plotting the figures with the individual matrices
     n_used = len(mean_activity_df.ID.unique())
     for fig_name, fig in figs.items():
@@ -353,6 +354,112 @@ def compare_threshold_trials_cosine_similarity(mean_activity_df, include_gaba=Fa
     fig_corr.canvas.manager.set_window_title(f"Corr_cosine_sim{centroid_str}_gaba={include_gaba}_{title_precision}")
     plt.show()
     return data
+
+def compare_global_cosine_sim(mean_activity_df):
+    for rec
+
+def correlate_tbt_var_behavior(mean_activity_df, include_gaba=False):
+    """Is more variability between the trials associated with more variability in the behavioral response ?
+    Correlation for each mouse of the cosine similarity between trials of each amplitude with the consistency of
+    behavioral response for this amplitude. Then global correlation for the genotype for each amplitude
+    (relatively to the threshold)"""
+    # Building a Dataframe with the cosine similarity between trials for each amplitude and each mouse
+    rows = []
+    for rec_id in mean_activity_df.ID.unique():
+        rec_data = mean_activity_df[mean_activity_df["ID"] == rec_id]
+        genotype = rec_data.Genotype.values[0]
+        threshold = rec_data.Threshold.values[0]
+        # Filtering out the GABAergic interneurons according to the optional parameter
+        if not include_gaba:
+            rec_data = rec_data[rec_data["Neuron"].str.startswith("EXC")]
+        for amp in range(2, 13, 2):
+            row = {"ID": rec_id, "Genotype": genotype, "Threshold": threshold, "Amplitude": amp}
+            amp_data = rec_data[rec_data["Amplitude"] == amp].sort_values(by=["Trial", "Neuron"]).copy()
+            n_trials = len(amp_data.Trial.unique())
+            # Computing the similarity between trials at the neuronal level
+            for metric in ["Resp", "Stim_mean"]:
+                neural_matrix = np.array(amp_data.pivot(index="Trial", columns="Neuron", values=metric))
+                # Computing the cosine similarity matrix between pairs of trials
+                cos_sim_mat = cosine_similarity(neural_matrix)
+                mean_sim = cos_sim_mat[~np.eye(n_trials, dtype=bool)].mean()
+                row[metric] = mean_sim
+            # Computing the similarity between trials at the behavioral level
+            behavior_vector = (amp_data.groupby("Trial", as_index=False).first())["Behavior"].values
+            behavior_mat = np.where(np.equal.outer(behavior_vector, behavior_vector), 1, -1)
+            mean_behavior_sim = behavior_mat[~np.eye(n_trials, dtype=bool)].mean()
+            row["Behavior"] = mean_behavior_sim
+            rows.append(row)
+    data = pd.DataFrame(rows)
+    # Plotting each mouse's correlation
+    color_dict = {"WT": ppt.wt_color, "KO": ppt.ko_color, "KO-Hypo": ppt.hypo_color}
+    cmap = plt.get_cmap("plasma")
+    mouse_resp_fig, r_axes = plt.subplots(nrows=4, ncols=6, figsize=(20, 20), constrained_layout=True)
+    mouse_mean_fig, m_axes = plt.subplots(nrows=4, ncols=6, figsize=(20, 20), constrained_layout=True)
+    for fig, axes, metric in zip([mouse_resp_fig, mouse_mean_fig], [r_axes, m_axes], ["Resp", "Stim_mean"]):
+        ax = axes.flatten()
+        for ax_id, rec_id in enumerate(data.ID.unique()):
+            rec_data = data[data["ID"] == rec_id]
+            geno = rec_data["Genotype"].values[0]
+            thre = rec_data["Threshold"].values[0]
+            x = rec_data[metric]
+            y = rec_data["Behavior"]
+            results = dict(linregress(x, y)._asdict())
+            r2 = results["rvalue"] ** 2
+            line = results["slope"] * x + results["intercept"]
+            # Plot the data points and regression line
+            ax[ax_id].plot(x, line, color=color_dict[geno], lw=2)
+            ax[ax_id].scatter(x, y, color=cmap(np.linspace(0, 1, len(x))), alpha=0.7, s=10, marker="+")
+            ax[ax_id].text(0.05, 0.95, f"$r^2 = {r2:.3f}$\np-value = {results["pvalue"]:.3f}",
+                         transform=ax[ax_id].transAxes, fontsize=8,
+                         verticalalignment="top", color="black")
+            ax[ax_id].set_title(f"{int(rec_id)}[{geno}] - {thre}", color=color_dict[geno])
+            ax[ax_id].set_xlabel(metric, fontsize=10)
+            ax[ax_id].set_ylabel("Behavioral similarity of trials", fontsize=10)
+            ax[ax_id].set_xlim([-1, 1.05])
+            ax[ax_id].set_ylim([-1, 1.05])
+            ax[ax_id].spines['top'].set_visible(False)
+            ax[ax_id].spines['right'].set_visible(False)
+            ax[ax_id].axvline(x=0, linestyle=":", linewidth=0.5, color="gray")
+            ax[ax_id].axhline(y=0, linestyle=":", linewidth=0.5, color="gray")
+        fig.suptitle(f"Correlation per mouse of {metric} cosine similarity between trials of each amplitude "
+                     f"and corresponding similarity of behavioral outcome", fontsize=12)
+        fig.canvas.manager.set_window_title(f"Corr_{metric}_cosim_behavior")
+    # Plotting the mean genotype correlation between neural tbt var and behavioral similarity per amplitude
+    grouped_data = data.groupby(["Genotype", "Amplitude"], as_index=False).mean()
+    genotype_resp_fig, gr_axes = plt.subplots(nrows=1, ncols=3, figsize=(21, 7), constrained_layout=True)
+    genotype_mean_fig, gm_axes = plt.subplots(nrows=1, ncols=3, figsize=(21, 7), constrained_layout=True)
+    for fig, axes, metric in zip([genotype_resp_fig, genotype_mean_fig], [gr_axes, gm_axes], ["Resp", "Stim_mean"]):
+        ax = axes.flatten()
+        for ax_id, geno in enumerate(grouped_data.Genotype.unique()):
+            geno_data = grouped_data[grouped_data["Genotype"] == geno]
+            x = geno_data[metric]
+            y = geno_data["Behavior"]
+            results = dict(linregress(x, y)._asdict())
+            r2 = results["rvalue"] ** 2
+            line = results["slope"] * x + results["intercept"]
+            # Plot the data points and regression line
+            ax[ax_id].plot(x, line, color=color_dict[geno], lw=2)
+            ax[ax_id].scatter(x, y, color=cmap(np.linspace(0, 1, len(x))), alpha=0.7, s=10, marker="+")
+            ax[ax_id].text(0.05, 0.95, f"$r^2 = {r2:.3f}$\np-value = {results["pvalue"]:.3f}",
+                           transform=ax[ax_id].transAxes, fontsize=8,
+                           verticalalignment="top", color="black")
+            ax[ax_id].set_title(geno, color=color_dict[geno])
+            ax[ax_id].set_xlabel(metric, fontsize=10)
+            ax[ax_id].set_ylabel("Behavioral similarity of trials", fontsize=10)
+            ax[ax_id].set_xlim([-1, 1.05])
+            ax[ax_id].set_ylim([-1, 1.05])
+            ax[ax_id].spines['top'].set_visible(False)
+            ax[ax_id].spines['right'].set_visible(False)
+            ax[ax_id].axvline(x=0, linestyle=":", linewidth=0.5, color="gray")
+            ax[ax_id].axhline(y=0, linestyle=":", linewidth=0.5, color="gray")
+        fig.suptitle(f"Correlation per mouse of mean {metric} cosine similarity between trials per amplitude "
+                     f"and corresponding mean similarity of behavioral outcome", fontsize=12)
+        fig.canvas.manager.set_window_title(f"Corr_mean_{metric}_cosim_behavior")
+    # Plotting each genotype correlation for different amplitude
+    plt.show()
+    return data
+
+
 
 def compare_nb_trials_wt_ko(mean_activity_df):
     """Compares the number of threshold trials for both behavioral outcome between 2 genotypes"""
@@ -1020,8 +1127,9 @@ if __name__ == '__main__':
     # without_12 = activity_long_df[activity_long_df["Threshold"] != 12]
     # cosine_sim_df = compare_threshold_trials_cosine_similarity(without_12, include_gaba=False, title_precision="All neurons")
     cosine_sim_df = compare_threshold_trials_cosine_similarity(activity_long_df, include_gaba=False, title_precision="",
-                                                               amps={"WT": [12], "KO-Hypo": [12]}, centroid=False,
+                                                               amps={"WT": "threshold", "KO-Hypo": "threshold"}, centroid=False,
                                                                min_nb_trials=2)
+
     # nb_trials_df = compare_nb_trials_wt_ko(activity_long_df)
     # endregion
 
@@ -1060,3 +1168,44 @@ if __name__ == '__main__':
         rows.append({"ID": rec.filename, "Genotype": rec.genotype, "Threshold": rec.session_threshold, "T+2_hit": hit,
                      "T+2_miss": miss})
     supra_det_df = pd.DataFrame(rows)
+
+    mean_trials = activity_long_df.copy().drop(columns=["Neuron", "FA"]).groupby(["Genotype", "ID", "Threshold", "Trial", "Amplitude", "Behavior"], as_index=False).mean()
+    count_trials = mean_trials.groupby(["Genotype", "ID", "Threshold", "Amplitude", "Behavior"], as_index=False).count()
+    mean_count = count_trials.drop(columns=["Threshold"]).groupby(["Genotype", "Amplitude", "Behavior"], as_index=False).mean().drop(columns=["ID"])
+
+    # 1) define ordering and bar geometry
+    ampls = [i for i in range(2, 13, 2)]  # [0,2,4,…,12]
+    genos = ['WT', 'KO', 'KO-Hypo']
+    labels = [True, False]
+    nA, nG, nL = len(ampls), len(genos), len(labels)
+    bar_w = 0.8 / (nG * nL)  # total cluster width ~0.8
+
+    # 2) color maps (solid for Hit, lighter for Miss)
+    gen_colors = {'WT': ppt.wt_color, 'KO': ppt.ko_color, 'KO-Hypo': ppt.hypo_color}
+    gen_colors_light = {'WT': ppt.wt_light_color, 'KO': ppt.ko_light_color, 'KO-Hypo': ppt.hypo_light_color}
+
+    # 3) x‐positions
+    x = np.arange(nA)
+
+    fig, ax = plt.subplots(figsize=(12, 10), constrained_layout=True)
+
+    for gi, geno in enumerate(genos):
+        for li, label in enumerate(labels):
+            # pick your subset
+            sub = mean_count[(mean_count['Genotype'] == geno) & (mean_count['Behavior'] == label)]
+            # ensure it’s in amplitude order
+            means = [sub.loc[sub['Amplitude'] == amp, 'Trial'].values[0] for amp in ampls]
+            # compute offsets so clusters are centered at x
+            offset = (gi * nL + li) * bar_w - 0.5 * (nG * nL * bar_w - bar_w)
+            xpos = x + offset
+            # choose color
+            color = gen_colors[geno] if label == True else gen_colors_light[geno]
+            ax.bar(xpos, means, bar_w, label=f"{geno} {label}", color=color)
+
+    # 4) polish
+    ax.set_xticks(x)
+    ax.set_xticklabels(ampls)
+    ax.set_xlabel("Stimulation amplitude (µm)", fontsize=10)
+    ax.set_ylabel("Mean nb trials", fontsize=10)
+    ax.set_title("Hit vs Miss trial counts per amplitude & genotype", fontsize=12)
+    plt.show()
