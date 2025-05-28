@@ -70,6 +70,24 @@ def get_features(recs, amp_delay=True, auc=False):
     return pd.DataFrame(rows)
 
 
+def compare_x0_psy_threshold(recs):
+    """Controlling that there is no difference between the rounding of the x0_psy to session threshold in both genotypes
+    → Useless because, threshold as be set to 12 for KO-Hypo even if the computed x0_psy was way greater"""
+    colors_dict = {"WT": ppt.wt_color, "KO": ppt.ko_color, "KO-Hypo": ppt.hypo_color}
+    rows = []
+    for rec in recs:
+        rows.append({"ID": rec.filename, "Genotype": rec.genotype, "x0": rec.x0_psy, "Threshold": rec.session_threshold})
+    data = pd.DataFrame(rows)
+    data["Delta"] = abs(data["x0"] - data["Threshold"])
+    fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(18, 8), constrained_layout=True)
+    for ax_id, (geno1, geno2) in enumerate([["WT", "KO-Hypo"], ["WT", "KO"], ["KO", "KO-Hypo"]]):
+        ppt.boxplot(ax[ax_id], data[data["Genotype"] == geno1]["Delta"].values, data[data["Genotype"] == geno2]["Delta"].values,
+                    ylabel="Delta x0_psy/Threshold", paired=False, title=f"{geno1}/{geno2}", ylim=[], colors=[colors_dict[geno1], colors_dict[geno2]],
+                    det_marker=False, force_markers_identity=False)
+    plt.show()
+    return data
+
+
 def filter_amplitude(data, amplitude="all", no_go=False):
     if amplitude == "all":
         filt_data = data
@@ -175,6 +193,23 @@ def compare_sub_supra_between(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo
     plt.show()
     return data_gp1, data_gp2
 
+
+def compare_sub_supra_deltas(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo"):
+    """Comparing th raw values of sub and supra trials to the threshold may not be the best way to assess a broad
+    threshold. Instead, comparison of the delta between threshold and sub/supra or delta sub/supra between both groups"""
+    # Retrieving the data from threshold, sub (and supra threshold) for both groups
+    gp1_threshold, gp1_sub = get_sub_supra_threshold(data, behavior_filter=behavior_filter, genotype=gp1, comparison="sub")
+    _, gp1_supra = get_sub_supra_threshold(data, behavior_filter=behavior_filter, genotype=gp1, comparison="supra")
+    gp2_threshold, gp2_sub = get_sub_supra_threshold(data, behavior_filter=behavior_filter, genotype=gp2, comparison="sub")
+    _, gp2_sub = get_sub_supra_threshold(data, behavior_filter=behavior_filter, genotype=gp2, comparison="supra")
+
+    gp1_threshold = gp1_threshold.set_index('ID')
+    gp1_sub = gp1_sub.set_index('ID')
+    diff_sub1 = gp1_threshold.subtract(gp1_sub).reset_index()
+
+    return gp1_sub
+
+sub_supra_delta_df = compare_sub_supra_deltas(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo")
 
 def compare_det_undet(data_df, genotype="WT", amplitude="all"):
     colors_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color],

@@ -355,8 +355,91 @@ def compare_threshold_trials_cosine_similarity(mean_activity_df, include_gaba=Fa
     plt.show()
     return data
 
-def compare_global_cosine_sim(mean_activity_df):
-    for rec
+def compare_global_cosine_sim(mean_activity_df, include_gaba=False, centroid=False):
+    names = ["Resp_All", "Resp_Hit", "Resp_Miss", "Stim_mean_All", "Stim_mean_Hit", "Stim_mean_Miss"]
+    figs = {}
+    axes = {}
+    for name in names:
+        fig, axs = plt.subplots(nrows=4, ncols=6, figsize=(24, 16), constrained_layout=True)
+        figs[name] = fig
+        axes[name] = axs.flatten()
+    for i, rec_id in enumerate(mean_activity_df.ID.unique()):
+        # Retrieving the data for the recording
+        rec_data = mean_activity_df[mean_activity_df["ID"] == rec_id]
+        if not include_gaba:
+            rec_data = rec_data[rec_data["Neuron"].str.startswith("EXC")]
+        genotype = rec_data.Genotype.values[0]
+        threshold = rec_data.Threshold.values[0]
+        # Splitting hit and miss data
+        miss_data = rec_data[rec_data["Behavior"] == False]
+        hit_data = rec_data[rec_data["Behavior"] == True]
+        row = {"ID": rec_id, "Genotype": genotype}
+        for behavior_label, behavior_data in zip(["All", "Miss", "Hit"], [rec_data, miss_data, hit_data]):
+            n_trials = len(behavior_data.Trial.unique())
+            for metric in ["Resp", "Stim_mean", "Prestim_mean"]:
+                matrix = np.array(behavior_data.pivot(index="Trial", columns="Neuron", values=metric))
+
+                # ========== Cosine similarity computation and grouping ==========
+                global_cos_metric = compute_mean_cos_sim(matrix, centroid=centroid)
+
+                row[f"{metric}_{behavior_label}"] = global_cos_metric
+                if metric != "Prestim_mean":
+                    # Retrieving the axes corresponding to the metrics to plot and plotting the rec matrix
+                    ax = axes[f"{metric}_{behavior_label}"]
+                    ax[i].imshow(cosine_similarity(matrix), cmap="seismic", vmin=-1, vmax=+1, interpolation="none")
+                    ax[i].set_xlabel("Trial i", fontsize=10)
+                    ax[i].set_ylabel("Trial j", fontsize=10)
+                    ax[i].set_title(f"{int(rec_id)} - {genotype}({threshold})[{global_cos_metric:.2f}]", fontsize=12)
+        rows.append(row)
+    data = pd.DataFrame(rows)
+    # Setting off the unused axes
+    n_used = len(mean_activity_df.ID.unique())
+    for fig_name, fig in figs.items():
+        for extra_ax in axes[fig_name][n_used:]:
+            extra_ax.set_axis_off()
+        fig.suptitle(f"Cosine similarity of {fig_name} between pairs of trials (all amplitudes)\n[centroid={centroid}]", fontsize=14)
+        fig.canvas.manager.set_window_title(f"Cos_sim_mat_{centroid}{fig_name}")
+    # Plotting the comparisons
+    fig, ax = plt.subplots(nrows=2, ncols=5, figsize=(30, 16), constrained_layout=True)
+    colors = {"Miss": [ppt.wt_light_color, ppt.hypo_light_color], "Hit": [ppt.wt_color, ppt.hypo_color],
+              "All": [ppt.wt_color, ppt.hypo_color],
+              "WT": [ppt.wt_color, ppt.wt_light_color], "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color]}
+    for row, metric in enumerate(["Resp", "Stim_mean"]):
+        # Plotting the difference between genotypes
+        for col, behavior in enumerate(["Miss", "Hit", "All"]):
+            param = f"{metric}_{behavior}"
+            ppt.boxplot(ax[row, col], data[data["Genotype"] == "WT"][param].values,
+                        data[data["Genotype"] == "KO-Hypo"][param].values,
+                        ylabel="Mean cosine similarity", paired=False, title=param, ylim=[],
+                        colors=colors[behavior], det_marker=False,
+                        force_markers_identity=False)
+        # Plotting the difference within genotypes
+        for col, genotype in enumerate(["WT", "KO-Hypo"]):
+            gp_data = data[data["Genotype"] == genotype]
+            ppt.boxplot(ax[row, 3 + col], gp_data[f"{metric}_Hit"].values, gp_data[f"{metric}_Miss"].values,
+                        ylabel="Mean cosine similarity", paired=True, title=f"Hit/Miss ({genotype})", ylim=[],
+                        colors=colors[genotype],
+                        det_marker=True, force_markers_identity=False)
+    fig.suptitle(f"Comparison of the mean cosine similarity between pairs of trials (centroid={centroid})"
+                 f"\n[GABAergic interneurons included = {include_gaba}]", fontsize=14)
+    fig.canvas.manager.set_window_title(f"Cosine_sim_comp_gaba={include_gaba}")
+    plt.show()
+    return data
+
+
+def compute_mean_cos_sim(matrix, centroid=False):
+    if centroid:
+        # Testing another global similarity metric: mean distance of each trial to the centroid trial
+        centroid = matrix.mean(axis=0).reshape(1, -1)
+        mean_centroid_cos_sim = cosine_similarity(matrix, centroid).mean()
+        global_cos_metric = mean_centroid_cos_sim
+    else:
+        # Computing the cosine similarity matrix between pairs of trials
+        n_trials = matrix.shape[0]
+        cos_sim_mat = cosine_similarity(matrix)
+        mean_cos_sim = cos_sim_mat[~np.eye(n_trials, dtype=bool)].mean()
+        global_cos_metric = mean_cos_sim
+    return global_cos_metric
 
 def correlate_tbt_var_behavior(mean_activity_df, include_gaba=False):
     """Is more variability between the trials associated with more variability in the behavioral response ?
@@ -1127,9 +1210,9 @@ if __name__ == '__main__':
     # without_12 = activity_long_df[activity_long_df["Threshold"] != 12]
     # cosine_sim_df = compare_threshold_trials_cosine_similarity(without_12, include_gaba=False, title_precision="All neurons")
     cosine_sim_df = compare_threshold_trials_cosine_similarity(activity_long_df, include_gaba=False, title_precision="",
-                                                               amps={"WT": "threshold", "KO-Hypo": "threshold"}, centroid=False,
+                                                               amps={"WT": "supra_threshold", "KO-Hypo": [12]}, centroid=False,
                                                                min_nb_trials=2)
-
+    global_cos_df = compare_global_cosine_sim(activity_long_df, include_gaba=False, centroid=False)
     # nb_trials_df = compare_nb_trials_wt_ko(activity_long_df)
     # endregion
 
