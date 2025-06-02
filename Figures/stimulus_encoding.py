@@ -194,22 +194,57 @@ def compare_sub_supra_between(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo
     return data_gp1, data_gp2
 
 
-def compare_sub_supra_deltas(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo"):
-    """Comparing th raw values of sub and supra trials to the threshold may not be the best way to assess a broad
+def compare_sub_supra_deltas(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo", delta="both"):
+    """Comparing the raw values of sub and supra trials to the threshold may not be the best way to assess a broad
     threshold. Instead, comparison of the delta between threshold and sub/supra or delta sub/supra between both groups"""
     # Retrieving the data from threshold, sub (and supra threshold) for both groups
     gp1_threshold, gp1_sub = get_sub_supra_threshold(data, behavior_filter=behavior_filter, genotype=gp1, comparison="sub")
     _, gp1_supra = get_sub_supra_threshold(data, behavior_filter=behavior_filter, genotype=gp1, comparison="supra")
     gp2_threshold, gp2_sub = get_sub_supra_threshold(data, behavior_filter=behavior_filter, genotype=gp2, comparison="sub")
-    _, gp2_sub = get_sub_supra_threshold(data, behavior_filter=behavior_filter, genotype=gp2, comparison="supra")
+    _, gp2_supra = get_sub_supra_threshold(data, behavior_filter=behavior_filter, genotype=gp2, comparison="supra")
+    # Setting the ID as index to perform the computation of deltas by subtracting dataframes
+    gp1_threshold = gp1_threshold.set_index('ID').drop(columns=["Genotype", "behavior"])
+    gp1_sub = gp1_sub.set_index('ID').drop(columns=["Genotype", "behavior"])
+    gp1_supra = gp1_supra.set_index('ID').drop(columns=["Genotype", "behavior"])
+    gp2_threshold = gp2_threshold.set_index('ID').drop(columns=["Genotype", "behavior"])
+    gp2_sub = gp2_sub.set_index('ID').drop(columns=["Genotype", "behavior"])
+    gp2_supra = gp2_supra.set_index('ID').drop(columns=["Genotype", "behavior"])
+    # !!! Taking the absolute values for the deltas !!!
+    # Computing the delta sub / threshold
+    diff_sub1 = gp1_threshold.subtract(gp1_sub).reset_index().abs()
+    diff_sub2 = gp2_threshold.subtract(gp2_sub).reset_index().abs()
+    # Computing the delta supra / threshold
+    diff_supra1 = gp1_supra.subtract(gp1_threshold).reset_index().abs()
+    diff_supra2 = gp2_supra.subtract(gp2_threshold).reset_index().abs()
+    # Computing the delta sub / supra
+    diff_both1 = gp1_supra.subtract(gp1_sub).reset_index().abs()
+    diff_both2 = gp2_supra.subtract(gp2_sub).reset_index().abs()
 
-    gp1_threshold = gp1_threshold.set_index('ID')
-    gp1_sub = gp1_sub.set_index('ID')
-    diff_sub1 = gp1_threshold.subtract(gp1_sub).reset_index()
+    # Plotting the deltas
+    color_dict = {"WT": ppt.wt_color, "KO-Hypo": ppt.hypo_color, "KO": ppt.ko_color}
+    if delta == "both":
+        delta1 = diff_both1
+        delta2 = diff_both2
+    elif delta == "sub":
+        delta1 = diff_sub1
+        delta2 = diff_sub2
+    elif delta == "supra":
+        delta1 = diff_supra1
+        delta2 = diff_supra2
+    not_variables = ["ID", "Genotype", "behavior", "amplitude", "threshold", "bounded_x0"]
+    variables = [col for col in data.columns if col not in not_variables]
+    fig, axes = plt.subplots(nrows=3, ncols=4, figsize=(24, 24), constrained_layout=True)
+    axes_flat = axes.flatten()
+    for variable, ax in zip(variables, axes_flat):
+        ppt.boxplot(ax, delta1[variable], delta2[variable], ylabel=variable, paired=False, title="", ylim=[],
+                    colors=[color_dict[gp1], color_dict[gp2]], det_marker=False, force_markers_identity=False)
+    fig.suptitle(f"Comparison between deltas (sub/supra: {delta}) trials of {gp1} & {gp2}"
+                 f"\n[behavior filter={behavior_filter}]", fontsize=20)
+    fig.canvas.manager.set_window_title(f"delta_comp_{delta}_{behavior_filter}_{gp1}_{gp2}")
+    plt.show()
+    return delta1, delta2
 
-    return gp1_sub
-
-sub_supra_delta_df = compare_sub_supra_deltas(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo")
+sub_supra_delta_df_wt, sub_supra_delta_df_hypo = compare_sub_supra_deltas(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo", delta="supra")
 
 def compare_det_undet(data_df, genotype="WT", amplitude="all"):
     colors_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color],
@@ -1099,6 +1134,67 @@ def pca_neurons(recs, n_type="EXC", min_trials=5, pre_stim=False):
     return pd.DataFrame(rows)
 
 
+def compare_pca_trial_vs_concat(recs, n_type="EXC"):
+    cmap = plt.get_cmap("rainbow")
+    color_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO": [ppt.ko_color, ppt.ko_light_color],
+                  "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color]}
+    marker_map = {-1: "x", 0: "o", 1: "^"}
+    for rec in recs:
+        activity = rec.zscore_exc if n_type == "EXC" else rec.zscore_inh
+        resp_mat = rec.matrices[n_type]["Responsivity"]
+        # Getting the activity for the threshold trials, splitting hit and miss
+        hit_mask = (rec.stim_ampl == rec.session_threshold) & (rec.detected_stim == True)
+        miss_mask = (rec.stim_ampl == rec.session_threshold) & (rec.detected_stim == False)
+        hit_times = rec.stim_time[hit_mask]
+        miss_times = rec.stim_time[miss_mask]
+        hit_durations = rec.stim_durations[hit_mask]
+        miss_durations = rec.stim_durations[miss_mask]
+        hit_resp = resp_mat[:, hit_mask]
+        miss_resp = resp_mat[:, miss_mask]
+        fig, axs = plt.subplots(nrows=4, ncols=6, figsize=(24, 16), constrained_layout=True)
+        ax = axs.flatten()
+        counts = 0
+        neuron_colors = cmap(np.linspace(0, 1, activity.shape[0]))
+        for behavior, times, durations, resp in zip(["Hit", "Miss"], [hit_times, miss_times], [hit_durations, miss_durations], [hit_resp, miss_resp]):
+            type_activity = np.empty((activity.shape[0], 0))
+            for trial_id in range(len(times)):
+                start = int(times[trial_id])
+                end = int(start + durations[trial_id])
+                trial_activity = activity[:, start:end]
+                trial_resp = resp[:, trial_id]
+                # Concatenating the trial activity
+                type_activity = np.hstack((type_activity, trial_activity))
+                # Performing a PCA
+                pca = PCA(n_components=2, svd_solver="auto", whiten=False)
+                X_pca = pca.fit_transform(trial_activity)
+                explained_var = pca.explained_variance_ratio_
+                # Storing the values in a DataFrame and plotting them
+                ax[counts + trial_id].scatter(X_pca[:, 0], X_pca[:, 1], color=neuron_colors, alpha=0.7, s=5)
+                ax[counts + trial_id].set_xlabel(f"PC1 ({explained_var[0]:.1%})", fontsize=10)
+                ax[counts + trial_id].set_ylabel(f"PC2 ({explained_var[1]:.1%})", fontsize=10)
+                ax[counts + trial_id].tick_params(axis='both', labelsize=10)
+                ax[counts + trial_id].set_title(f"{behavior} n°{trial_id}", color=color_dict[rec.genotype][0 if behavior == "Hit" else 1], fontsize=10)
+            # PCA on the concatenated trials
+            pca = PCA(n_components=2, svd_solver="auto", whiten=False)
+            X_pca_concat = pca.fit_transform(type_activity)
+            explained_var = pca.explained_variance_ratio_
+            # Storing the values in a DataFrame and plotting them
+            ax[counts + trial_id + 1].scatter(X_pca_concat[:, 0], X_pca_concat[:, 1], color=neuron_colors, alpha=0.7, s=5)
+            ax[counts + trial_id + 1].set_xlabel(f"PC1 ({explained_var[0]:.1%})", fontsize=10)
+            ax[counts + trial_id + 1].set_ylabel(f"PC2 ({explained_var[1]:.1%})", fontsize=10)
+            ax[counts + trial_id + 1].tick_params(axis='both', labelsize=10)
+            ax[counts + trial_id + 1].set_title(f"{behavior} (concatenated)", color=color_dict[rec.genotype][0 if behavior == "Hit" else 1], fontsize=10)
+            counts += trial_id + 2
+        # Setting the unused axes off
+        for ax_id in ax[counts:]:
+            ax_id.set_axis_off()
+        fig.suptitle(f"PCA of neuronal activity during threshold trials for {rec.filename} ({rec.genotype})", fontsize=12)
+        fig.canvas.manager.set_window_title(f"PCA_{rec.filename}")
+        plt.show()
+
+
+
+
 def hit_tuned_neurons(recs, normalize=True):
     """
     Compares the numbers of neurons that are significantly tuned to detection between genotypes.
@@ -1290,6 +1386,10 @@ if __name__ == '__main__':
     #             compare_sub_supra_within(data, behavior_filter=filter, genotype=gen, comparison=comp)
     #   --- Between ---
     # wt, hypo = compare_sub_supra_between(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo", gp1_amps="threshold", gp2_amps="threshold", colors=[ppt.wt_color, ppt.hypo_color])
+    #   --- Between (Deltas) ---
+    # sub_supra_delta_df = compare_sub_supra_deltas(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo")
+    sub_supra_delta_df_wt, sub_supra_delta_df_hypo = compare_sub_supra_deltas(data, behavior_filter=True, gp1="WT",
+                                                                              gp2="KO-Hypo", delta="supra")
     # --- Hit vs. Miss ---
     # det, undet = compare_det_undet(full_data, genotype="WT", amplitude="supra") # /!\ full_data for all amp and data for threshold analysis
 
@@ -1311,9 +1411,9 @@ if __name__ == '__main__':
     # plot_neuron_frac_det_undet(pattern=-1, ko_hypo_only=True, stim_ampl="session_threshold", no_go_normalize=True, ylim=[0, 60])
     # resp_contrast(pattern="recruited", stim_ampl="session_threshold", method="delta", ylim=[-10, 30])
     #
-    results = plot_neuron_perc_amp(recs.values(), pattern="recruited", detected_trials=True, undetected_trials=True, ylim=[0, 45],
-                                   transformation="yeojohnson", normality=[False, False], homogeneity=[True, True], qq_show=False,
-                                   colors=[ppt.all_ko_bms_color, ppt.all_ko_color, ppt.wt_bms_color, ppt.wt_color])
+    # results = plot_neuron_perc_amp(recs.values(), pattern="recruited", detected_trials=True, undetected_trials=True, ylim=[0, 45],
+    #                                transformation="yeojohnson", normality=[False, False], homogeneity=[True, True], qq_show=False,
+    #                                colors=[ppt.all_ko_bms_color, ppt.all_ko_color, ppt.wt_bms_color, ppt.wt_color])
     # To save the results from ampcurv:
     # test_exc = results['test_EXC']
     # post_exc = results["post_EXC"]
@@ -1346,10 +1446,19 @@ if __name__ == '__main__':
     # plt.show()
 
     # tuned_df = plot_hit_amp_tuned(recs.values())
-    var_df = plot_response_variance(full_data, variable="act_EXC_perc")
+    # var_df = plot_response_variance(full_data, variable="act_EXC_perc")
+
+    # rows = []
+    # for rec in recs.values():
+    #     perc_non_recr = get_perc_non_recruited_neurons_trials(rec, amplitude_filter="threshold", n_type="EXC")
+    #     rows.append({"ID": rec.filename, "Genotype": rec.genotype, "Threshold": rec.session_threshold, "Perc_non_recr": perc_non_recr})
+    # non_recr_df = pd.DataFrame(rows)
 
     rows = []
     for rec in recs.values():
-        perc_non_recr = get_perc_non_recruited_neurons_trials(rec, amplitude_filter="threshold", n_type="EXC")
-        rows.append({"ID": rec.filename, "Genotype": rec.genotype, "Threshold": rec.session_threshold, "Perc_non_recr": perc_non_recr})
-    non_recr_df = pd.DataFrame(rows)
+        hit = ((rec.stim_ampl == rec.session_threshold) & (rec.detected_stim == True)).sum()
+        miss = ((rec.stim_ampl == rec.session_threshold) & (rec.detected_stim == False)).sum()
+        rows.append({"ID": rec.filename, "Genotype": rec.genotype, "Threshold": rec.session_threshold, "Hit": hit, "Miss": miss})
+    nb_threshold_trials_df = pd.DataFrame(rows)
+
+    compare_pca_trial_vs_concat([recs[4445]], n_type="EXC")

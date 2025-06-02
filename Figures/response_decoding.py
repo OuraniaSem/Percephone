@@ -621,14 +621,16 @@ if __name__ == '__main__':
     # corr_data = correlate_mean_zscore_behavior_frame(frame_data[frame_data["Amplitude"] == 12])
     # plot_frame_correlation(corr_data)
 
-    frame_dff = get_activity_by_frame_df(recs.values(), zscore=False)
-    frame_dff_threshold = frame_dff[frame_dff["Amplitude"] == frame_dff["Threshold"]]
-    frame_model_df, frame_mean_sem, frame_comp = frame_model(frame_dff_threshold)
+    # frame_dff = get_activity_by_frame_df(recs.values(), zscore=False)
+    # frame_dff_threshold = frame_dff[frame_dff["Amplitude"] == frame_dff["Threshold"]]
+    # frame_model_df, frame_mean_sem, frame_comp = frame_model(frame_dff_threshold)
 
     # saved_framed_model_df = pd.read_csv("C:/Users/cvandromme/Desktop/frame_model_df.csv")
     # frame_model_df_amp_gp = frame_model_df.groupby(["Genotype", "ID", "Threshold", "Amplitude"], as_index=False).mean().drop(columns=["Trial", "Duration", "Behavior"])
     # plot_hit_miss_classif(saved_framed_model_df)
     # data = plot_hit_miss_classif_comp(saved_framed_model_df, gp1="WT", gp2="KO", title_precision="['EXC',_'INH'][0,_1,_-1]_-_db_cv=True")
 
-    # accuracy_comp_df = compare_accuracy(recs.values(), random=42)
-    # acc_nb_df = correlate_nb_accuracy(recs, accuracy_comp_df, threshold="median")
+    recs_wt = {k: v for k, v in recs.items() if v.genotype == "WT"}
+    recs_hypo = {k: v for k, v in recs.items() if v.genotype == "KO-Hypo"}
+    accuracy_comp_df = compare_accuracy(recs_wt.values(), random=42)
+    acc_nb_df = correlate_nb_accuracy(recs_wt, accuracy_comp_df, threshold="median")
