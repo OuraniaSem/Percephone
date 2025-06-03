@@ -54,6 +54,37 @@ def get_activity_by_frame_df(recs, zscore=True):
                     rows.append(row)
     return pd.DataFrame(rows)
 
+
+def sliding_window_average(df, header_cols, window_size, sum=False):
+    """
+    Applies a sliding-window average across the numeric columns of a DataFrame.
+
+    Parameters:
+    - df: pandas.DataFrame containing header columns and numeric columns labeled 0..N-1.
+    - header_cols: list of column names in df that should remain unchanged.
+    - window_size: int, size of the sliding window (must be >= 1).
+
+    Returns:
+    - A new DataFrame with the same columns and shape as df.
+      Header columns are copied as-is, and numeric columns are replaced by their windowed averages.
+
+    Behavior:
+    - For interior columns, the value at position i is the mean of columns [i - k, ..., i, ..., i + k],
+      where k = window_size // 2.
+    - For edge columns (where a full window would extend beyond 0 or N-1), the window is truncated
+      and only the available columns are averaged (min_periods=2).
+    """
+    numeric_cols = [col for col in df.columns if col not in header_cols]
+    if sum:
+        rolled = df[numeric_cols].rolling(window=window_size, axis=1, center=True, min_periods=2).sum()
+    else:
+        rolled = df[numeric_cols].rolling(window=window_size, axis=1, center=True, min_periods=2).mean()
+    # Reconstruct the DataFrame: keep headers, replace numeric columns with rolled values.
+    result_df = pd.concat([df[header_cols].reset_index(drop=True), rolled.reset_index(drop=True)], axis=1)
+    # Ensure numeric column names stay as ints (or as they were originally).
+    result_df.columns = header_cols + [int(c) for c in numeric_cols]
+    return result_df
+
 # region ======================================== Correlation ==========================================================
 
 
@@ -621,9 +652,13 @@ if __name__ == '__main__':
     # corr_data = correlate_mean_zscore_behavior_frame(frame_data[frame_data["Amplitude"] == 12])
     # plot_frame_correlation(corr_data)
 
-    # frame_dff = get_activity_by_frame_df(recs.values(), zscore=False)
-    # frame_dff_threshold = frame_dff[frame_dff["Amplitude"] == frame_dff["Threshold"]]
-    # frame_model_df, frame_mean_sem, frame_comp = frame_model(frame_dff_threshold)
+    frame_dff = get_activity_by_frame_df(recs.values(), zscore=False)
+    frame_model_df, frame_mean_sem, frame_comp = frame_model(frame_dff, neuron_type=["INH"], resp_type=[0, 1, -1], db_cv=True)
+
+    # Sliding window average
+    sum_3_frame_dff = sliding_window_average(frame_dff, ["Genotype", "ID", "Threshold", "Trial", "Amplitude", "Duration", "Behavior", "n_type", "resp", "n_ID"],
+                                             3, sum=True)
+    frame_model_df3s, frame_mean_sem3s, frame_comp3s = frame_model(sum_3_frame_dff, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db_cv=True)
 
     # saved_framed_model_df = pd.read_csv("C:/Users/cvandromme/Desktop/frame_model_df.csv")
     # frame_model_df_amp_gp = frame_model_df.groupby(["Genotype", "ID", "Threshold", "Amplitude"], as_index=False).mean().drop(columns=["Trial", "Duration", "Behavior"])
@@ -632,5 +667,5 @@ if __name__ == '__main__':
 
     recs_wt = {k: v for k, v in recs.items() if v.genotype == "WT"}
     recs_hypo = {k: v for k, v in recs.items() if v.genotype == "KO-Hypo"}
-    accuracy_comp_df = compare_accuracy(recs_wt.values(), random=42)
-    acc_nb_df = correlate_nb_accuracy(recs_wt, accuracy_comp_df, threshold="median")
+    accuracy_comp_df = compare_accuracy(recs.values(), random=42)
+    acc_nb_df = correlate_nb_accuracy(recs, accuracy_comp_df[accuracy_comp_df["Genotype"] == "KO"], threshold="median")

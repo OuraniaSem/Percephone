@@ -566,6 +566,23 @@ def compare_nb_trials_wt_ko(mean_activity_df):
     return data
 
 
+def plot_venn_upset(recs, amp="threshold", behavior_filter=None, pattern="responsive", n_type="EXC"):
+    pattern_dict = {"activated": [1], "inhibited": [-1], "responsive": [-1, 1]}
+    for rec in recs:
+        if amp == "threshold":
+            amp_list = [rec.session_threshold]
+        elif isinstance(amp, list):
+            amp_list = amp
+        if behavior_filter is not None:
+            trial_mask = (rec.stim_ampl.isin(amp_list) & (rec.detected_stim == behavior_filter))
+        else:
+            trial_mask = rec.stim_ampl.isin(amp_list)
+        # Filtering the repsonsivity
+        resp = rec.matrices[n_type]["Responsivity"][:, trial_mask]
+
+        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(20, 15), constrained_layout=True)
+
+
 # endregion ============================================================================================================
 # region ======================================== Pre-stimulus =========================================================
 
@@ -1209,9 +1226,9 @@ if __name__ == '__main__':
     #                                                            title_precision="No-go non recruited neurons")
     # without_12 = activity_long_df[activity_long_df["Threshold"] != 12]
     # cosine_sim_df = compare_threshold_trials_cosine_similarity(without_12, include_gaba=False, title_precision="All neurons")
-    cosine_sim_df = compare_threshold_trials_cosine_similarity(activity_long_df, include_gaba=False, title_precision="",
-                                                               amps={"WT": "supra_threshold", "KO-Hypo": [12]}, centroid=False,
-                                                               min_nb_trials=2)
+    # cosine_sim_df = compare_threshold_trials_cosine_similarity(activity_long_df, include_gaba=False, title_precision="",
+    #                                                            amps={"WT": "supra_threshold", "KO-Hypo": [12]}, centroid=False,
+    #                                                            min_nb_trials=2)
     global_cos_df = compare_global_cosine_sim(activity_long_df, include_gaba=False, centroid=False)
     # nb_trials_df = compare_nb_trials_wt_ko(activity_long_df)
     # endregion
@@ -1256,6 +1273,7 @@ if __name__ == '__main__':
     count_trials = mean_trials.groupby(["Genotype", "ID", "Threshold", "Amplitude", "Behavior"], as_index=False).count()
     mean_count = count_trials.drop(columns=["Threshold"]).groupby(["Genotype", "Amplitude", "Behavior"], as_index=False).mean().drop(columns=["ID"])
 
+    # === Plotting the number of hits and miss per amplitude per genotype ===
     # 1) define ordering and bar geometry
     ampls = [i for i in range(2, 13, 2)]  # [0,2,4,…,12]
     genos = ['WT', 'KO', 'KO-Hypo']

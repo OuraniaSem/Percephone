@@ -244,7 +244,6 @@ def compare_sub_supra_deltas(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo"
     plt.show()
     return delta1, delta2
 
-sub_supra_delta_df_wt, sub_supra_delta_df_hypo = compare_sub_supra_deltas(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo", delta="supra")
 
 def compare_det_undet(data_df, genotype="WT", amplitude="all"):
     colors_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color],
@@ -1138,7 +1137,7 @@ def compare_pca_trial_vs_concat(recs, n_type="EXC"):
     cmap = plt.get_cmap("rainbow")
     color_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO": [ppt.ko_color, ppt.ko_light_color],
                   "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color]}
-    marker_map = {-1: "x", 0: "o", 1: "^"}
+    marker_map = {-1: "s", 0: "o", 1: "^"}
     for rec in recs:
         activity = rec.zscore_exc if n_type == "EXC" else rec.zscore_inh
         resp_mat = rec.matrices[n_type]["Responsivity"]
@@ -1168,8 +1167,12 @@ def compare_pca_trial_vs_concat(recs, n_type="EXC"):
                 pca = PCA(n_components=2, svd_solver="auto", whiten=False)
                 X_pca = pca.fit_transform(trial_activity)
                 explained_var = pca.explained_variance_ratio_
-                # Storing the values in a DataFrame and plotting them
-                ax[counts + trial_id].scatter(X_pca[:, 0], X_pca[:, 1], color=neuron_colors, alpha=0.7, s=5)
+                # Plotting the different neurons, with a specific marker depending on the response pattern
+                for resp_val, marker in marker_map.items():
+                    mask = (trial_resp == resp_val)
+                    if np.any(mask):
+                        ax[counts + trial_id].scatter(X_pca[mask, 0], X_pca[mask, 1], c=neuron_colors[mask], marker=marker, edgecolor="dimgrey", s=20, alpha=0.75)
+                # ax[counts + trial_id].scatter(X_pca[:, 0], X_pca[:, 1], color=neuron_colors, alpha=0.7, s=5)
                 ax[counts + trial_id].set_xlabel(f"PC1 ({explained_var[0]:.1%})", fontsize=10)
                 ax[counts + trial_id].set_ylabel(f"PC2 ({explained_var[1]:.1%})", fontsize=10)
                 ax[counts + trial_id].tick_params(axis='both', labelsize=10)
@@ -1179,7 +1182,7 @@ def compare_pca_trial_vs_concat(recs, n_type="EXC"):
             X_pca_concat = pca.fit_transform(type_activity)
             explained_var = pca.explained_variance_ratio_
             # Storing the values in a DataFrame and plotting them
-            ax[counts + trial_id + 1].scatter(X_pca_concat[:, 0], X_pca_concat[:, 1], color=neuron_colors, alpha=0.7, s=5)
+            ax[counts + trial_id + 1].scatter(X_pca_concat[:, 0], X_pca_concat[:, 1], color=neuron_colors, alpha=0.7, s=20)
             ax[counts + trial_id + 1].set_xlabel(f"PC1 ({explained_var[0]:.1%})", fontsize=10)
             ax[counts + trial_id + 1].set_ylabel(f"PC2 ({explained_var[1]:.1%})", fontsize=10)
             ax[counts + trial_id + 1].tick_params(axis='both', labelsize=10)
@@ -1406,7 +1409,8 @@ if __name__ == '__main__':
 
 
     # ====== Responsivity ======
-    # neurons = nb_neurons(recs.values())
+    recs_without_ko = {k: v for k, v in recs.items() if v.genotype != "KO"}
+    neurons = nb_neurons(recs.values())
     # plot_neuron_frac_wt_ko(pattern=0, ko_hypo_only=True, stim_ampl="all", no_go_normalize=True, ylim=[0, 60])
     # plot_neuron_frac_det_undet(pattern=-1, ko_hypo_only=True, stim_ampl="session_threshold", no_go_normalize=True, ylim=[0, 60])
     # resp_contrast(pattern="recruited", stim_ampl="session_threshold", method="delta", ylim=[-10, 30])

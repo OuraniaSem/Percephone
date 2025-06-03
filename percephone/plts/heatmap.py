@@ -638,7 +638,7 @@ if __name__ == '__main__':
                     interactive_heatmap(rec, rec.zscore_exc)
 
     else:
-        rec_directory = "C:/Users/cvandromme/Desktop/Tactile_detection/Data/20231104_5873_04_synchro/"
+        rec_directory = "C:/Users/cvandromme/Desktop/Tactile_detection/Data/20241210_7553_02_synchro/"
         rec = RecordingAmplDet(rec_directory, 0, roi_path, cache=True, correction=False)
         # rec.responsivity()
         # rec.peak_delay_amp()
