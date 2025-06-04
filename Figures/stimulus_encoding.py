@@ -1404,7 +1404,7 @@ if __name__ == '__main__':
     #                                homogeneity=[False, True])
 
     # nogo_df = nogo_fa_cr(recs.values())
-    # delta_df, delta_nogo_df = delta_hit_miss_comp(data, threshold_only=False, wt_threshold=False)
+    delta_df = delta_hit_miss_comp(data, threshold_only=False, wt_threshold=False)
     # delta_df = delta_hit_miss_comp(full_data, threshold_only=False, wt_threshold=False, condition="BMS") #/!\ full_data for all amp and data for threshold analysis
 
 
