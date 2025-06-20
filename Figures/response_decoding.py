@@ -291,7 +291,7 @@ def frame_model_n_type_avg(frame_data):
     # return frame_data
 
 
-def frame_model(frame_data, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db_cv=True):
+def frame_model(frame_data, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db_cv=True, balancing_method="resampling"):
     """
     Return the hit versus miss classification graph.
     A logistic regression model is trained on for each frame for each animal. CV is used to assess the hit accuracy
@@ -316,7 +316,7 @@ def frame_model(frame_data, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db
     rows = []
     # Creating a pivot DataFrame to obtain a dataframe per frame, each column being a neuron
     for frame in tqdm(numeric_columns):
-        # frame_data = frame_data[frame_data["Amplitude"] != 0]
+        frame_data = frame_data[frame_data["Amplitude"] != 0]
         # Training a model for each recording and storing the evaluation metrics in a new DataFrame
         for rec_id in data["ID"].unique():
             rec_data = data[data["ID"] == rec_id].copy()
@@ -332,10 +332,18 @@ def frame_model(frame_data, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db
             else:
                 # Splitting the data into training and test sets (using stratification to preserve class distribution)
                 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42, stratify=y)
-                undersampler = RandomUnderSampler(random_state=42)
-                X_train_res, y_train_res = undersampler.fit_resample(X_train, y_train)
-                lr = LogisticRegression(solver='lbfgs', C=1, max_iter=5000)
-                lr.fit(X_train_res, y_train_res)
+                if balancing_method == "resampling":
+                    undersampler = RandomUnderSampler(random_state=42)
+                    X_train_res, y_train_res = undersampler.fit_resample(X_train, y_train)
+                    lr = LogisticRegression(solver='lbfgs', C=1, max_iter=5000)
+                    lr.fit(X_train_res, y_train_res)
+                elif balancing_method == "weights":
+                    # Uses the weight parameter of the LR to balance the weight of samples rather than resampling
+                    lr = LogisticRegression(solver='lbfgs', class_weight="balanced", C=1, max_iter=5000)
+                    lr.fit(X_train, y_train)
+                elif balancing_method == None:
+                    lr = LogisticRegression(solver='lbfgs', C=1, max_iter=5000)
+                    lr.fit(X_train, y_train)
                 y_pred = lr.predict(X_test)
                 metrics = get_metrics(y_test, y_pred)
             row = {"Genotype": rec_data["Genotype"].values[0], "ID": rec_data["ID"].values[0],
@@ -343,8 +351,8 @@ def frame_model(frame_data, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db
             rows.append(row)
     frame_model_df = pd.DataFrame(rows)
     frame_mean_sem = plot_hit_miss_classif(frame_model_df, title_precision=f"{neuron_type}{resp_type} - Double CV=={db_cv}")
-    frame_comp = plot_hit_miss_classif_comp(frame_model_df, gp1="WT", gp2="KO-Hypo", title_precision=f"{neuron_type}{resp_type} - db_cv={db_cv}")
-    return frame_model_df, frame_mean_sem, frame_comp
+    # frame_comp = plot_hit_miss_classif_comp(frame_model_df, gp1="WT", gp2="KO-Hypo", title_precision=f"{neuron_type}{resp_type} - db_cv={db_cv}")
+    return frame_model_df, frame_mean_sem #, frame_comp
 
 
 def get_metrics(y_test, y_pred):
@@ -439,8 +447,13 @@ def plot_hit_miss_classif(frame_model_df, title_precision=""):
     -------
 
     """
-    color_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color], "KO": [ppt.ko_color, ppt.ko_light_color]}
-    fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(20, 8), constrained_layout=True)
+    color_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color], "KO": [ppt.ko_color, ppt.ko_light_color],
+                  "WT-DMSO": [ppt.wt_color, ppt.wt_light_color], "WT-BMS": [ppt.wt_bms_color, ppt.wt_bms_light_color],
+                  "KO-DMSO": [ppt.all_ko_color, ppt.all_ko_light_color], "KO-BMS": [ppt.all_ko_bms_color, ppt.all_ko_bms_light_color]}
+    if "WT-BMS" in frame_model_df["Genotype"].unique():
+        fig, ax = plt.subplots(nrows=1, ncols=4, figsize=(28, 8), constrained_layout=True)
+    else:
+        fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(21, 8), constrained_layout=True)
     for i, genotype in enumerate(frame_model_df["Genotype"].unique()):
         data = frame_model_df[frame_model_df["Genotype"] == genotype].drop(columns=["Genotype", "ID"])
         tpr_mean = data.groupby("Frame")["TPR"].mean().values
@@ -467,8 +480,9 @@ def plot_hit_miss_classif(frame_model_df, title_precision=""):
 
 
 def plot_hit_miss_classif_comp(frame_model_df, gp1="WT", gp2="KO-Hypo", title_precision=""):
-    color_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color],
-                  "KO": [ppt.ko_color, ppt.ko_light_color]}
+    color_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color], "KO": [ppt.ko_color, ppt.ko_light_color],
+                  "WT-DMSO": [ppt.wt_color, ppt.wt_light_color], "WT-BMS": [ppt.wt_bms_color, ppt.wt_bms_light_color],
+                  "KO-DMSO": [ppt.all_ko_color, ppt.all_ko_light_color], "KO-BMS": [ppt.all_ko_bms_color, ppt.all_ko_bms_light_color]}
     period_dict = {"stim": [30, 45], "start_stim (250ms)": [30, 37], "end_stim (250ms)": [37, 45], "pre_stim (200ms)": [24, 30]}
     fig, ax = plt.subplots(nrows=2, ncols=4, figsize=(20, 12), constrained_layout=True)
     for col, period in enumerate(period_dict.keys()):
@@ -638,7 +652,10 @@ if __name__ == '__main__':
     workers = cpu_count()
     pool = pool.ThreadPool(processes=workers)
     async_results = [pool.apply_async(opening_rec, args=(file, i)) for i, file in enumerate(files_)]
-    recs = {ar.get().filename: ar.get() for ar in async_results}
+    if BMS_analysis:
+        recs = {f"{ar.get().filename}-{ar.get().genotype.split("-")[1]}": ar.get() for ar in async_results}
+    else:
+        recs = {ar.get().filename: ar.get() for ar in async_results}
 
 
     # for rec in recs.values():
@@ -653,19 +670,24 @@ if __name__ == '__main__':
     # plot_frame_correlation(corr_data)
 
     frame_dff = get_activity_by_frame_df(recs.values(), zscore=False)
-    frame_model_df, frame_mean_sem, frame_comp = frame_model(frame_dff, neuron_type=["INH"], resp_type=[0, 1, -1], db_cv=True)
+
+    # frame_model_df, frame_mean_sem = frame_model(frame_dff[~frame_dff["ID"].isin([5893, 7539, 7554])], neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db_cv=True) # Those 3 mice are the typically detecting mice in BMS
+
+    frame_model_df_res, frame_mean_sem_res = frame_model(frame_dff, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db_cv=False, balancing_method="resampling")
+    frame_model_df_weights, frame_mean_sem_weights = frame_model(frame_dff, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db_cv=False, balancing_method="weights")
+    frame_model_df_none, frame_mean_sem_none = frame_model(frame_dff, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db_cv=False, balancing_method=None)
 
     # Sliding window average
-    sum_3_frame_dff = sliding_window_average(frame_dff, ["Genotype", "ID", "Threshold", "Trial", "Amplitude", "Duration", "Behavior", "n_type", "resp", "n_ID"],
-                                             3, sum=True)
-    frame_model_df3s, frame_mean_sem3s, frame_comp3s = frame_model(sum_3_frame_dff, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db_cv=True)
+    # sum_3_frame_dff = sliding_window_average(frame_dff, ["Genotype", "ID", "Threshold", "Trial", "Amplitude", "Duration", "Behavior", "n_type", "resp", "n_ID"],
+    #                                          3, sum=True)
+    # frame_model_df3s, frame_mean_sem3s, frame_comp3s = frame_model(sum_3_frame_dff, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db_cv=True)
 
     # saved_framed_model_df = pd.read_csv("C:/Users/cvandromme/Desktop/frame_model_df.csv")
     # frame_model_df_amp_gp = frame_model_df.groupby(["Genotype", "ID", "Threshold", "Amplitude"], as_index=False).mean().drop(columns=["Trial", "Duration", "Behavior"])
     # plot_hit_miss_classif(saved_framed_model_df)
     # data = plot_hit_miss_classif_comp(saved_framed_model_df, gp1="WT", gp2="KO", title_precision="['EXC',_'INH'][0,_1,_-1]_-_db_cv=True")
 
-    recs_wt = {k: v for k, v in recs.items() if v.genotype == "WT"}
-    recs_hypo = {k: v for k, v in recs.items() if v.genotype == "KO-Hypo"}
-    accuracy_comp_df = compare_accuracy(recs.values(), random=42)
-    acc_nb_df = correlate_nb_accuracy(recs, accuracy_comp_df[accuracy_comp_df["Genotype"] == "KO"], threshold="median")
+    # recs_wt = {k: v for k, v in recs.items() if v.genotype == "WT"}
+    # recs_hypo = {k: v for k, v in recs.items() if v.genotype == "KO-Hypo"}
+    # accuracy_comp_df = compare_accuracy(recs.values(), random=42)
+    # acc_nb_df = correlate_nb_accuracy(recs, accuracy_comp_df[accuracy_comp_df["Genotype"] == "KO"], threshold="median")

@@ -78,7 +78,8 @@ ko_light_color = "#fda7ca"  # I defined this one
 
 
 @boxplot_style
-def boxplot(ax, gp1, gp2, ylabel, paired=False, title="", ylim=[], colors=[wt_color, hypo_color], det_marker=True, force_markers_identity=False):
+def boxplot(ax, gp1, gp2, ylabel, paired=False, title="", ylim=[], colors=[wt_color, hypo_color],
+            det_marker=True, force_markers_identity=False, force_normality=False):
     """
     create boxplot for two data groups.
 
@@ -147,7 +148,7 @@ def boxplot(ax, gp1, gp2, ylabel, paired=False, title="", ylim=[], colors=[wt_co
     ax.plot([x[0], x[1]], [y, y], lw=mpl.rcParams['axes.linewidth'], c=bar_color, clip_on=False)
     # Computing and plotting the significance symbol
     if len(gp1_nan) > 2 and len(gp2_nan) > 2:
-        pval = stat_boxplot(gp1_nan, gp2_nan, ylabel, title=title, paired=paired)
+        pval = stat_boxplot(gp1_nan, gp2_nan, ylabel, title=title, paired=paired, force_normality=force_normality)
         sig_symbol = symbol_pval(pval)
     else:
         sig_symbol = "n.a"

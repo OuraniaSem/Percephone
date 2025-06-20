@@ -38,7 +38,7 @@ def symbol_pval(pval):
     return sig_symbol
 
 
-def stat_boxplot(group_1, group_2, ylabel, title="", paired=False, verbose=True):
+def stat_boxplot(group_1, group_2, ylabel, title="", paired=False, verbose=True, force_normality=False):
     """
     Returns the p-value for the comparison between 2 independant or paired sample's distribution.
 
@@ -76,7 +76,9 @@ def stat_boxplot(group_1, group_2, ylabel, title="", paired=False, verbose=True)
     # Normality of the distribution testing
     pvalue_n1 = ss.shapiro(group_1).pvalue
     pvalue_n2 = ss.shapiro(group_2).pvalue
-    if pvalue_n1 > 0.05 and pvalue_n2 > 0.05:  # Normality of the samples
+    if (pvalue_n1 > 0.05 and pvalue_n2 > 0.05) or force_normality:  # Normality of the samples
+        if not (pvalue_n1 > 0.05 and pvalue_n2 > 0.05) and force_normality:
+            print("/!\ Assumed normality /!\ ")
         if paired:
             pvalue = ss.ttest_rel(group_1, group_2).pvalue
             print(ss.ttest_rel(group_1, group_2)) if verbose else None

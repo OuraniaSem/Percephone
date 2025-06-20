@@ -638,11 +638,10 @@ if __name__ == '__main__':
                     interactive_heatmap(rec, rec.zscore_exc)
 
     else:
-        rec_directory = "C:/Users/cvandromme/Desktop/Tactile_detection/Data/20231104_5881_00_synchro/"
+        rec_directory = "C:/Users/cvandromme/Desktop/Tactile_detection/Data/20241210_7553_02_synchro/"
         rec = RecordingAmplDet(rec_directory, 0, roi_path, cache=True, correction=False)
-        # rec.responsivity()
-        # rec.peak_delay_amp()
-        # rec.auc()
+        rec.peak_delay_amp()
+        rec.auc()
         if plot_ordered_heatmap:
             ordered_heatmap(rec, exc_neurons=True, inh_neurons=False,
                             time_span="stim", window=0.5, estimator="Mean",

@@ -109,10 +109,27 @@ class Recording:
             spks = np.load(self.input_path + "spks.npy")
             self.spks_exc = spks[excitatory_ids]
             self.spks_inh = spks[inhibitory_ids]
-
+        # Using the already computed repsonsivity matrix if existing
         if os.path.exists(input_path + 'matrice_resp_exc.npy') and os.path.exists(input_path + 'matrice_resp_inh.npy'):
             self.matrices["EXC"]["Responsivity"] = np.load(self.input_path + "matrice_resp_exc.npy")
             self.matrices["INH"]["Responsivity"] = np.load(self.input_path + "matrice_resp_inh.npy")
+
+        # Using the already computed AUC matrices if existing
+        if os.path.exists(input_path + 'matrice_auc_exc.npy') and os.path.exists(input_path + 'matrice_auc_inh.npy'):
+            self.matrices["EXC"]["AUC"] = np.load(self.input_path + "matrice_auc_exc.npy")
+            self.matrices["INH"]["AUC"] = np.load(self.input_path + "matrice_auc_inh.npy")
+        if os.path.exists(input_path + 'matrice_cum_auc_exc.npy') and os.path.exists(input_path + 'matrice_cum_auc_inh.npy'):
+            self.matrices["EXC"]["cum_AUC"] = np.load(self.input_path + "matrice_cum_auc_exc.npy")
+            self.matrices["INH"]["cum_AUC"] = np.load(self.input_path + "matrice_cum_auc_inh.npy")
+        if os.path.exists(input_path + 'matrice_cum_auc_pre_exc.npy') and os.path.exists(input_path + 'matrice_cum_auc_pre_inh.npy'):
+            self.matrices["EXC"]["cum_AUC_pre"] = np.load(self.input_path + "matrice_cum_auc_pre_exc.npy")
+            self.matrices["INH"]["cum_AUC_pre"] = np.load(self.input_path + "matrice_cum_auc_pre_inh.npy")
+        if os.path.exists(input_path + 'matrice_cum_auc_fixpre_exc.npy') and os.path.exists(input_path + 'matrice_cum_auc_fixpre_inh.npy'):
+            self.matrices["EXC"]["cum_AUC_fixpre"] = np.load(self.input_path + "matrice_cum_auc_fixpre_exc.npy")
+            self.matrices["INH"]["cum_AUC_fixpre"] = np.load(self.input_path + "matrice_cum_auc_fixpre_inh.npy")
+        if os.path.exists(input_path + 'matrice_pos_auc_fixpre_exc.npy') and os.path.exists(input_path + 'matrice_pos_auc_fixpre_inh.npy'):
+            self.matrices["EXC"]["pos_AUC_fixpre"] = np.load(self.input_path + "matrice_pos_auc_fixpre_exc.npy")
+            self.matrices["INH"]["pos_AUC_fixpre"] = np.load(self.input_path + "matrice_pos_auc_fixpre_inh.npy")
 
         if os.path.exists(input_path + 'hit_tuned_exc.npy') and os.path.exists(input_path + 'hit_tuned_inh.npy'):
             self.hit_tuned_exc = np.load(self.input_path + "hit_tuned_exc.npy")
@@ -247,8 +264,32 @@ class Recording:
 
         This method updates the 'AUC' matrices for the excitatory and inhibitory neurons in the 'matrices' attribute.
         """
-        self.matrices["EXC"]["AUC"] = auc_matrice(self, self.zscore_exc, self.matrices["EXC"]["Responsivity"])
-        self.matrices["INH"]["AUC"] = auc_matrice(self, self.zscore_inh, self.matrices["INH"]["Responsivity"])
+        # stim AUC
+        self.matrices["EXC"]["AUC"] = auc_matrice(self, self.df_f_exc, self.matrices["EXC"]["Responsivity"], period="stim", method="adaptive")
+        self.matrices["INH"]["AUC"] = auc_matrice(self, self.df_f_inh, self.matrices["INH"]["Responsivity"], period="stim", method="adaptive")
+        np.save(self.input_path + "matrice_auc_exc.npy", self.matrices["EXC"]["AUC"])
+        np.save(self.input_path + "matrice_auc_inh.npy", self.matrices["INH"]["AUC"])
+        self.matrices["EXC"]["cum_AUC"] = auc_matrice(self, self.df_f_exc, self.matrices["EXC"]["Responsivity"], period="stim", method="cumulative")
+        self.matrices["INH"]["cum_AUC"] = auc_matrice(self, self.df_f_inh, self.matrices["INH"]["Responsivity"], period="stim", method="cumulative")
+        np.save(self.input_path + "matrice_cum_auc_exc.npy", self.matrices["EXC"]["cum_AUC"])
+        np.save(self.input_path + "matrice_cum_auc_inh.npy", self.matrices["INH"]["cum_AUC"])
+        # pre-stim AUC
+        self.matrices["EXC"]["cum_AUC_pre"] = auc_matrice(self, self.df_f_exc, self.matrices["EXC"]["Responsivity"], period="prestim", method="cumulative")
+        self.matrices["INH"]["cum_AUC_pre"] = auc_matrice(self, self.df_f_inh, self.matrices["INH"]["Responsivity"], period="prestim", method="cumulative")
+        np.save(self.input_path + "matrice_cum_auc_pre_exc.npy", self.matrices["EXC"]["cum_AUC_pre"])
+        np.save(self.input_path + "matrice_cum_auc_pre_inh.npy", self.matrices["INH"]["cum_AUC_pre"])
+        self.matrices["EXC"]["cum_AUC_fixpre"] = auc_matrice(self, self.df_f_exc, self.matrices["EXC"]["Responsivity"], period="fixed_prestim", method="cumulative")
+        self.matrices["INH"]["cum_AUC_fixpre"] = auc_matrice(self, self.df_f_inh, self.matrices["INH"]["Responsivity"], period="fixed_prestim", method="cumulative")
+        np.save(self.input_path + "matrice_cum_auc_fixpre_exc.npy", self.matrices["EXC"]["cum_AUC_fixpre"])
+        np.save(self.input_path + "matrice_cum_auc_fixpre_inh.npy", self.matrices["INH"]["cum_AUC_fixpre"])
+        # pre-stim positive
+        self.matrices["EXC"]["pos_AUC_fixpre"] = auc_matrice(self, self.df_f_exc, self.matrices["EXC"]["Responsivity"], period="fixed_prestim", method="positive")
+        self.matrices["INH"]["pos_AUC_fixpre"] = auc_matrice(self, self.df_f_inh, self.matrices["INH"]["Responsivity"], period="fixed_prestim", method="positive")
+        np.save(self.input_path + "matrice_pos_auc_fixpre_exc.npy", self.matrices["EXC"]["pos_AUC_fixpre"])
+        np.save(self.input_path + "matrice_pos_auc_fixpre_inh.npy", self.matrices["INH"]["pos_AUC_fixpre"])
+
+
+
 
     def peak_delay_amp(self):
         """

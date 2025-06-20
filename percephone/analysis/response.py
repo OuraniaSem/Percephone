@@ -118,7 +118,7 @@ def resp_matrice(rec, df_data):
     return resp_mat
 
 
-def auc_matrice(rec, zscore_data, resp_mask):
+def auc_matrice(rec, activity, resp_mask, period="stim", method="adaptive"):
     """
     Perform Area Under the Curve for evey responses trace to the stimulations
     Parameters
@@ -139,26 +139,45 @@ def auc_matrice(rec, zscore_data, resp_mask):
     neuron_list, stim_list = resp_mask.shape
     for neuron in range(neuron_list):
         for stim in range(stim_list):
-            # Get the times and associated zscores for the stimulation
-            x_window = np.linspace(rec.stim_time[stim],
-                                   rec.stim_time[stim] + rec.stim_durations[stim],
-                                   num=int(rec.stim_durations[stim]) + 1,
-                                   dtype=int)
-            window = zscore_data[neuron, x_window]
-
+            # Selection of the period of interest
+            if period == "stim":
+                x_window = np.linspace(rec.stim_time[stim],
+                                       rec.stim_time[stim] + rec.stim_durations[stim],
+                                       num=int(rec.stim_durations[stim]) + 1,
+                                       dtype=int)
+            elif period == "prestim":
+                x_window = np.linspace(rec.stim_time[stim] - rec.stim_durations[stim],
+                                       rec.stim_time[stim],
+                                       num=int(rec.stim_durations[stim]) + 1,
+                                       dtype=int)
+            elif period == "fixed_prestim":
+                x_window = np.linspace(rec.stim_time[stim] - 15,
+                                       rec.stim_time[stim],
+                                       num=15 + 1,
+                                       dtype=int)
+            window = activity[neuron, x_window]
             # Interpolation of values
             x_window_inter = np.array([np.linspace(start, end, num=10)[:-1] for start, end in zip(x_window[:-1], x_window[1:])]).flatten()
             window_inter = np.array([np.linspace(start, end, num=10)[:-1] for start, end in zip(window[:-1], window[1:])]).flatten()
-
-            if resp_mask[neuron, stim] == 1:
-                window_inter[window_inter < 0] = 0
-                result_auc[neuron, stim] = simpson(window_inter, x=x_window_inter)/ rec.sf
-            elif resp_mask[neuron, stim] == -1:
-                window_inter[window_inter > 0] = 0
-                result_auc[neuron, stim] = simpson(window_inter, x=x_window_inter)/ rec.sf
-            # if there is no response, NaN is added in the matrix
-            elif resp_mask[neuron, stim] == 0:
-                result_auc[neuron, stim] = np.NaN
+            # Computation of he AUC according to the provided parameters
+            if method == "cumulative":
+                positive = window_inter.copy()
+                negative = window_inter.copy()
+                positive[positive < 0] = 0
+                negative[negative > 0] = 0
+                pos_auc = simpson(positive, x=x_window_inter) / rec.sf
+                neg_auc = simpson(negative, x=x_window_inter) / rec.sf
+                result_auc[neuron, stim] = pos_auc + abs(neg_auc)
+            elif method in ["adaptive", "positive", "negative"]:
+                if (method == "adaptive" and resp_mask[neuron, stim] == 1) or method == "positive":
+                    window_inter[window_inter < 0] = 0
+                    result_auc[neuron, stim] = simpson(window_inter, x=x_window_inter)/ rec.sf
+                elif (method == "adaptive" and resp_mask[neuron, stim] == -1) or method == "negative":
+                    window_inter[window_inter > 0] = 0
+                    result_auc[neuron, stim] = simpson(window_inter, x=x_window_inter)/ rec.sf
+                # if there is no response, NaN is added in the matrix
+                elif resp_mask[neuron, stim] == 0:
+                    result_auc[neuron, stim] = np.NaN
     return result_auc
 
 

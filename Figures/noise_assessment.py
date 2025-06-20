@@ -43,6 +43,11 @@ def get_mean_trial_activity_df(recs, zscore=True):
             fa_vector.append(is_fa)
         for neuron_type, activity in zip(["EXC", "INH"], [exc_activity, inh_activity]):
             resp_mat = rec.matrices[neuron_type]["Responsivity"]
+            AUC = rec.matrices[neuron_type]["AUC"]
+            cum_AUC = rec.matrices[neuron_type]["cum_AUC"]
+            cum_AUC_pre = rec.matrices[neuron_type]["cum_AUC_pre"]
+            cum_AUC_fixpre = rec.matrices[neuron_type]["cum_AUC_fixpre"]
+            pos_AUC_fixpre = rec.matrices[neuron_type]["pos_AUC_fixpre"]
             for n_id, neuron_activity in enumerate(activity):
                 for trial_id in range(len(behavior_vector)):
                     stim_start = stim_time_vector[trial_id]
@@ -59,7 +64,10 @@ def get_mean_trial_activity_df(recs, zscore=True):
                            "FA": fa_vector[trial_id], "Neuron": f"{neuron_type}_{n_id}",
                            "Resp": resp_mat[n_id, trial_id],
                            "Stim_mean": trial_mean_activity, "Stim_std": trial_std_activity,
-                           "Prestim_mean": prestim_mean_activity, "Prestim_std": prestim_std_activity}
+                           "Prestim_mean": prestim_mean_activity, "Prestim_std": prestim_std_activity,
+                           "AUC": AUC[n_id, trial_id], "cum_AUC": cum_AUC[n_id, trial_id],
+                           "cum_AUC_pre": cum_AUC_pre[n_id, trial_id], "cum_AUC_fixpre": cum_AUC_fixpre[n_id, trial_id],
+                           "pos_AUC_fixpre": pos_AUC_fixpre[n_id, trial_id]}
                     rows.append(row)
     activity_df = pd.DataFrame(rows)
     activity_df["Diff_mean"] = activity_df["Stim_mean"] - activity_df["Prestim_mean"]
@@ -658,26 +666,44 @@ def compute_neuronal_sensitivity(data_df, amplitude="All", n_type="all"):
             rows.append({"ID": rec_id, "Genotype": genotype, "Threshold": threshold, "n_EXC": n_exc, "n_INH": n_inh,
                          "Amplitude": amp, "Sensitivity": sensitivity_data})
     data = pd.DataFrame(rows)
+    # Splitting the sensitivity of EXC and INH neurons
     data["Sensitivity_exc"] = data.apply(lambda row: row["Sensitivity"][: row["n_EXC"]], axis=1)
     data["Sensitivity_inh"] = data.apply(lambda row: row["Sensitivity"][row["n_EXC"]:], axis=1)
+    # Computing the mean sensitivity per mouse/amplitude combination
     data["Mean_sensitivity"] = data["Sensitivity"].apply(lambda lst: np.mean(lst))
     data["Mean_sensitivity_exc"] = data["Sensitivity_exc"].apply(lambda lst: np.mean(lst))
     data["Mean_sensitivity_inh"] = data["Sensitivity_inh"].apply(lambda lst: np.mean(lst))
-    data["Sensitive_neurons"] = data["Sensitivity"].apply(lambda lst: np.nan if any(pd.isna(v) for v in lst) else sum(v > 1 for v in lst))
-    data["Sensitive_neurons_exc"] = data["Sensitivity_exc"].apply(lambda lst: np.nan if any(pd.isna(v) for v in lst) else sum(v > 1 for v in lst))
-    data["Sensitive_neurons_inh"] = data["Sensitivity_inh"].apply(lambda lst: np.nan if any(pd.isna(v) for v in lst) else sum(v > 1 for v in lst))
+    # Filtering the sensitivity vector to keep only the d'>1
+    data["Sensitive_neurons"] = data["Sensitivity"].apply(lambda lst: [v for v in lst if v > 1])
+    data["Sensitive_neurons_exc"] = data["Sensitivity_exc"].apply(lambda lst: [v for v in lst if v > 1])
+    data["Sensitive_neurons_inh"] = data["Sensitivity_inh"].apply(lambda lst: [v for v in lst if v > 1])
+    # Computing the mean sensitivity of sensitive neurons
+    data["Mean_sens_neurons"] = data["Sensitive_neurons"].apply(lambda lst: np.mean(lst))
+    data["Mean_sens_neurons_exc"] = data["Sensitive_neurons_exc"].apply(lambda lst: np.mean(lst))
+    data["Mean_sens_neurons_inh"] = data["Sensitive_neurons_inh"].apply(lambda lst: np.mean(lst))
+    # Computing the number of sensitive neurons
+    data["Nb_Sens_neurons"] = data["Sensitivity"].apply(lambda lst: np.nan if any(pd.isna(v) for v in lst) else sum(v > 1 for v in lst))
+    data["Nb_Sens_neurons_exc"] = data["Sensitivity_exc"].apply(lambda lst: np.nan if any(pd.isna(v) for v in lst) else sum(v > 1 for v in lst))
+    data["Nb_Sens_neurons_inh"] = data["Sensitivity_inh"].apply(lambda lst: np.nan if any(pd.isna(v) for v in lst) else sum(v > 1 for v in lst))
+    # Defining the column to take into consideration according to the neuron type chosen
     if n_type == "all":
         sens_col = "Sensitivity"
         mean_sens_col = "Mean_sensitivity"
-        nb_sens_col = "Sensitive_neurons"
+        nb_sens_col = "Nb_Sens_neurons"
+        d_sens_col = "Sensitive_neurons"
+        d_mean_sens_col = "Mean_sens_neurons"
     elif n_type == "EXC":
         sens_col = "Sensitivity_exc"
         mean_sens_col = "Mean_sensitivity_exc"
-        nb_sens_col = "Sensitive_neurons_exc"
+        nb_sens_col = "Nb_Sens_neurons_exc"
+        d_sens_col = "Sensitive_neurons_exc"
+        d_mean_sens_col = "Mean_sens_neurons_exc"
     elif n_type == "INH":
         sens_col = "Sensitivity_inh"
         mean_sens_col = "Mean_sensitivity_inh"
-        nb_sens_col = "Sensitive_neurons_inh"
+        nb_sens_col = "Nb_Sens_neurons_inh"
+        d_sens_col = "Sensitive_neurons_inh"
+        d_mean_sens_col = "Mean_sens_neurons_inh"
     # Plotting the stem plots of neuronal sensitivity for each mouse
     fig, axs = plt.subplots(nrows=4, ncols=6, figsize=(20, 15), constrained_layout=True)
     ax = axs.flatten()
@@ -715,15 +741,33 @@ def compute_neuronal_sensitivity(data_df, amplitude="All", n_type="all"):
         ax[ax_id].axhline(y=1, lw=1, ls=":", color="green")
     fig.suptitle(f"Sensitivity of neurons for {amplitude} amplitudes", fontsize=14)
     fig.canvas.manager.set_window_title(f"Sensitivity_{amplitude}")
+    # Plotting the curveplot of mean d' per mouse as a function of the amplitude
+    curve_plot_data = data[~data["Amplitude"].isin(["All", 0])].copy()
+    curve_fig, curve_ax = plt.subplots(nrows=2, ncols=1, figsize=(10, 16), constrained_layout=True)
+    exc_test, exc_posthoc = ppt.curveplot(curve_ax[0], curve_plot_data[curve_plot_data["Genotype"] != "KO"], between="Genotype", within="Amplitude",
+                                          variable="Mean_sensitivity_exc", data_points=True,
+                                          title=f"Variation of the mean sensitivity per animal for EXC neurons across amplitudes",
+                                          ylabel=None, xlabel=None, ylim=[-0.75, 1], colors=[ppt.hypo_color, ppt.wt_color],
+                                          id_display=True, legend_display=True,
+                                          qq_show=True, transformation=None, consider_normality=False,
+                                          consider_homogeneity=False)
+    inh_test, inh_posthoc = ppt.curveplot(curve_ax[1], curve_plot_data[curve_plot_data["Genotype"] != "KO"], between="Genotype", within="Amplitude",
+                                          variable="Mean_sensitivity_inh", data_points=True,
+                                          title=f"Variation of the mean sensitivity per animal for INH neurons across amplitudes",
+                                          ylabel=None, xlabel=None, ylim=[-0.75, 1], colors=[ppt.hypo_color, ppt.wt_color],
+                                          id_display=True, legend_display=True,
+                                          qq_show=True, transformation=None, consider_normality=False,
+                                          consider_homogeneity=False)
+    curve_fig.canvas.manager.set_window_title(f"Curv_Sensitivity")
     # Plotting the number of sensitive neurons (d' > 1) between both genotypes
     fig_stats, axs_stats = plt.subplots(nrows=2, ncols=5, figsize=(24, 16), constrained_layout=True)
     ax_stats = axs_stats.flatten()
-    # Plotting the global sensitivity of pulled neurons between both genotypes
-    # fig_sens, axs_sens = plt.subplots(nrows=2, ncols=5, figsize=(24, 16), constrained_layout=True)
-    # ax_sens = axs_sens.flatten()
     # Plotting the mean sensitivity per animal between both genotypes
     fig_mean, axs_mean = plt.subplots(nrows=2, ncols=5, figsize=(24, 16), constrained_layout=True)
     ax_mean = axs_mean.flatten()
+    # Plotting the mean sensitivity of sensitive neurons per animal between both genotypes
+    fig_d_mean, axs_d_mean = plt.subplots(nrows=2, ncols=5, figsize=(24, 16), constrained_layout=True)
+    ax_d_mean = axs_d_mean.flatten()
     for i, amp in enumerate(data["Amplitude"].unique()):
         # Number
         ppt.boxplot(ax_stats[i], data[(data["Genotype"] == "WT") & (data["Amplitude"] == amp)][nb_sens_col].values,
@@ -736,15 +780,15 @@ def compute_neuronal_sensitivity(data_df, amplitude="All", n_type="all"):
                     ylabel="Mean d'", paired=False, title=f"Amplitude = {amp}", ylim=[],
                     colors=[ppt.wt_color, ppt.hypo_color],
                     det_marker=False, force_markers_identity=False)
+        # Mean - sensitive neurons
+        ppt.boxplot(ax_d_mean[i], data[(data["Genotype"] == "WT") & (data["Amplitude"] == amp)][d_mean_sens_col].values,
+                    data[(data["Genotype"] == "KO-Hypo") & (data["Amplitude"] == amp)][d_mean_sens_col].values,
+                    ylabel="Mean d' of sensitive neurons", paired=False, title=f"Amplitude = {amp}", ylim=[],
+                    colors=[ppt.wt_color, ppt.hypo_color],
+                    det_marker=False, force_markers_identity=False)
         # Global sensitivity
-        # wt = data[(data["Genotype"] == "WT") & (data["Amplitude"] == amp)]
-        # merged_wt = [x for sublist in wt["Sensitivity_exc"] for x in sublist]
-        # hypo = data[(data["Genotype"] == "KO-Hypo") & (data["Amplitude"] == amp)]
-        # merged_hypo = [x for sublist in hypo["Sensitivity_exc"] for x in sublist]
-        # ppt.boxplot(ax_sens[i], merged_wt, merged_hypo, ylabel="d'", paired=False, title=f"Amplitude = {amp}",
-        #             ylim=[], colors=[ppt.wt_color, ppt.hypo_color], det_marker=False, force_markers_identity=False)
         amp_data = data[data["Amplitude"] == amp].copy()
-        amp_long = amp_data.explode(sens_col).rename(columns={sens_col: "neuron_sens"})
+        amp_long = amp_data.explode(d_sens_col).rename(columns={d_sens_col: "neuron_sens"})
         amp_long["neuron_sens"] = pd.to_numeric(amp_long["neuron_sens"])
         amp_long["Genotype"] = pd.Categorical(amp_long["Genotype"], categories=["WT", "KO", "KO-Hypo"])
         amp_long = amp_long.dropna(subset=["neuron_sens"])
@@ -752,7 +796,6 @@ def compute_neuronal_sensitivity(data_df, amplitude="All", n_type="all"):
         result = model.fit()
         print(f"=== === === Amplitude: {amp} === === ===")
         print(result.summary())
-
     # Number - threshold
     ppt.boxplot(ax_stats[8], data[(data["Genotype"] == "WT") & (data["Amplitude"] == data["Threshold"])][nb_sens_col].values,
                 data[(data["Genotype"] == "KO-Hypo") & (data["Amplitude"] == data["Threshold"])][nb_sens_col].values,
@@ -766,6 +809,13 @@ def compute_neuronal_sensitivity(data_df, amplitude="All", n_type="all"):
                 ylabel="Mean d'", paired=False, title=f"Amplitude = Threshold", ylim=[],
                 colors=[ppt.wt_color, ppt.hypo_color],
                 det_marker=False, force_markers_identity=False)
+    # Mean sensitive neurons - threshold
+    ppt.boxplot(ax_d_mean[8],
+                data[(data["Genotype"] == "WT") & (data["Amplitude"] == data["Threshold"])][d_mean_sens_col].values,
+                data[(data["Genotype"] == "KO-Hypo") & (data["Amplitude"] == data["Threshold"])][d_mean_sens_col].values,
+                ylabel="Mean d'", paired=False, title=f"Amplitude = Threshold", ylim=[],
+                colors=[ppt.wt_color, ppt.hypo_color],
+                det_marker=False, force_markers_identity=False)
     # Global sensitivity - threshold
     thre_data = data[data["Amplitude"] == data["Threshold"]].copy()
     thre_long = thre_data.explode(sens_col).rename(columns={sens_col: "neuron_sens"})
@@ -776,23 +826,29 @@ def compute_neuronal_sensitivity(data_df, amplitude="All", n_type="all"):
     result_thre = model_thre.fit()
     print(f"=== === === Amplitude: Threshold === === ===")
     print(result_thre.summary())
-    # wt = data[(data["Genotype"] == "WT") & (data["Amplitude"] == data["Threshold"])]
-    # merged_wt = [x for sublist in wt[sens_col] for x in sublist]
-    # hypo = data[(data["Genotype"] == "KO-Hypo") & (data["Amplitude"] == data["Threshold"])]
-    # merged_hypo = [x for sublist in hypo[sens_col] for x in sublist]
-    # ppt.boxplot(ax_sens[8], merged_wt, merged_hypo, ylabel="Nb neurons with d'>1", paired=False, title=f"Amplitude = Threshold",
-    #             ylim=[], colors=[ppt.wt_color, ppt.hypo_color], det_marker=False, force_markers_identity=False)
+    # Global sensitivity - Including the amplitude in the model
+    global_data = data.copy()
+    global_data["Neuron_ID"] = global_data[sens_col].apply(lambda lst: list(range(len(lst))))
+    global_data = global_data.explode(["Neuron_ID", sens_col]).rename(columns={sens_col: "neuron_sens", "Neuron_ID": "Neuron"})
+    global_data["neuron_sens"] = pd.to_numeric(global_data["neuron_sens"], errors="coerce")
+    global_data["Genotype"] = pd.Categorical(global_data["Genotype"], categories=["WT", "KO", "KO-Hypo"])
+    global_data["Neuron"] = global_data["Neuron"].astype("category")
+    global_data = global_data.dropna(subset=["neuron_sens"])
+    # model_global = smf.mixedlm("neuron_sens ~ Genotype + Amplitude", global_data, groups=global_data["ID"], vc_formula={"Neuron": "0 + C(Neuron)"})
+    model_global = smf.mixedlm("neuron_sens ~ Genotype + Amplitude", global_data, groups=global_data["ID"])
+    result_global = model_global.fit()
+    print(f"=== === === MixedLM including amplitude === === ===")
+    print(result_global.summary())
+
     fig_stats.suptitle(f"Comparison between genotypes of the number of sensitive neurons for different amplitudes", fontsize=14)
     fig_stats.canvas.manager.set_window_title(f"Sensitivity_comp")
-    # fig_sens.suptitle(f"Comparison all mice grouped {n_type} neuron's sensitivity for different amplitudes", fontsize=14)
-    # fig_sens.canvas.manager.set_window_title(f"Grouped_neuron_sens_comp")
     fig_mean.suptitle(f"Comparison mean {n_type} sensitivity per mouse for different amplitudes", fontsize=14)
     fig_mean.canvas.manager.set_window_title(f"Mean_sens_comp")
+    fig_d_mean.suptitle(f"Comparison mean {n_type} sensitivity of sensitive neurons per mouse for different amplitudes", fontsize=14)
+    fig_d_mean.canvas.manager.set_window_title(f"Mean_sens_d1_comp")
     plt.show()
-    return data
+    return curve_plot_data
 
-
-sensitivity_df = compute_neuronal_sensitivity(activity_long_df, amplitude="All", n_type="EXC")
 
 
 # endregion ============================================================================================================
@@ -1437,6 +1493,176 @@ def baseline_and_SNR(recruitment_df):
     plt.show()
     return bsl, hit, miss, hit_snr, miss_snr
 
+def compare_prestim(mean_activity_df, threshold_only=False):
+    """Compare the pre-stimulus period between WT and KO mice"""
+    activity_df = mean_activity_df.copy()
+    activity_df["cum_AUC_diff"] = activity_df["cum_AUC"] - activity_df["cum_AUC_pre"]
+    no_go = activity_df[activity_df.Amplitude == 0]
+    activity_df = activity_df[activity_df.Amplitude != 0]
+    color_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color],
+                  "KO": [ppt.ko_color, ppt.ko_light_color]}
+    amp_grouped = activity_df.drop(columns=["Neuron", "Resp", "FA"]).groupby(["Genotype", "ID", "Threshold", "Behavior", "Amplitude"], as_index=False).mean()
+    nogo_grouped = no_go.drop(columns=["Neuron", "Resp", "Amplitude", "Behavior"]).groupby(["Genotype", "ID", "Threshold", "FA"], as_index=False).mean()
+    nogo_fa = nogo_grouped[nogo_grouped.FA == True]
+    nogo_cr = nogo_grouped[nogo_grouped.FA == False]
+    if threshold_only:
+        all_grouped = activity_df[activity_df.Amplitude == activity_df.Threshold].drop(columns=["Neuron", "Resp", "FA", "Behavior"]).groupby(["Genotype", "ID", "Threshold"], as_index=False).mean()
+        hit = amp_grouped[(amp_grouped.Amplitude == amp_grouped.Threshold) & (amp_grouped.Behavior == True)].set_index("ID")
+        miss = amp_grouped[(amp_grouped.Amplitude == amp_grouped.Threshold) & (amp_grouped.Behavior == False)].set_index("ID")
+    else:
+        all_grouped = activity_df.drop(columns=["Neuron", "Resp", "FA", "Behavior"]).groupby(["Genotype", "ID", "Threshold"], as_index=False).mean()
+        behavior_grouped = activity_df.drop(columns=["Neuron", "Resp", "FA"]).groupby(["Genotype", "ID", "Threshold", "Behavior"], as_index=False).mean()
+        hit = behavior_grouped[behavior_grouped.Behavior == True].set_index("ID")
+        miss = behavior_grouped[behavior_grouped.Behavior == False].set_index("ID")
+    numeric_cols = [col for col in hit.columns if col not in ["Genotype", "ID", "Threshold", "Trial", "Behavior", "Amplitude", "Neuron", "Resp", "FA"]]
+    delta = hit.copy()
+    delta[numeric_cols] = hit[numeric_cols].subtract(miss[numeric_cols])
+    fig, ax = plt.subplots(nrows=2, ncols=8, figsize=(48, 16), constrained_layout=True)
+    wt_all = all_grouped[all_grouped.Genotype == "WT"]
+    wt_hit = hit[hit.Genotype == "WT"].sort_values(by="ID", ascending=True)
+    wt_miss = miss[miss.Genotype == "WT"].sort_values(by="ID", ascending=True)
+    wt_delta = delta[delta.Genotype == "WT"]
+    wt_fa = nogo_fa[nogo_fa.Genotype == "WT"]
+    wt_cr_full = nogo_cr[nogo_cr.Genotype == "WT"]
+    wt_cr = wt_cr_full[wt_cr_full["ID"].isin(wt_fa["ID"])]
+    hypo_all = all_grouped[all_grouped.Genotype == "KO-Hypo"]
+    hypo_hit = hit[hit.Genotype == "KO-Hypo"].sort_values(by="ID", ascending=True)
+    hypo_miss = miss[miss.Genotype == "KO-Hypo"].sort_values(by="ID", ascending=True)
+    hypo_delta = delta[delta.Genotype == "KO-Hypo"]
+    hypo_fa = nogo_fa[nogo_fa.Genotype == "KO-Hypo"]
+    hypo_cr_full = nogo_cr[nogo_cr.Genotype == "KO-Hypo"]
+    hypo_cr = hypo_cr_full[hypo_cr_full["ID"].isin(hypo_fa["ID"])]
+    for row, auc_metric in enumerate(["cum_AUC_fixpre", "pos_AUC_fixpre"]):
+        # Between Hit/Miss
+        ppt.boxplot(ax[row, 0], wt_hit[auc_metric].values, wt_miss[auc_metric].values,
+                    ylabel=auc_metric, paired=True, title="WT Hit/Miss", ylim=[],
+                    colors=color_dict["WT"], det_marker=False, force_markers_identity=False)
+        ppt.boxplot(ax[row, 1], hypo_hit[auc_metric].values, hypo_miss[auc_metric].values,
+                    ylabel=auc_metric, paired=True, title="KO-Hypo Hit/Miss", ylim=[],
+                    colors=color_dict["KO-Hypo"], det_marker=False, force_markers_identity=False)
+        # Between FA/CR
+        ppt.boxplot(ax[row, 2], wt_fa[auc_metric].values, wt_cr[auc_metric].values,
+                    ylabel=auc_metric, paired=True, title="WT FA/CR", ylim=[],
+                    colors=color_dict["WT"], det_marker=False, force_markers_identity=False)
+        ppt.boxplot(ax[row, 3], hypo_fa[auc_metric].values, hypo_cr[auc_metric].values,
+                    ylabel=auc_metric, paired=True, title="KO-Hypo FA/CR", ylim=[],
+                    colors=color_dict["KO-Hypo"], det_marker=False, force_markers_identity=False)
+        # Between Genotypes
+        ppt.boxplot(ax[row, 4], wt_all[auc_metric].values, hypo_all[auc_metric].values,
+                    ylabel=auc_metric, paired=False, title="All", ylim=[],
+                    colors=[color_dict["WT"][0], color_dict["KO-Hypo"][0]], det_marker=False, force_markers_identity=False)
+        ppt.boxplot(ax[row, 5], wt_hit[auc_metric].values, hypo_hit[auc_metric].values,
+                    ylabel=auc_metric, paired=False, title="Hit", ylim=[],
+                    colors=[color_dict["WT"][0], color_dict["KO-Hypo"][0]], det_marker=False, force_markers_identity=False)
+        ppt.boxplot(ax[row, 6], wt_miss[auc_metric].values, hypo_miss[auc_metric].values,
+                    ylabel=auc_metric, paired=False, title="Miss", ylim=[],
+                    colors=[color_dict["WT"][1], color_dict["KO-Hypo"][1]], det_marker=False, force_markers_identity=False)
+        ppt.boxplot(ax[row, 7], wt_delta[auc_metric].values, hypo_delta[auc_metric].values,
+                    ylabel=auc_metric, paired=False, title="Delta Hit/Miss", ylim=[],
+                    colors=[color_dict["WT"][0], color_dict["KO-Hypo"][0]], det_marker=False, force_markers_identity=False)
+    fig.suptitle(f"Comparison of prestim AUC\n Threshold only == {threshold_only}")
+    fig.canvas.manager.set_window_title("Prestim AUC comp")
+    plt.show()
+    return all_grouped
+
+prestim_auc_df = compare_prestim(activity_long_df[activity_long_df.ID != 4456], threshold_only=False)
+prestim_auc_df = compare_prestim(activity_long_df, threshold_only=False)
+
+def diff_AUC_stim_prestim(mean_activity_df):
+    activity_df = mean_activity_df.copy()
+    activity_df["cum_AUC_diff"] = activity_df["cum_AUC"] - activity_df["cum_AUC_pre"]
+    responsive_neurons = activity_df[activity_df["Resp"] != 0]
+
+
+def population_SNR(mean_activity_df):
+    """Is the SNR the same across trials, is there a change in SNR between hits and miss trials that could explain the detection"""
+    rows = []
+    for rec_id in mean_activity_df.ID.unique():
+        # Building a Dataframe with one row per trial and one column per neuron
+        rec_data_long = mean_activity_df[(mean_activity_df["ID"] == rec_id) & (mean_activity_df["Neuron"].str.startswith("EXC"))].copy()
+        genotype = rec_data_long.Genotype.values[0]
+        threshold = rec_data_long.Threshold.values[0]
+        rec_data = rec_data_long.drop(columns=["Genotype", "Threshold", "ID", "FA"]).pivot(columns="Neuron", values="Stim_mean",
+                                                                               index=["Trial", "Amplitude", "Behavior"]).reset_index()
+        # TODO: Try to sort the columns
+        # sorted_idx = sorted(grouped_hit_data.index, key=lambda x: (x.split('_')[0], int(x.split('_')[1])))
+        # grouped_hit_data = grouped_hit_data.loc[sorted_idx]
+        no_go = rec_data[rec_data.Amplitude == 0]
+        trials = rec_data[rec_data.Amplitude != 0]
+        # === Computing the baseline references (neurons' average responsane and variance) ===
+        mean_nogo = no_go.drop(columns=["Trial", "Amplitude", "Behavior"]).to_numpy().mean(axis=0)
+        cov_nogo = np.cov(no_go.drop(columns=["Trial", "Amplitude", "Behavior"]).to_numpy(), rowvar=False)
+        # Adding a small regularization factor to be able to invert the matrix
+        cov_nogo += np.eye(cov_nogo.shape[0]) * 1e-6
+        inv_cov_nogo = np.linalg.inv(cov_nogo)
+        # === Computing each trial distance from the baseline ===
+        def mahalanobis_distance(x, mu, inv_cov):
+            delta = x - mu
+            return np.sqrt(delta.T @ inv_cov @ delta)
+        for _, trial in trials.iterrows():
+            amp = trial.Amplitude
+            behavior = trial.Behavior
+            vector = trial.drop(labels=["Trial", "Amplitude", "Behavior"])
+            dist = mahalanobis_distance(vector, mean_nogo, inv_cov_nogo)
+            rows.append({"ID": rec_id, "Genotype": genotype, "Threshold": threshold, "Amplitude": amp, "Behavior": behavior, "Distance": dist})
+    data = pd.DataFrame(rows)
+    # plotting the difference between hit and miss trials for each mouse
+    color_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color],
+                  "KO": [ppt.ko_color, ppt.ko_light_color]}
+    fig_recs, axes_recs = plt.subplots(nrows=4, ncols=6, figsize=(20, 15), constrained_layout=True)
+    ax_recs = axes_recs.flatten()
+    for i, rec_id in enumerate(data.ID.unique()):
+        hit_data = data[(data["ID"] == rec_id) & (data["Behavior"] == True)]["Distance"].values
+        miss_data = data[(data["ID"] == rec_id) & (data["Behavior"] == False)]["Distance"].values
+        geno = data[data["ID"] == rec_id].Genotype.values[0]
+        thre = data[data["ID"] == rec_id].Threshold.values[0]
+        ppt.boxplot(ax_recs[i], hit_data, miss_data, ylabel="Distance", paired=False, title=f"{rec_id} - {thre}",
+                    ylim=[], colors=color_dict[geno], det_marker=False, force_markers_identity=False)
+    fig_recs.suptitle(f"Comparison of the Mahalanobis distance to no-go trials between hit ans miss trials", fontsize=12)
+    fig_recs.canvas.manager.set_window_title(f"Recs Mahalanobis distance")
+    # Plotting the difference in mean distance between genotypes
+    grouped_data = data.groupby(["ID", "Genotype", "Threshold", "Behavior"], as_index=False).mean()
+    fig_comp, ax_comp = plt.subplots(nrows=2, ncols=3, figsize=(18, 16), constrained_layout=True)
+    wt_hit = grouped_data[(grouped_data.Genotype == "WT") & (grouped_data.Behavior == True)]["Distance"].values
+    wt_miss = grouped_data[(grouped_data.Genotype == "WT") & (grouped_data.Behavior == False)]["Distance"].values
+    hypo_hit = grouped_data[(grouped_data.Genotype == "KO-Hypo") & (grouped_data.Behavior == True)]["Distance"].values
+    hypo_miss = grouped_data[(grouped_data.Genotype == "KO-Hypo") & (grouped_data.Behavior == False)]["Distance"].values
+    ppt.boxplot(ax_comp[0, 0], wt_hit, wt_miss, ylabel="Distance", paired=True, title=f"WT Hit/Miss",
+                ylim=[], colors=color_dict["WT"], det_marker=False, force_markers_identity=False)
+    ppt.boxplot(ax_comp[1, 0], hypo_hit, hypo_miss, ylabel="Distance", paired=True, title=f"KO-Hypo Hit/Miss",
+                ylim=[], colors=color_dict["KO-Hypo"], det_marker=False, force_markers_identity=False)
+    ppt.boxplot(ax_comp[0, 1], wt_hit, hypo_hit, ylabel="Distance", paired=False, title=f"Hit",
+                ylim=[], colors=[color_dict["WT"][0], color_dict["KO-Hypo"][0]], det_marker=False, force_markers_identity=False)
+    ppt.boxplot(ax_comp[1, 1], wt_miss, hypo_miss, ylabel="Distance", paired=False, title=f"Miss",
+                ylim=[], colors=[color_dict["WT"][1], color_dict["KO-Hypo"][1]], det_marker=False, force_markers_identity=False)
+    ppt.boxplot(ax_comp[0, 2], wt_hit - wt_miss, hypo_hit - hypo_miss, ylabel="Distance", paired=False, title=f"Delta comparison",
+                ylim=[], colors=[color_dict["WT"][0], color_dict["KO-Hypo"][0]], det_marker=False, force_markers_identity=False)
+
+    fig_comp.suptitle(f"Comparison of the mean Mahalanobis distance per animal", fontsize=12)
+    fig_comp.canvas.manager.set_window_title(f"Mean Mahalanobis distance")
+    # Plotting the mean distance per amplitude
+    amp_data = data.groupby(["ID", "Genotype", "Threshold", "Amplitude", "Behavior"], as_index=False).mean()
+    fig_curv, ax_curv = plt.subplots(nrows=2, ncols=1, figsize=(10, 16), constrained_layout=True)
+    ppt.curveplot(ax_curv[0], amp_data[amp_data["Behavior"] == True], between="Genotype", within="Amplitude", variable="Distance",
+                  data_points=True, title="Hit trials", ylabel=None, xlabel=None, ylim=None,
+                  colors=[ppt.ko_color, ppt.hypo_color, ppt.wt_color], id_display=True,
+                  legend_display=True, qq_show=True, transformation=None, consider_normality=True, consider_homogeneity=False)
+    ppt.curveplot(ax_curv[1], amp_data[amp_data["Behavior"] == False], between="Genotype", within="Amplitude", variable="Distance",
+                  data_points=True, title="Miss trials", ylabel=None, xlabel=None, ylim=None,
+                  colors=[ppt.ko_color, ppt.hypo_color, ppt.wt_color], id_display=True,
+                  legend_display=True, qq_show=True, transformation=None, consider_normality=False, consider_homogeneity=False)
+    fig_curv.suptitle(f"Mean Mahalanobis distance per trial type per animal across amplitudes")
+    fig_curv.canvas.manager.set_window_title(f"Amp Mahalanobis distance")
+    plt.show()
+    return amp_data
+
+# pop_snr_df = population_SNR(activity_long_df)
+
+
+def overall_zscore_comp(mean_activity_df):
+    """Compares the sum of the zscore of all neurons from trial to trial"""
+    pass
+
 
 # endregion ============================================================================================================
 
@@ -1468,6 +1694,9 @@ if __name__ == '__main__':
         recs = {f"{ar.get().filename}-{ar.get().genotype.split("-")[1]}": ar.get() for ar in async_results}
     else:
         recs = {ar.get().filename: ar.get() for ar in async_results}
+
+    # for rec in recs.values():
+    #     rec.auc()
     # endregion
     # Dropping 5886 from the noise assessment analysis because its computed threshold is 3 (10% hit rate for 2µm and 90% for 4µm)
     if not BMS_analysis:
@@ -1495,8 +1724,8 @@ if __name__ == '__main__':
     # endregion
 
     # region ====== TBT variability ======
-    recruitment_df = get_features(recs.values(), amp_delay=False)
-    hit_test, hit_posthoc, miss_test, miss_posthoc = compare_tbt_var_per_amp(recruitment_df)
+    recruitment_df = get_features(recs.values(), amp_delay=False, auc=False)
+    # hit_test, hit_posthoc, miss_test, miss_posthoc = compare_tbt_var_per_amp(recruitment_df)
     activity_long_df = get_mean_trial_activity_df(recs.values(), zscore=True)
     # activity_long_dff = get_mean_trial_activity_df(recs.values(), zscore=False)
     # prestim_df = prestim_activated_neurons(filtered_activity_df)
@@ -1521,12 +1750,12 @@ if __name__ == '__main__':
     # cosine_sim_df = compare_threshold_trials_cosine_similarity(activity_long_df, include_gaba=False, title_precision="",
     #                                                            amps={"WT": "supra_threshold", "KO-Hypo": [12]}, centroid=False,
     #                                                            min_nb_trials=2)
-    global_cos_df = compare_global_cosine_sim(activity_long_df, include_gaba=False, centroid=False)
+    # global_cos_df = compare_global_cosine_sim(activity_long_df, include_gaba=False, centroid=False)
     # nb_trials_df = compare_nb_trials_wt_ko(activity_long_df)
     # endregion
 
     # region ====== Pre-stimulus ======
-    bsl, hit, miss, hit_snr, miss_snr = baseline_and_SNR(recruitment_df)
+    # bsl, hit, miss, hit_snr, miss_snr = baseline_and_SNR(recruitment_df)
     # filtered_activity_df = filter_stim_recruited_neurons(activity_long_dff[activity_long_dff["ID"] != 4456])
     # filtered_activity_df = filter_stim_recruited_neurons(activity_long_dff)
     # grouped_comp, gp_hit, gp_miss = prestim_comp(filtered_activity_df)
@@ -1554,54 +1783,54 @@ if __name__ == '__main__':
     #     rows.append({"Genotype": rec.genotype, "ID": rec.filename, "Hit": hit_thres.sum(), "Miss": miss_thres.sum()})
     # test = pd.DataFrame(rows)
 
-    rows = []
-    for rec in recs.values():
-        hit = np.sum((rec.stim_ampl == (rec.session_threshold + 2)) & rec.detected_stim)
-        miss = np.sum((rec.stim_ampl == (rec.session_threshold + 2)) & ~rec.detected_stim)
-        rows.append({"ID": rec.filename, "Genotype": rec.genotype, "Threshold": rec.session_threshold, "T+2_hit": hit,
-                     "T+2_miss": miss})
-    supra_det_df = pd.DataFrame(rows)
-
-    mean_trials = activity_long_df.copy().drop(columns=["Neuron", "FA"]).groupby(
-        ["Genotype", "ID", "Threshold", "Trial", "Amplitude", "Behavior"], as_index=False).mean()
-    count_trials = mean_trials.groupby(["Genotype", "ID", "Threshold", "Amplitude", "Behavior"], as_index=False).count()
-    mean_count = count_trials.drop(columns=["Threshold"]).groupby(["Genotype", "Amplitude", "Behavior"],
-                                                                  as_index=False).mean().drop(columns=["ID"])
+    # rows = []
+    # for rec in recs.values():
+    #     hit = np.sum((rec.stim_ampl == (rec.session_threshold + 2)) & rec.detected_stim)
+    #     miss = np.sum((rec.stim_ampl == (rec.session_threshold + 2)) & ~rec.detected_stim)
+    #     rows.append({"ID": rec.filename, "Genotype": rec.genotype, "Threshold": rec.session_threshold, "T+2_hit": hit,
+    #                  "T+2_miss": miss})
+    # supra_det_df = pd.DataFrame(rows)
+    #
+    # mean_trials = activity_long_df.copy().drop(columns=["Neuron", "FA"]).groupby(
+    #     ["Genotype", "ID", "Threshold", "Trial", "Amplitude", "Behavior"], as_index=False).mean()
+    # count_trials = mean_trials.groupby(["Genotype", "ID", "Threshold", "Amplitude", "Behavior"], as_index=False).count()
+    # mean_count = count_trials.drop(columns=["Threshold"]).groupby(["Genotype", "Amplitude", "Behavior"],
+    #                                                               as_index=False).mean().drop(columns=["ID"])
 
     # === Plotting the number of hits and miss per amplitude per genotype ===
     # 1) define ordering and bar geometry
-    ampls = [i for i in range(2, 13, 2)]  # [0,2,4,…,12]
-    genos = ['WT', 'KO', 'KO-Hypo']
-    labels = [True, False]
-    nA, nG, nL = len(ampls), len(genos), len(labels)
-    bar_w = 0.8 / (nG * nL)  # total cluster width ~0.8
-
-    # 2) color maps (solid for Hit, lighter for Miss)
-    gen_colors = {'WT': ppt.wt_color, 'KO': ppt.ko_color, 'KO-Hypo': ppt.hypo_color}
-    gen_colors_light = {'WT': ppt.wt_light_color, 'KO': ppt.ko_light_color, 'KO-Hypo': ppt.hypo_light_color}
-
-    # 3) x‐positions
-    x = np.arange(nA)
-
-    fig, ax = plt.subplots(figsize=(12, 10), constrained_layout=True)
-
-    for gi, geno in enumerate(genos):
-        for li, label in enumerate(labels):
-            # pick your subset
-            sub = mean_count[(mean_count['Genotype'] == geno) & (mean_count['Behavior'] == label)]
-            # ensure it’s in amplitude order
-            means = [sub.loc[sub['Amplitude'] == amp, 'Trial'].values[0] for amp in ampls]
-            # compute offsets so clusters are centered at x
-            offset = (gi * nL + li) * bar_w - 0.5 * (nG * nL * bar_w - bar_w)
-            xpos = x + offset
-            # choose color
-            color = gen_colors[geno] if label == True else gen_colors_light[geno]
-            ax.bar(xpos, means, bar_w, label=f"{geno} {label}", color=color)
-
-    # 4) polish
-    ax.set_xticks(x)
-    ax.set_xticklabels(ampls)
-    ax.set_xlabel("Stimulation amplitude (µm)", fontsize=10)
-    ax.set_ylabel("Mean nb trials", fontsize=10)
-    ax.set_title("Hit vs Miss trial counts per amplitude & genotype", fontsize=12)
-    plt.show()
+    # ampls = [i for i in range(2, 13, 2)]  # [0,2,4,…,12]
+    # genos = ['WT', 'KO', 'KO-Hypo']
+    # labels = [True, False]
+    # nA, nG, nL = len(ampls), len(genos), len(labels)
+    # bar_w = 0.8 / (nG * nL)  # total cluster width ~0.8
+    #
+    # # 2) color maps (solid for Hit, lighter for Miss)
+    # gen_colors = {'WT': ppt.wt_color, 'KO': ppt.ko_color, 'KO-Hypo': ppt.hypo_color}
+    # gen_colors_light = {'WT': ppt.wt_light_color, 'KO': ppt.ko_light_color, 'KO-Hypo': ppt.hypo_light_color}
+    #
+    # # 3) x‐positions
+    # x = np.arange(nA)
+    #
+    # fig, ax = plt.subplots(figsize=(12, 10), constrained_layout=True)
+    #
+    # for gi, geno in enumerate(genos):
+    #     for li, label in enumerate(labels):
+    #         # pick your subset
+    #         sub = mean_count[(mean_count['Genotype'] == geno) & (mean_count['Behavior'] == label)]
+    #         # ensure it’s in amplitude order
+    #         means = [sub.loc[sub['Amplitude'] == amp, 'Trial'].values[0] for amp in ampls]
+    #         # compute offsets so clusters are centered at x
+    #         offset = (gi * nL + li) * bar_w - 0.5 * (nG * nL * bar_w - bar_w)
+    #         xpos = x + offset
+    #         # choose color
+    #         color = gen_colors[geno] if label == True else gen_colors_light[geno]
+    #         ax.bar(xpos, means, bar_w, label=f"{geno} {label}", color=color)
+    #
+    # # 4) polish
+    # ax.set_xticks(x)
+    # ax.set_xticklabels(ampls)
+    # ax.set_xlabel("Stimulation amplitude (µm)", fontsize=10)
+    # ax.set_ylabel("Mean nb trials", fontsize=10)
+    # ax.set_title("Hit vs Miss trial counts per amplitude & genotype", fontsize=12)
+    # plt.show()
