@@ -812,7 +812,7 @@ class RecordingAmplDet(Recording):
     def get_mean_param(self, pattern=1, n_type="EXC", parameter="Peak_amplitude"):
         assert n_type in ["EXC", "INH"], "Please provide a valid neuron type (EXC or INH)"
         assert pattern in [-1, 0, 1], "Please provide a valid neuron type (-1, 0 or 1)"
-        assert parameter in ["Peak_amplitude", "Peak_delay", "AUC"], "Please provide a valid parameter (Peak_amplitude or Peak_delay)"
+        assert parameter in ["Peak_amplitude", "Peak_delay", "AUC", "cum_AUC"], "Please provide a valid parameter (Peak_amplitude or Peak_delay)"
         resp_mat = np.array(self.matrices[n_type]["Responsivity"])
         para_mat = np.array(self.matrices[n_type][parameter])
         filtered_para_mat = np.where(resp_mat == pattern, para_mat, np.nan)

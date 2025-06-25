@@ -56,11 +56,16 @@ def get_features(recs, amp_delay=True, auc=False):
             "inh_INH_delay": rec.get_mean_param(pattern=-1, n_type="INH", parameter="Peak_delay")})
         if auc:
             feature_vectors.update({
-            # Mean peak amplitude for responsive neurons
+            # Mean AUC for responsive neurons
             "act_EXC_auc": rec.get_mean_param(pattern=1, n_type="EXC", parameter="AUC"),
             "inh_EXC_auc": rec.get_mean_param(pattern=-1, n_type="EXC", parameter="AUC"),
             "act_INH_auc": rec.get_mean_param(pattern=1, n_type="INH", parameter="AUC"),
-            "inh_INH_auc": rec.get_mean_param(pattern=-1, n_type="INH", parameter="AUC")})
+            "inh_INH_auc": rec.get_mean_param(pattern=-1, n_type="INH", parameter="AUC"),
+            # Mean cumulted AUC for responsive neurons
+            "act_EXC_cum_auc": rec.get_mean_param(pattern=1, n_type="EXC", parameter="cum_AUC"),
+            "inh_EXC_cum_auc": rec.get_mean_param(pattern=-1, n_type="EXC", parameter="cum_AUC"),
+            "act_INH_cum_auc": rec.get_mean_param(pattern=1, n_type="INH", parameter="cum_AUC"),
+            "inh_INH_cum_auc": rec.get_mean_param(pattern=-1, n_type="INH", parameter="cum_AUC")})
         nb_trials = len(feature_vectors["behavior"])
         for trial_id in range(nb_trials):
             row = {"ID": rec.filename, "Genotype": rec.genotype, "threshold": rec.session_threshold, "bounded_x0": rec.bounded_x0}

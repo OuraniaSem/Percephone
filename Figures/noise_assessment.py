@@ -1569,9 +1569,51 @@ prestim_auc_df = compare_prestim(activity_long_df[activity_long_df.ID != 4456], 
 prestim_auc_df = compare_prestim(activity_long_df, threshold_only=False)
 
 def diff_AUC_stim_prestim(mean_activity_df):
+    """Is there a difference in how (AUC) the responsive neurons respond between trial outcome and genotypes"""
     activity_df = mean_activity_df.copy()
     activity_df["cum_AUC_diff"] = activity_df["cum_AUC"] - activity_df["cum_AUC_pre"]
-    responsive_neurons = activity_df[activity_df["Resp"] != 0]
+    # Filtering out the non-responsive neurons
+    activity_df = activity_df[activity_df["Resp"] != 0]
+    # Filtering out the no-go trials
+    activity_df = activity_df[activity_df["Amplitude"] != 0].drop(columns=["FA"])
+    grouped_behavior = activity_df.drop(columns=["Trial", "Amplitude", "Neuron", "Resp"]).groupby(["Genotype", "ID", "Behavior"], as_index=False).mean()
+    grouped_all = activity_df.drop(columns=["Trial", "Amplitude", "Neuron", "Resp", "Behavior"]).groupby(["Genotype", "ID"], as_index=False).mean()
+    # Defining the different groups
+    wt_hit = grouped_behavior[(grouped_behavior.Genotype == "WT") & (grouped_behavior.Behavior == True)].set_index("ID").reindex()
+    wt_miss = grouped_behavior[(grouped_behavior.Genotype == "WT") & (grouped_behavior.Behavior == False)].set_index("ID").reindex()
+    wt_delta = wt_hit.drop(columns=["Genotype", "Behavior"]) - wt_miss.drop(columns=["Genotype", "Behavior"])
+    hypo_hit = grouped_behavior[(grouped_behavior.Genotype == "KO-Hypo") & (grouped_behavior.Behavior == True)].set_index("ID").reindex()
+    hypo_miss = grouped_behavior[(grouped_behavior.Genotype == "KO-Hypo") & (grouped_behavior.Behavior == False)].set_index("ID").reindex()
+    hypo_delta = hypo_hit.drop(columns=["Genotype", "Behavior"]) - hypo_miss.drop(columns=["Genotype", "Behavior"])
+    # Plotting the comparisons
+    color_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color],
+                  "KO": [ppt.ko_color, ppt.ko_light_color]}
+    fig, ax = plt.subplots(nrows=2, ncols=3, figsize=(18, 16), constrained_layout=True)
+    ppt.boxplot(ax[0, 0], grouped_all[grouped_all.Genotype == "WT"]["cum_AUC_diff"].values,
+                grouped_all[grouped_all.Genotype == "KO-Hypo"]["cum_AUC_diff"].values,
+                ylabel="cum_AUC_diff", paired=False, title="All trials", ylim=[],
+                colors=[color_dict["WT"][0], color_dict["KO-Hypo"][0]], det_marker=False, force_markers_identity=False)
+    ppt.boxplot(ax[1, 0], wt_delta["cum_AUC_diff"].values, hypo_delta["cum_AUC_diff"].values,
+                ylabel="cum_AUC_diff", paired=False, title="Deltas", ylim=[],
+                colors=[color_dict["WT"][0], color_dict["KO-Hypo"][0]], det_marker=False, force_markers_identity=False)
+    ppt.boxplot(ax[0, 1], wt_hit["cum_AUC_diff"].values, wt_miss["cum_AUC_diff"].values,
+                ylabel="cum_AUC_diff", paired=True, title="WT Hit/Miss", ylim=[],
+                colors=color_dict["WT"], det_marker=False, force_markers_identity=False)
+    ppt.boxplot(ax[1, 1], hypo_hit["cum_AUC_diff"].values, hypo_miss["cum_AUC_diff"].values,
+                ylabel="cum_AUC_diff", paired=True, title="Hypo Hit/Miss", ylim=[],
+                colors=color_dict["KO-Hypo"], det_marker=False, force_markers_identity=False)
+    ppt.boxplot(ax[0, 2], wt_hit["cum_AUC_diff"].values, hypo_hit["cum_AUC_diff"].values,
+                ylabel="cum_AUC_diff", paired=False, title="Hit", ylim=[],
+                colors=[color_dict["WT"][0], color_dict["KO-Hypo"][0]], det_marker=False, force_markers_identity=False)
+    ppt.boxplot(ax[1, 2], hypo_hit["cum_AUC_diff"].values, hypo_miss["cum_AUC_diff"].values,
+                ylabel="cum_AUC_diff", paired=False, title="Miss", ylim=[],
+                colors=[color_dict["WT"][1], color_dict["KO-Hypo"][1]], det_marker=False, force_markers_identity=False)
+    fig.suptitle(f"Comparison between trials types and genotypes of the difference of cumulative AUC between stim and prestim for responsive neurons", fontsize=12)
+    fig.canvas.manager.set_window_title("Cum_AUC_comp")
+    plt.show()
+    return wt_hit
+
+diff_AUC_prestim_df = diff_AUC_stim_prestim(activity_long_df[activity_long_df.ID != 4456])
 
 
 def population_SNR(mean_activity_df):
