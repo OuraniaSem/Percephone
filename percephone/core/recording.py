@@ -130,6 +130,9 @@ class Recording:
         if os.path.exists(input_path + 'matrice_pos_auc_fixpre_exc.npy') and os.path.exists(input_path + 'matrice_pos_auc_fixpre_inh.npy'):
             self.matrices["EXC"]["pos_AUC_fixpre"] = np.load(self.input_path + "matrice_pos_auc_fixpre_exc.npy")
             self.matrices["INH"]["pos_AUC_fixpre"] = np.load(self.input_path + "matrice_pos_auc_fixpre_inh.npy")
+        if os.path.exists(input_path + 'matrice_neg_auc_fixpre_exc.npy') and os.path.exists(input_path + 'matrice_neg_auc_fixpre_inh.npy'):
+            self.matrices["EXC"]["neg_AUC_fixpre"] = np.load(self.input_path + "matrice_neg_auc_fixpre_exc.npy")
+            self.matrices["INH"]["neg_AUC_fixpre"] = np.load(self.input_path + "matrice_neg_auc_fixpre_inh.npy")
 
         if os.path.exists(input_path + 'hit_tuned_exc.npy') and os.path.exists(input_path + 'hit_tuned_inh.npy'):
             self.hit_tuned_exc = np.load(self.input_path + "hit_tuned_exc.npy")
@@ -287,6 +290,13 @@ class Recording:
         self.matrices["INH"]["pos_AUC_fixpre"] = auc_matrice(self, self.df_f_inh, self.matrices["INH"]["Responsivity"], period="fixed_prestim", method="positive")
         np.save(self.input_path + "matrice_pos_auc_fixpre_exc.npy", self.matrices["EXC"]["pos_AUC_fixpre"])
         np.save(self.input_path + "matrice_pos_auc_fixpre_inh.npy", self.matrices["INH"]["pos_AUC_fixpre"])
+
+    def auc_neg(self):
+        # pre-stim negative
+        self.matrices["EXC"]["neg_AUC_fixpre"] = auc_matrice(self, self.df_f_exc, self.matrices["EXC"]["Responsivity"], period="fixed_prestim", method="negative")
+        self.matrices["INH"]["neg_AUC_fixpre"] = auc_matrice(self, self.df_f_inh, self.matrices["INH"]["Responsivity"], period="fixed_prestim", method="negative")
+        np.save(self.input_path + "matrice_neg_auc_fixpre_exc.npy", self.matrices["EXC"]["neg_AUC_fixpre"])
+        np.save(self.input_path + "matrice_neg_auc_fixpre_inh.npy", self.matrices["INH"]["neg_AUC_fixpre"])
 
 
 

@@ -48,6 +48,7 @@ def get_mean_trial_activity_df(recs, zscore=True):
             cum_AUC_pre = rec.matrices[neuron_type]["cum_AUC_pre"]
             cum_AUC_fixpre = rec.matrices[neuron_type]["cum_AUC_fixpre"]
             pos_AUC_fixpre = rec.matrices[neuron_type]["pos_AUC_fixpre"]
+            neg_AUC_fixpre = rec.matrices[neuron_type]["neg_AUC_fixpre"]
             for n_id, neuron_activity in enumerate(activity):
                 for trial_id in range(len(behavior_vector)):
                     stim_start = stim_time_vector[trial_id]
@@ -67,7 +68,7 @@ def get_mean_trial_activity_df(recs, zscore=True):
                            "Prestim_mean": prestim_mean_activity, "Prestim_std": prestim_std_activity,
                            "AUC": AUC[n_id, trial_id], "cum_AUC": cum_AUC[n_id, trial_id],
                            "cum_AUC_pre": cum_AUC_pre[n_id, trial_id], "cum_AUC_fixpre": cum_AUC_fixpre[n_id, trial_id],
-                           "pos_AUC_fixpre": pos_AUC_fixpre[n_id, trial_id]}
+                           "pos_AUC_fixpre": pos_AUC_fixpre[n_id, trial_id], "neg_AUC_fixpre": neg_AUC_fixpre[n_id, trial_id]}
                     rows.append(row)
     activity_df = pd.DataFrame(rows)
     activity_df["Diff_mean"] = activity_df["Stim_mean"] - activity_df["Prestim_mean"]
@@ -850,6 +851,59 @@ def compute_neuronal_sensitivity(data_df, amplitude="All", n_type="all"):
     return curve_plot_data
 
 
+def ntn_cosine_similarity(mean_activity_df, amplitude="threshold", hit=True, miss=True, nogo=False, metric="Resp"):
+    if not nogo:
+        data = mean_activity_df[mean_activity_df.Amplitude != 0].copy()
+    else:
+        data = mean_activity_df.copy()
+    # Selection of trials, amplitude
+    if amplitude == "threshold":
+        data = data[data.Amplitude == data.Threshold].copy()
+    elif amplitude == "all":
+        data = data[data.Amplitude != 0].copy()
+    elif isinstance(amplitude, list):
+        data = data[data.Amplitude.isin(amplitude)].copy()
+    # Selection of trials, behavior
+    if not hit:
+        data = data[data.Behavior != True]
+    if not miss:
+        data = data[data.Behavior != False]
+    # for each recording, computing the cosine similarity between its neurons
+    rows = []
+    fig, axs = plt.subplots(nrows=4, ncols=6, figsize=(24, 16), constrained_layout=True)
+    ax = axs.flatten()
+    for i, rec_id in enumerate(data.ID.unique()):
+        rec_data_long = data[data.ID == rec_id].copy()
+        genotype = rec_data_long.Genotype.values[0]
+        threshold = rec_data_long.Threshold.values[0]
+        rec_data = rec_data_long.pivot(index="Neuron", columns="Trial", values=metric)
+        rec_data = rec_data.loc[sorted(rec_data.index, key=lambda lab: (lab.split('_')[0], int(lab.split('_')[1])))]
+        # computing cosine similarity between pairs of neurons
+        matrix = np.array(rec_data)
+        n_neurons = matrix.shape[0]
+        cos_sim_mat = cosine_similarity(matrix)
+        mean_cos_sim = cos_sim_mat[~np.eye(n_neurons, dtype=bool)].mean()
+        # Plotting the cosine similarity matrix
+        ax[i].imshow(cos_sim_mat, cmap="seismic", vmin=-1, vmax=+1, interpolation="none")
+        ax[i].set_xlabel("Neuron i", fontsize=10)
+        ax[i].set_ylabel("Neuron j", fontsize=10)
+        ax[i].set_title(f"{int(rec_id)} - {genotype}({threshold})[{mean_cos_sim:.2f}]", fontsize=12)
+        rows.append({"ID": rec_id, "Genotype": genotype, "Threshold": threshold, "mean_cos_sim": mean_cos_sim})
+    mean_cos_sim_data = pd.DataFrame(rows)
+    fig.suptitle(f"Neuron to neuron {metric} cosine similarity between trials\n"
+                 f"Amp: {amplitude} - Hit: {hit} - Miss: {miss} - No-Go: {nogo}", fontsize=12)
+    fig.canvas.manager.set_window_title(f"ntn_cosim_{amplitude}_{hit}_{miss}_{nogo}")
+    fig_comp, ax_comp = plt.subplots(nrows=1, ncols=1, figsize=(6, 8), constrained_layout=True)
+    ppt.boxplot(ax_comp, mean_cos_sim_data[mean_cos_sim_data.Genotype == "WT"].values, mean_cos_sim_data[mean_cos_sim_data.Genotype == "KO-Hypo"].values,
+                ylabel="Mean cosine similarity", paired=False, title=f"WT/KO-Hypo", ylim=[],
+                colors=[ppt.wt_color, ppt.hypo_color], det_marker=False, force_markers_identity=False)
+    fig_comp.suptitle(f"Comparison of the mean cosine similarity between pairs of neurons between genotypes\n"
+                      f"Amp: {amplitude} - Hit: {hit} - Miss: {miss} - No-Go: {nogo}", fontsize=12)
+    fig_comp.canvas.manager.set_window_title(f"ntn_cosim_comp_{amplitude}_{hit}_{miss}_{nogo}")
+    return data
+
+
+
 
 # endregion ============================================================================================================
 # region ======================================== Pre-stimulus =========================================================
@@ -1532,7 +1586,7 @@ def compare_prestim(mean_activity_df, threshold_only=False):
     hypo_fa = nogo_fa[nogo_fa.Genotype == "KO-Hypo"]
     hypo_cr_full = nogo_cr[nogo_cr.Genotype == "KO-Hypo"]
     hypo_cr = hypo_cr_full[hypo_cr_full["ID"].isin(hypo_fa["ID"])]
-    for row, auc_metric in enumerate(["cum_AUC_fixpre", "pos_AUC_fixpre"]):
+    for row, auc_metric in enumerate(["cum_AUC_fixpre", "neg_AUC_fixpre"]):
         # Between Hit/Miss
         ppt.boxplot(ax[row, 0], wt_hit[auc_metric].values, wt_miss[auc_metric].values,
                     ylabel=auc_metric, paired=True, title="WT Hit/Miss", ylim=[],
@@ -1565,8 +1619,8 @@ def compare_prestim(mean_activity_df, threshold_only=False):
     plt.show()
     return all_grouped
 
-prestim_auc_df = compare_prestim(activity_long_df[activity_long_df.ID != 4456], threshold_only=False)
-prestim_auc_df = compare_prestim(activity_long_df, threshold_only=False)
+# prestim_auc_df = compare_prestim(activity_long_df[activity_long_df.ID != 4456], threshold_only=False)
+#prestim_auc_df = compare_prestim(activity_long_dff, threshold_only=False)
 
 def diff_AUC_stim_prestim(mean_activity_df):
     """Is there a difference in how (AUC) the responsive neurons respond between trial outcome and genotypes"""
@@ -1613,7 +1667,7 @@ def diff_AUC_stim_prestim(mean_activity_df):
     plt.show()
     return wt_hit
 
-diff_AUC_prestim_df = diff_AUC_stim_prestim(activity_long_df[activity_long_df.ID != 4456])
+# diff_AUC_prestim_df = diff_AUC_stim_prestim(activity_long_df[activity_long_df.ID != 4456])
 
 
 def population_SNR(mean_activity_df):
@@ -1746,6 +1800,7 @@ if __name__ == '__main__':
     # region ====== Comparison of threshold to session threshold ======
     rows = []
     for rec in recs.values():
+        rec.auc_neg()
         rows.append({"ID": rec.filename, "Genotype": rec.genotype, "threshold": rec.threshold,
                      "session_threshold": rec.session_threshold, "session_x0": rec.x0_psy})
     session_threshold = pd.DataFrame(rows)
@@ -1769,6 +1824,9 @@ if __name__ == '__main__':
     recruitment_df = get_features(recs.values(), amp_delay=False, auc=False)
     # hit_test, hit_posthoc, miss_test, miss_posthoc = compare_tbt_var_per_amp(recruitment_df)
     activity_long_df = get_mean_trial_activity_df(recs.values(), zscore=True)
+    activity_long_dff = get_mean_trial_activity_df(recs.values(), zscore=False)
+
+    ntn_df = ntn_cosine_similarity(activity_long_df, amplitude="threshold", hit=True, miss=False, nogo=False, metric="Resp")
     # activity_long_dff = get_mean_trial_activity_df(recs.values(), zscore=False)
     # prestim_df = prestim_activated_neurons(filtered_activity_df)
     # prestim_vector_df = prestim_act_vector(activity_long_df, metric="Stim_mean", hit_activated_only=False)
