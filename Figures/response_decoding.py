@@ -25,7 +25,7 @@ from Figures.stimulus_encoding import get_features
 
 # endregion
 
-def get_activity_by_frame_df(recs, zscore=True):
+def get_activity_by_frame_df(recs, zscore=True, BMS=False):
     """
     Generates a pd.DataFrame, each containing the neuronal data for a single neuron 30 frames preceding and following for a single trial.
     Frame 30 = stim_time.
@@ -40,7 +40,7 @@ def get_activity_by_frame_df(recs, zscore=True):
     """
     rows = []
     for rec in recs:
-        if BMS_analysis:
+        if BMS:
             rec_id = f"{rec.filename}-{rec.genotype.split("-")[1]}"
         else:
             rec_id = rec.filename

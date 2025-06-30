@@ -13,6 +13,7 @@ import statsmodels.formula.api as smf
 
 import percephone.core.recording as pc
 import percephone.plts.stats as ppt
+from Figures.response_decoding import get_activity_by_frame_df
 from Figures.stimulus_encoding import get_features
 from percephone.plts.utils import stat_boxplot
 
@@ -852,6 +853,8 @@ def compute_neuronal_sensitivity(data_df, amplitude="All", n_type="all"):
 
 
 def ntn_cosine_similarity(mean_activity_df, amplitude="threshold", hit=True, miss=True, nogo=False, metric="Resp"):
+    """Computing and plotting each vector of neuronal activity across trials cosine similarity."""
+    # Filtering out the no-gos according to the specified parameter
     if not nogo:
         data = mean_activity_df[mean_activity_df.Amplitude != 0].copy()
     else:
@@ -902,6 +905,50 @@ def ntn_cosine_similarity(mean_activity_df, amplitude="threshold", hit=True, mis
     fig_comp.canvas.manager.set_window_title(f"ntn_cosim_comp_{amplitude}_{hit}_{miss}_{nogo}")
     return data
 
+
+def temporal_correlation_neuron(frame_df):
+    """Compute the correlation between the temporal dynamics of neurons within each trial"""
+    data = frame_df.drop(columns=["resp"]).copy()
+    for rec_id in data.ID.unique():
+        rec_data = data[data.ID == rec_id]
+        genotype = rec_data.Genotype.values[0]
+        threshold = rec_data.Threshold.values[0]
+        rows = []
+        for trial_id in rec_data.Trial.unique():
+            trial_data = rec_data[rec_data.Trial == trial_id]
+            duration = trial_data.Duration.values[0]
+            amplitude = trial_data.Amplitude.values[0]
+            behavior = trial_data.Behavior.values[0]
+            n_exc = (trial_data["n_type"] == "EXC").sum()
+            trial_data = trial_data.drop(columns=["Genotype", "ID", "Threshold", "Trial", "Amplitude", "Duration", "Behavior"]).copy()
+            # Selecting the desired frames
+            trial_data = trial_data.loc[:, 30:30+duration]
+            # Computing the correlation between neurons
+            corr_mat = np.corrcoef(trial_data)
+            rows.append({"Genotype": genotype, "ID": rec_id, "Threshold": threshold, "Amplitude": amplitude,
+                         "Duration": duration, "Behavior": behavior, "n_exc": n_exc, "corr_mat": corr_mat})
+        corr_data = pd.DataFrame(rows)
+        corr_data.sort_values(by=["Behavior", "Amplitude"], ascending=True, inplace=True)
+        corr_data.reset_index(drop=True, inplace=True)
+        # Plotting the correlation matrices of trials
+        ncols = int(np.ceil(np.sqrt(len(corr_data))))
+        nrows = int(np.ceil(len(corr_data) / ncols))
+        fig, axs = plt.subplots(nrows=nrows, ncols=ncols, figsize=(4*ncols, 4*nrows), constrained_layout=True)
+        ax = axs.flatten()
+        for i, trial in corr_data.iterrows():
+            ax[i].imshow(trial.corr_mat, cmap="seismic", vmin=-1, vmax=+1, interpolation="none")
+            ax[i].set_title(f"{trial.Amplitude}µm ({trial.Duration}s) - {trial.Behavior}", fontsize=8)
+            ax[i].axhline(y=trial.n_exc - 0.5, ls="--", lw=0.5, color="black")
+            ax[i].axvline(x=trial.n_exc - 0.5, ls="--", lw=0.5, color="black")
+            ax[i].tick_params(axis="both", which="major", labelsize=6)
+        for ax in ax[len(corr_data):]:
+            ax.axis("off")
+        fig.suptitle(f"Temporal dynamics correlation of neurons within trials\n {rec_id}({genotype}) [{threshold}]", fontsize=12)
+        fig.canvas.manager.set_window_title(f"temp_corr_{rec_id}")
+    plt.show()
+    return corr_data
+
+temp_corr_df = temporal_correlation_neuron(frame_data[frame_data.ID.isin([4445])])
 
 
 
@@ -1825,6 +1872,7 @@ if __name__ == '__main__':
     # hit_test, hit_posthoc, miss_test, miss_posthoc = compare_tbt_var_per_amp(recruitment_df)
     activity_long_df = get_mean_trial_activity_df(recs.values(), zscore=True)
     activity_long_dff = get_mean_trial_activity_df(recs.values(), zscore=False)
+    frame_data = get_activity_by_frame_df(recs.values(), zscore=True)
 
     ntn_df = ntn_cosine_similarity(activity_long_df, amplitude="threshold", hit=True, miss=False, nogo=False, metric="Resp")
     # activity_long_dff = get_mean_trial_activity_df(recs.values(), zscore=False)
