@@ -1013,6 +1013,7 @@ def plot_neuron_perc_amp(recs, pattern="recruited", detected_trials=True, undete
     plt.show()
     return results
 
+
 def plot_response_variance(features_df, variable="act_EXC_perc"):
     """Plot the variance in the number of activated pyramidal neurons according to the amplitude of stimulation for the 3 genotypes"""
     color_dict = {"WT": ppt.wt_color, "KO": ppt.ko_color, "KO-Hypo": ppt.hypo_color}
@@ -1217,8 +1218,6 @@ def compare_pca_trial_vs_concat(recs, n_type="EXC"):
         plt.show()
 
 
-
-
 def hit_tuned_neurons(recs, normalize=True):
     """
     Compares the numbers of neurons that are significantly tuned to detection between genotypes.
@@ -1412,10 +1411,10 @@ if __name__ == '__main__':
     # wt, hypo = compare_sub_supra_between(data, behavior_filter=None, gp1="KO", gp2="KO-Hypo", gp1_amps="all_supra", gp2_amps="all_supra", colors=[ppt.ko_color, ppt.hypo_color])
     #   --- Between (Deltas) ---
     # sub_supra_delta_df = compare_sub_supra_deltas(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo")
-    sub_supra_delta_df_wt, sub_supra_delta_df_hypo = compare_sub_supra_deltas(data, behavior_filter=None, gp1="WT",
-                                                                              gp2="KO-Hypo", delta="sub")
+    # sub_supra_delta_df_wt, sub_supra_delta_df_hypo = compare_sub_supra_deltas(data, behavior_filter=None, gp1="WT",
+    #                                                                           gp2="KO-Hypo", delta="sub")
     # --- Hit vs. Miss ---
-    # det, undet = compare_det_undet(data, genotype="WT", amplitude="all_supra") # /!\ full_data for all amp and data for threshold analysis
+    det, undet = compare_det_undet(full_data, genotype="WT", amplitude="all") # /!\ full_data for all amp and data for threshold analysis
 
     # mean_det = np.mean(det.drop(columns="Genotype"), axis=0)
     # mean_undet = np.mean(undet.drop(columns="Genotype"), axis=0)
@@ -1425,7 +1424,7 @@ if __name__ == '__main__':
     #                                homogeneity=[False, True])
 
     # nogo_df = nogo_fa_cr(recs.values())
-    # delta_df = delta_hit_miss_comp(data, threshold_only=False, wt_threshold=False)
+    delta_df = delta_hit_miss_comp(full_data, threshold_only=False, wt_threshold=False)
     # delta_df = delta_hit_miss_comp(data, threshold_only=False, wt_threshold=False, condition="BMS") #/!\ full_data for all amp and data for threshold analysis
 
 

@@ -612,7 +612,7 @@ def curveplot(ax, data, between="Genotype", within="Trial", variable=None,
                 subset = data[(data[between] == group) & (data[within] == measure)]
                 gp_measure = subset[variable].values
                 if len(gp_measure) > 0:
-                    gp_plot = ax.scatter([x] * len(gp_measure), gp_measure, color=color, alpha=0.5, marker="+")
+                    gp_plot = ax.scatter([x] * len(gp_measure), gp_measure, color=color, alpha=0.5, marker="o", s=20)
                     scatters.append(gp_plot)
                     all_labels.append(subset["ID"].values)
                     # Displaying the ID when hovering the data points

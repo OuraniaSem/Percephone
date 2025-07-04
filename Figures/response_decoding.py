@@ -20,6 +20,7 @@ from tqdm import tqdm
 
 import percephone.core.recording as pc
 import percephone.plts.stats as ppt
+# from Figures.noise_assessment import get_mean_trial_activity_df, ntn_cosine_similarity
 from Figures.stimulus_encoding import get_features
 
 
@@ -641,7 +642,7 @@ def compare_accuracy(recs, random=42):
                     colors=["#229708", "#cba61b"], det_marker=False, force_markers_identity=False)
     fig.suptitle("Comparison of decoding accuracy between neuron types")
     fig.canvas.manager.set_window_title(f"Accuracy n_types")
-    plt.show()
+    # plt.show()
     return data
 
 
@@ -786,6 +787,75 @@ def correlate_frame_accuracy_metrics(frame_model_df, features_df, period="stim")
     plt.savefig(f"{server_address}/response_decoding/corr_acc_model_features_{period}.pdf", format="pdf")
     return data, results
 
+def correlate_frame_accuracy_ntn_df(frame_model_df, ntn_df, period="stim"):
+    """Correlates the model accuracy during the period with the ntn_cosim"""
+    # Getting a Dataframe of the model mean accuracy during stim, one row per animal
+    period_dict = {"stim": [30, 45], "start": [30, 37], "end": [37, 45], "pre_stim": [24, 30]}
+    start, end = period_dict[period]
+    data_acc = frame_model_df[frame_model_df["Frame"].isin(range(start, end))].groupby(["Genotype", "ID"], as_index=False).mean().drop(columns="Frame")
+    # Getting the features DataFrame, defining a single metric per animal, only responsive neurons are considered
+    data = ntn_df.merge(data_acc[["ID", "TPR", "FPR", "Accuracy"]], on="ID", how="left").drop(columns=["Threshold"])
+    data_hit = data[data.Behavior == "Hit"]
+    data_miss = data[data.Behavior == "Miss"]
+    data_all = data[data.Behavior == "All"]
+    cols_id = ["ID", "Genotype", "Behavior"]
+    cols_acc = ["Accuracy", "TPR", "FPR"]
+    cols_features = [col for col in data.columns if ((col not in cols_id) and (col not in cols_acc))]
+    n_features = len(cols_features)
+    # Plotting the correlation of the different features with the model accuracy for all genotypes
+    color_dict = {"WT": ppt.wt_color, "KO-Hypo": ppt.hypo_color, "KO": ppt.ko_color}
+    fig, ax = plt.subplots(nrows=9, ncols=n_features, figsize=(n_features * 5, 45), constrained_layout=True)
+    rows = []
+    for row, (data, trial_type) in enumerate(zip([data_all, data_hit, data_miss], ["All", "Hit", "Miss"])):
+        for sub_row, acc in enumerate(cols_acc):
+            for col, feature in enumerate(cols_features):
+                # Correlation global
+                y_col = data[acc]
+                x_col = data[feature]
+                results = dict(linregress(x_col, y_col)._asdict())
+                r2 = results["rvalue"] ** 2
+                line = results["slope"] * x_col + results["intercept"]
+                # Correlation WT
+                y_col_wt = data[data.Genotype == "WT"][acc]
+                x_col_wt = data[data.Genotype == "WT"][feature]
+                results_wt = dict(linregress(x_col_wt, y_col_wt)._asdict())
+                r2_wt = results_wt["rvalue"] ** 2
+                line_wt = results_wt["slope"] * x_col_wt + results_wt["intercept"]
+                # Correlation KO-Hypo
+                y_col_hypo = data[data.Genotype == "KO-Hypo"][acc]
+                x_col_hypo = data[data.Genotype == "KO-Hypo"][feature]
+                results_hypo = dict(linregress(x_col_hypo, y_col_hypo)._asdict())
+                r2_hypo = results_hypo["rvalue"] ** 2
+                line_hypo = results_hypo["slope"] * x_col_hypo + results_hypo["intercept"]
+                # Defining the axis
+                if n_features == 1:
+                    axis = ax[3 * row + sub_row]
+                else:
+                    axis = ax[3 * row + sub_row, col]
+                # Plot the data points and regression lines
+                axis.plot(x_col, line, color="black", lw=2)
+                axis.plot(x_col_wt, line_wt, color=ppt.wt_color, lw=2)
+                axis.plot(x_col_hypo, line_hypo, color=ppt.hypo_color, lw=2)
+                for g in sorted(data["Genotype"].unique()):
+                    group = data[data["Genotype"] == g]
+                    sc = axis.scatter(group[feature], group[acc], color=color_dict[g], alpha=0.7, s=10, marker="+")
+                # Annotate the plot with R² and p-value
+                axis.text(0.05, 0.95, f"$r^2={r2:.3f}$ p-val={results["pvalue"]:.3f}", transform=axis.transAxes, fontsize=8, verticalalignment="top", color="black")
+                axis.text(0.05, 0.90, f"$r^2={r2_wt:.3f}$ p-val={results_wt["pvalue"]:.3f}", transform=axis.transAxes, fontsize=8, verticalalignment="top", color=ppt.wt_color)
+                axis.text(0.05, 0.85, f"$r^2={r2_hypo:.3f}$ p-val={results_hypo["pvalue"]:.3f}", transform=axis.transAxes, fontsize=8, verticalalignment="top", color=ppt.hypo_color)
+                axis.set_title(f"{trial_type} trials", fontsize=10)
+                axis.set_xlabel(feature, fontsize=10)
+                axis.set_ylabel(acc, fontsize=10)
+                axis.set_ylim(ymin=0, ymax=1)
+                axis.tick_params(axis='both', which='major', labelsize=5)
+                rows.append({"Trials": trial_type, "Acc_metric": acc, "Feature": feature,
+                             "r2": r2, "pval": results["pvalue"],
+                             "r2_wt": r2_wt, "pval_wt": results_wt["pvalue"],
+                             "r2_hypo": r2_hypo, "pval_hypo": results_hypo["pvalue"]})
+    results = pd.DataFrame(rows)
+    fig.suptitle(f"Correlation of the frame model accuracy during the whole {period} period with neuron to neuron global cosine similarity")
+    plt.savefig(f"{server_address}response_decoding/corr_acc_model_ntn_cosim_{period}.pdf", format="pdf")
+    return data, results
 
 # endregion ============================================================================================================
 
@@ -817,6 +887,7 @@ if __name__ == '__main__':
 
 
     for rec in recs.values():
+        rec.auc_neg()
         rec.peak_delay_amp()
     # endregion ============
     # test = perceptual_magnitude_behavior_corr(recs.values())
@@ -829,15 +900,19 @@ if __name__ == '__main__':
 
     frame_dff = get_activity_by_frame_df(recs.values(), zscore=False)
     features_df = get_features(recs.values(), amp_delay=True, auc=True)
+    # activity_long_df = get_mean_trial_activity_df(recs.values(), zscore=True)
+    # ntn_df = ntn_cosine_similarity(activity_long_df, amplitude="all", nogo=False, metric="Resp", filter_out_nr=False)
 
     frame_model_df_res = pd.read_csv("C:/Users/cvandromme/Desktop/Tactile_detection/Analysis_data/frame_model_df_res.csv")
+    frame_model_df_avg = pd.read_csv("C:/Users/cvandromme/Desktop/Tactile_detection/Analysis_data/frame_model_df_avg3.csv")
     # frame_model_df_res, frame_mean_sem_res = frame_model(frame_dff, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db_cv=True, balancing_method="resampling")
     # frame_model_df_avg, frame_mean_sem_avg = frame_model(frame_dff, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1],
     #                                                      db_cv=True, balancing_method="resampling", sliding_window=3, window_sum=False)
-    # plot_df = plot_hit_miss_classif(frame_model_df_res, title_precision="All neurons, all patterns, doubleCV", shuffle=True)
-    # plot_hit_miss_classif_comp(frame_model_df_res, gp1="WT", gp2="KO-Hypo", title_precision="All neurons, all patterns, doubleCV")
+    plot_df = plot_hit_miss_classif(frame_model_df_res, title_precision="All neurons, all patterns, doubleCV", shuffle=True)
+    plot_hit_miss_classif_comp(frame_model_df_avg, gp1="WT", gp2="KO", title_precision="All neurons, all patterns, doubleCV avg3")
 
-    corr_acc_features_df, corr_results_df = correlate_frame_accuracy_metrics(frame_model_df_res, features_df, period="stim")
+    # corr_acc_features_df, corr_results_df = correlate_frame_accuracy_metrics(frame_model_df_res, features_df, period="stim")
+    # corr_acc_ntn_df, corr_ntn_results_df = correlate_frame_accuracy_ntn_df(frame_model_df_res, ntn_df, period="stim")
 
     # saved_framed_model_df = pd.read_csv("C:/Users/cvandromme/Desktop/frame_model_df.csv")
     # frame_model_df_amp_gp = frame_model_df.groupby(["Genotype", "ID", "Threshold", "Amplitude"], as_index=False).mean().drop(columns=["Trial", "Duration", "Behavior"])
@@ -846,5 +921,5 @@ if __name__ == '__main__':
 
     # recs_wt = {k: v for k, v in recs.items() if v.genotype == "WT"}
     # recs_hypo = {k: v for k, v in recs.items() if v.genotype == "KO-Hypo"}
-    # accuracy_comp_df = compare_accuracy(recs.values(), random=42)
+    accuracy_comp_df = compare_accuracy(recs.values(), random=42)
     # acc_nb_df = correlate_nb_accuracy(recs, accuracy_comp_df[accuracy_comp_df["Genotype"] == "KO"], threshold="median")
