@@ -13,6 +13,7 @@ import statsmodels.formula.api as smf
 
 import percephone.core.recording as pc
 import percephone.plts.stats as ppt
+from Figures.response_decoding import get_activity_by_frame_df
 from Figures.stimulus_encoding import get_features
 from percephone.plts.utils import stat_boxplot
 
@@ -877,7 +878,7 @@ def compute_neuronal_sensitivity(data_df, amplitude="All", n_type="all"):
     return curve_plot_data
 
 
-def ntn_cosine_similarity(mean_activity_df, amplitude="threshold", nogo=False, metric="Resp", filter_out_nr=False):
+def ntn_cosine_similarity(mean_activity_df, amplitude="threshold", nogo=False, metric="Resp", filter_out_nr=False, n_type="all"):
     """Computing and plotting each vector of neuronal activity across trials cosine similarity."""
     nogo_data = mean_activity_df[mean_activity_df.Amplitude == 0].copy()
     # Filtering out the no-gos according to the specified parameter
@@ -885,6 +886,9 @@ def ntn_cosine_similarity(mean_activity_df, amplitude="threshold", nogo=False, m
         data = mean_activity_df[mean_activity_df.Amplitude != 0].copy()
     else:
         data = mean_activity_df.copy()
+    # Filtering the neuron type
+    if n_type in ["EXC", "INH"]:
+        data = data[data["Neuron"].str.startswith(n_type)]
     # Selection of trials, amplitude
     if amplitude == "threshold":
         data = data[data.Amplitude == data.Threshold].copy()
@@ -924,8 +928,8 @@ def ntn_cosine_similarity(mean_activity_df, amplitude="threshold", nogo=False, m
             rows.append({"ID": rec_id, "Genotype": genotype, "Threshold": threshold, "Behavior": label,
                          "n_neurons": n_neurons, "n_trials": n_trials, "mean_cos_sim": mean_cos_sim})
         fig.suptitle(f"Neuron to neuron {metric} cosine similarity between trials\n"
-                     f"Amp: {amplitude} - Trials: {label} - No-Go: {nogo}", fontsize=12)
-        fig.canvas.manager.set_window_title(f"ntn_cosim_{amplitude}_{label}_{nogo}")
+                     f"Amp: {amplitude} - Trials: {label} - No-Go: {nogo} - Neurons: {n_type}", fontsize=12)
+        fig.canvas.manager.set_window_title(f"ntn_cosim_{amplitude}_{label}_{nogo}_{n_type}")
     mean_cos_sim_data = pd.DataFrame(rows)
 
     # WT
@@ -1023,7 +1027,7 @@ def ntn_cosine_similarity(mean_activity_df, amplitude="threshold", nogo=False, m
             ax[i].set_ylim(ymin=0, ymax=1)
             ax[i].tick_params(axis='both', which='major', labelsize=5)
         fig_corr.suptitle(f"Correlation of the {nb_variable} with the mean cosine similarity", fontsize=10)
-        fig_corr.canvas.manager.set_window_title(f"Corr_{nb_variable}_mean_cos_sim_{amplitude}_{metric}_{filter_out_nr}")
+        fig_corr.canvas.manager.set_window_title(f"Corr_{nb_variable}_mean_cos_sim_{amplitude}_{metric}_{filter_out_nr}_{n_type}")
     # Plotting the comparison between behavior labels and genotypes
     fig_comp, ax_comp = plt.subplots(nrows=2, ncols=3, figsize=(18, 16), constrained_layout=True)
     variable_col = "mean_cos_sim"
@@ -1054,8 +1058,8 @@ def ntn_cosine_similarity(mean_activity_df, amplitude="threshold", nogo=False, m
                 ylabel=variable_col, paired=False, title=f"WT/KO-Hypo (Miss)", ylim=[0, 0.8],
                 colors=[ppt.wt_light_color, ppt.hypo_light_color], det_marker=False, force_markers_identity=False)
     fig_comp.suptitle(f"Comparison of the {variable_col} between pairs of neurons between genotypes\n"
-                      f"Amp: {amplitude} - No-Go: {nogo} - NR filter: {filter_out_nr}", fontsize=12)
-    fig_comp.canvas.manager.set_window_title(f"ntn_cosim_comp_{amplitude}_{nogo}_{filter_out_nr}")
+                      f"Amp: {amplitude} - No-Go: {nogo} - Neurons: {n_type} - NR filter: {filter_out_nr}", fontsize=12)
+    fig_comp.canvas.manager.set_window_title(f"ntn_cosim_comp_{amplitude}_{nogo}_{filter_out_nr}_{n_type}")
     plt.show()
     return mean_cos_sim_data
 
@@ -1117,47 +1121,105 @@ def ntn_cosim_per_amp(mean_activity_df, metric="Resp", filter_out_nr=False):
 def temporal_correlation_neuron(frame_df):
     """Compute the correlation between the temporal dynamics of neurons within each trial"""
     data = frame_df.drop(columns=["resp"]).copy()
+    rows = []
     for rec_id in data.ID.unique():
         rec_data = data[data.ID == rec_id]
         genotype = rec_data.Genotype.values[0]
         threshold = rec_data.Threshold.values[0]
-        rows = []
+        rec_rows = []
         for trial_id in rec_data.Trial.unique():
             trial_data = rec_data[rec_data.Trial == trial_id]
             duration = trial_data.Duration.values[0]
             amplitude = trial_data.Amplitude.values[0]
             behavior = trial_data.Behavior.values[0]
+            n_neurons = len(trial_data)
             n_exc = (trial_data["n_type"] == "EXC").sum()
             trial_data = trial_data.drop(columns=["Genotype", "ID", "Threshold", "Trial", "Amplitude", "Duration", "Behavior"]).copy()
             # Selecting the desired frames
             trial_data = trial_data.loc[:, 30:30+duration]
             # Computing the correlation between neurons
             corr_mat = np.corrcoef(trial_data)
-            rows.append({"Genotype": genotype, "ID": rec_id, "Threshold": threshold, "Amplitude": amplitude,
+            rec_rows.append({"Genotype": genotype, "ID": rec_id, "Threshold": threshold, "Amplitude": amplitude,
                          "Duration": duration, "Behavior": behavior, "n_exc": n_exc, "corr_mat": corr_mat})
-        corr_data = pd.DataFrame(rows)
+        corr_data = pd.DataFrame(rec_rows)
         corr_data.sort_values(by=["Behavior", "Amplitude"], ascending=True, inplace=True)
         corr_data.reset_index(drop=True, inplace=True)
-        # Plotting the correlation matrices of trials
-        ncols = int(np.ceil(np.sqrt(len(corr_data))))
-        nrows = int(np.ceil(len(corr_data) / ncols))
-        fig, axs = plt.subplots(nrows=nrows, ncols=ncols, figsize=(4*ncols, 4*nrows), constrained_layout=True)
-        ax = axs.flatten()
-        for i, trial in corr_data.iterrows():
-            ax[i].imshow(trial.corr_mat, cmap="seismic", vmin=-1, vmax=+1, interpolation="none")
-            ax[i].set_title(f"{trial.Amplitude}µm ({trial.Duration}s) - {trial.Behavior}", fontsize=8)
-            ax[i].axhline(y=trial.n_exc - 0.5, ls="--", lw=0.5, color="black")
-            ax[i].axvline(x=trial.n_exc - 0.5, ls="--", lw=0.5, color="black")
-            ax[i].tick_params(axis="both", which="major", labelsize=6)
-        for ax in ax[len(corr_data):]:
-            ax.axis("off")
-        fig.suptitle(f"Temporal dynamics correlation of neurons within trials\n {rec_id}({genotype}) [{threshold}]", fontsize=12)
-        fig.canvas.manager.set_window_title(f"temp_corr_{rec_id}")
-    plt.show()
-    return corr_data
+        # ====== Plotting each single correlation matrix of trials ======
+        # ncols = int(np.ceil(np.sqrt(len(corr_data))))
+        # nrows = int(np.ceil(len(corr_data) / ncols))
+        # fig_all, axs = plt.subplots(nrows=nrows, ncols=ncols, figsize=(4*ncols, 4*nrows), constrained_layout=True)
+        # ax = axs.flatten()
+        # for i, trial in corr_data.iterrows():
+        #     ax[i].imshow(trial.corr_mat, cmap="seismic", vmin=-1, vmax=+1, interpolation="none")
+        #     ax[i].set_title(f"{trial.Amplitude}µm ({trial.Duration}s) - {trial.Behavior}", fontsize=8)
+        #     ax[i].axhline(y=trial.n_exc - 0.5, ls="--", lw=0.5, color="black")
+        #     ax[i].axvline(x=trial.n_exc - 0.5, ls="--", lw=0.5, color="black")
+        #     ax[i].tick_params(axis="both", which="major", labelsize=6)
+        # for ax in ax[len(corr_data):]:
+        #     ax.axis("off")
+        # fig_all.suptitle(f"Temporal dynamics correlation of neurons within trials\n {rec_id}({genotype}) [{threshold}]", fontsize=12)
+        # fig_all.canvas.manager.set_window_title(f"temp_corr_{rec_id}")
 
-# frame_data = get_activity_by_frame_df(recs, zscore=True, BMS=False)
-# temp_corr_df = temporal_correlation_neuron(frame_data[frame_data.ID.isin([7553])])
+        # ====== Plotting the mean matrix per behavioral outcome ======
+        def mean_matrix(arrays):
+            """given a sequence of (M×N) arrays, return their elementwise mean."""
+            stack = np.stack(arrays, axis=0)
+            return stack.mean(axis=0)
+        # Computing the mean matrices for hit and miss trials, removing the no-go trials
+        mean_mats = corr_data[corr_data.Amplitude != 0].groupby("Behavior")["corr_mat"].apply(lambda series_of_arrays: mean_matrix(series_of_arrays.values))
+        # fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(20, 10), constrained_layout=True)
+        for i, behavior_label in enumerate([True, False]):
+            # ax[i].imshow(mean_mats[behavior_label], cmap="seismic", vmin=-1, vmax=+1, interpolation="none")
+            mean_corr = mean_mats[behavior_label][~np.eye(n_neurons, dtype=bool)].mean()
+            # ax[i].set_title(f"{behavior_label} [{mean_corr}]", fontsize=10)
+            # ax[i].axhline(y=n_exc - 0.5, ls="--", lw=0.5, color="black")
+            # ax[i].axvline(x=n_exc - 0.5, ls="--", lw=0.5, color="black")
+            # ax[i].tick_params(axis="both", which="major", labelsize=6)
+            rows.append({"Genotype": genotype, "ID": rec_id, "Behavior": behavior_label, "n_exc": n_exc, "Corr_mat": mean_mats[behavior_label], "Mean_corr": mean_corr})
+        # fig.suptitle(f"Mean correlation matrices for hit and miss trials for {rec_id}({genotype})", fontsize=12)
+    results_df = pd.DataFrame(rows)
+    ncols = int(np.ceil(np.sqrt(len(results_df[results_df.Behavior == True]))))
+    nrows = int(np.ceil(len(results_df[results_df.Behavior == True]) / ncols))
+    fig_hit, axs_hit = plt.subplots(nrows=nrows, ncols=ncols, figsize=(5*ncols, 5*nrows), constrained_layout=True)
+    fig_miss, axs_miss = plt.subplots(nrows=nrows, ncols=ncols, figsize=(5*ncols, 5*nrows), constrained_layout=True)
+    ax_hit = axs_hit.flatten()
+    ax_miss = axs_miss.flatten()
+    for ax_id, rec_id in enumerate(results_df.ID.unique()):
+        for behavior_ax, behavior_label in zip([ax_hit, ax_miss], [True, False]):
+            current_row = results_df[(results_df.ID == rec_id) & (results_df.Behavior == behavior_label)]
+            behavior_ax[ax_id].imshow(current_row["Corr_mat"].values[0], cmap="seismic", vmin=-1, vmax=+1, interpolation="none")
+            behavior_ax[ax_id].set_title(f"{rec_id}({current_row["Genotype"].values[0]}) - {current_row["Mean_corr"].values[0]:.3f}", fontsize=8)
+            behavior_ax[ax_id].axhline(y=current_row["n_exc"].values[0] - 0.5, ls="--", lw=0.5, color="black")
+            behavior_ax[ax_id].axvline(x=current_row["n_exc"].values[0] - 0.5, ls="--", lw=0.5, color="black")
+            behavior_ax[ax_id].tick_params(axis="both", which="major", labelsize=6)
+    fig_hit.suptitle(f"Mean temporal correlation of neurons during hit trials", fontsize=12)
+    fig_miss.suptitle(f"Mean temporal correlation of neurons during miss trials", fontsize=12)
+    # Plotting the difference in mean correlation within and between genotypes
+    fig_comp, ax_comp = plt.subplots(nrows=1, ncols=4, figsize=(24, 8), constrained_layout=True)
+    ppt.boxplot(ax_comp[0], results_df[(results_df.Genotype == "WT") & (results_df.Behavior == True)]["Mean_corr"].values,
+                results_df[(results_df.Genotype == "WT") & (results_df.Behavior == False)]["Mean_corr"].values,
+                ylabel="Mean_corr", paired=True, title=f"Hit/Miss (WT)", ylim=[],
+                colors=[ppt.wt_color, ppt.wt_light_color], det_marker=False, force_markers_identity=False)
+    ppt.boxplot(ax_comp[1], results_df[(results_df.Genotype == "KO-Hypo") & (results_df.Behavior == True)]["Mean_corr"].values,
+                results_df[(results_df.Genotype == "KO-Hypo") & (results_df.Behavior == False)]["Mean_corr"].values,
+                ylabel="Mean_corr", paired=True, title=f"Hit/Miss (KO-Hypo)", ylim=[],
+                colors=[ppt.hypo_color, ppt.hypo_light_color], det_marker=False, force_markers_identity=False)
+    ppt.boxplot(ax_comp[2], results_df[(results_df.Genotype == "WT") & (results_df.Behavior == True)]["Mean_corr"].values,
+                results_df[(results_df.Genotype == "KO-Hypo") & (results_df.Behavior == True)]["Mean_corr"].values,
+                ylabel="Mean_corr", paired=False, title=f"WT/KO-Hypo (Hit)", ylim=[],
+                colors=[ppt.wt_color, ppt.hypo_color], det_marker=False, force_markers_identity=False)
+    ppt.boxplot(ax_comp[3], results_df[(results_df.Genotype == "WT") & (results_df.Behavior == False)]["Mean_corr"].values,
+                results_df[(results_df.Genotype == "KO-Hypo") & (results_df.Behavior == False)]["Mean_corr"].values,
+                ylabel="Mean_corr", paired=False, title=f"WT/KO-Hypo (Miss)", ylim=[],
+                colors=[ppt.wt_light_color, ppt.hypo_light_color], det_marker=False, force_markers_identity=False)
+    fig_comp.suptitle(f"Comparison of the mean temporal correlation between neurons during hit and miss trials within and between genotypes", fontsize=12)
+    fig_comp.canvas.manager.set_window_title(f"Mean temporal correlation comp")
+    plt.show()
+    return mean_mats
+
+frame_data = get_activity_by_frame_df(recs.values(), zscore=True, BMS=False)
+# temp_corr_df = temporal_correlation_neuron(frame_data[frame_data.ID.isin([4445]) & (frame_data.Amplitude == frame_data.Threshold)])
+temp_corr_df = temporal_correlation_neuron(frame_data)
 
 
 
@@ -2085,9 +2147,9 @@ if __name__ == '__main__':
     activity_long_df = get_mean_trial_activity_df(recs.values(), zscore=True)
     activity_long_dff = get_mean_trial_activity_df(recs.values(), zscore=False)
 
-    compute_neuronal_sensitivity(activity_long_df, amplitude="All", n_type="EXC")
+    # compute_neuronal_sensitivity(activity_long_df, amplitude="All", n_type="EXC")
 
-    # ntn_df = ntn_cosine_similarity(activity_long_df, amplitude="all", nogo=False, metric="Resp", filter_out_nr=True)
+    ntn_df = ntn_cosine_similarity(activity_long_df, amplitude="all", nogo=False, metric="Resp", filter_out_nr=True, n_type="INH")
     # activity_long_dff = get_mean_trial_activity_df(recs.values(), zscore=False)
     # prestim_df = prestim_activated_neurons(filtered_activity_df)
     # prestim_vector_df = prestim_act_vector(activity_long_df, metric="Stim_mean", hit_activated_only=False)

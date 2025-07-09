@@ -78,7 +78,7 @@ def stat_boxplot(group_1, group_2, ylabel, title="", paired=False, verbose=True,
     pvalue_n2 = ss.shapiro(group_2).pvalue
     if (pvalue_n1 > 0.05 and pvalue_n2 > 0.05) or force_normality:  # Normality of the samples
         if not (pvalue_n1 > 0.05 and pvalue_n2 > 0.05) and force_normality:
-            print("/!\ Assumed normality /!\ ")
+            print("⚠️ Assumed normality ⚠️ ")
         if paired:
             pvalue = ss.ttest_rel(group_1, group_2).pvalue
             print(ss.ttest_rel(group_1, group_2)) if verbose else None

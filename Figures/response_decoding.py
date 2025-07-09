@@ -23,7 +23,6 @@ import percephone.plts.stats as ppt
 # from Figures.noise_assessment import get_mean_trial_activity_df, ntn_cosine_similarity
 from Figures.stimulus_encoding import get_features
 
-
 # endregion
 
 def get_activity_by_frame_df(recs, zscore=True, BMS=False):
@@ -90,6 +89,32 @@ def sliding_window_average(df, header_cols, window_size, sum=False):
     # Ensure numeric column names stay as ints (or as they were originally).
     result_df.columns = header_cols + [int(c) for c in numeric_cols]
     return result_df
+
+
+def aggregate_every_3cols(df, header_cols, window_size=3):
+    """
+    For a DataFrame with some non-numeric "header" columns and 60 numeric columns,
+    returns a new DataFrame with the same header columns plus one column per
+    consecutive block of 3 numeric columns, each equal to their rowwise mean.
+    """
+    # 1) Split off non-numeric headers
+    numeric_cols = [col for col in df.columns if col not in header_cols]
+    header = df[header_cols]
+    nums = df[numeric_cols]
+    # 2) Check we have a multiple of 3 (optional)
+    if len(nums.columns) % window_size != 0:
+        raise ValueError(f"Expected a multiple of {window_size} numeric columns, got {len(nums.columns)}")
+    # 3) For each block of 3, compute the mean
+    new_cols = {}
+    cols = list(nums.columns)
+    for block_idx in range(0, len(cols), window_size):
+        trio = cols[block_idx:block_idx + window_size]
+        # name the new column after the first of the trio (or anything you like)
+        new_name = f"{trio[0]}_to_{trio[-1]}_mean"
+        new_cols[new_name] = nums[trio].mean(axis=1)
+    # 4) Concatenate header + new means
+    result = pd.concat([header, pd.DataFrame(new_cols, index=df.index)], axis=1)
+    return result
 
 # region ======================================== Correlation ==========================================================
 
@@ -298,7 +323,7 @@ def frame_model_n_type_avg(frame_data):
 
 
 def frame_model(frame_data, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db_cv=True, balancing_method="resampling",
-                sliding_window=None, window_sum=False):
+                sliding_window=None, window_sum=False, window=None):
     """
     Return the hit versus miss classification graph.
     A logistic regression model is trained on for each frame for each animal. CV is used to assess the hit accuracy
@@ -313,11 +338,15 @@ def frame_model(frame_data, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db
     -------
 
     """
+    data = frame_data.copy()
+    assert (sliding_window is None or window is None), "Please choose between each frame, sliding window, and window"
     header_columns = ["Genotype", "ID", "Threshold", "Trial", "Amplitude", "Duration", "Behavior", "n_type", "resp", "n_ID"]
     if sliding_window is not None:
         data = sliding_window_average(frame_data, header_columns, sliding_window, sum=window_sum)
+    if window is not None:
+        data = aggregate_every_3cols(frame_data, header_columns, window_size=window)
     # Filtering the neuron types and activity
-    data = frame_data[frame_data["n_type"].isin(neuron_type)]
+    data = data[data["n_type"].isin(neuron_type)]
     data = data[data["resp"].isin(resp_type)]
     data = data.drop(columns=["Threshold", "Amplitude", "Duration", "resp"])
     index_columns = ["Genotype", "ID", "Trial", "Behavior", "n_type", "n_ID"]
@@ -361,7 +390,7 @@ def frame_model(frame_data, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db
                    # "p_hit": metrics["p_hit"], "p_miss": metrics["p_miss"]}
             rows.append(row)
     frame_model_df = pd.DataFrame(rows)
-    frame_mean_sem = plot_hit_miss_classif(frame_model_df, title_precision=f"{neuron_type}{resp_type} - Double CV=={db_cv}")
+    frame_mean_sem = plot_hit_miss_classif(frame_model_df, title_precision=f"{neuron_type}{resp_type} - Double CV=={db_cv}", timescale_division_factor=(1 if window is None else window))
     # frame_comp = plot_hit_miss_classif_comp(frame_model_df, gp1="WT", gp2="KO-Hypo", title_precision=f"{neuron_type}{resp_type} - db_cv={db_cv}")
     return frame_model_df, frame_mean_sem #, frame_comp
 
@@ -470,7 +499,8 @@ def double_cv(X, y, cv_out_fold=5, cv_in_fold=5, param_grid={"C": [0.0001, 0.001
     return results_df if get_df else results_metrics
 
 
-def plot_hit_miss_classif(frame_model_df, title_precision="", shuffle=False):
+def plot_hit_miss_classif(frame_model_df, title_precision="", shuffle=False, shuffle_frame_significance=False,
+                          timescale_division_factor=1):
     """
     Plot the hit vs miss classification graph from a Dataframe with each line containing infos about TPR and TNR for 1
     frame for one animal.
@@ -486,6 +516,8 @@ def plot_hit_miss_classif(frame_model_df, title_precision="", shuffle=False):
     color_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color], "KO": [ppt.ko_color, ppt.ko_light_color],
                   "WT-DMSO": [ppt.wt_color, ppt.wt_light_color], "WT-BMS": [ppt.wt_bms_color, ppt.wt_bms_light_color],
                   "KO-DMSO": [ppt.all_ko_color, ppt.all_ko_light_color], "KO-BMS": [ppt.all_ko_bms_color, ppt.all_ko_bms_light_color]}
+    draw_style = "default" if timescale_division_factor == 1 else "steps-post"
+    fill_style = None if timescale_division_factor == 1 else "post"
     if "WT-BMS" in frame_model_df["Genotype"].unique():
         fig, ax = plt.subplots(nrows=1, ncols=4, figsize=(28, 8), constrained_layout=True)
     else:
@@ -499,10 +531,10 @@ def plot_hit_miss_classif(frame_model_df, title_precision="", shuffle=False):
         fpr_sem = data.groupby("Frame")["FPR"].sem().values
         # Curves plotting
         x = np.arange(len(tpr_mean))
-        ax[i].plot(x, tpr_mean, label="Hit accuracy", color=color_dict[genotype][0], lw=2)
-        ax[i].fill_between(x, tpr_mean - tpr_sem, tpr_mean + tpr_sem, color=color_dict[genotype][0], alpha=0.3)
-        ax[i].plot(x, fpr_mean, label="Miss accuracy", color=color_dict[genotype][1], lw=2)
-        ax[i].fill_between(x, fpr_mean - fpr_sem, fpr_mean + fpr_sem, color=color_dict[genotype][1], alpha=0.3)
+        ax[i].plot(x, tpr_mean, label="Hit accuracy", color=color_dict[genotype][0], lw=2, drawstyle=draw_style)
+        ax[i].fill_between(x, tpr_mean - tpr_sem, tpr_mean + tpr_sem, color=color_dict[genotype][0], alpha=0.3, step=fill_style)
+        ax[i].plot(x, fpr_mean, label="Miss accuracy", color=color_dict[genotype][1], lw=2, drawstyle=draw_style)
+        ax[i].fill_between(x, fpr_mean - fpr_sem, fpr_mean + fpr_sem, color=color_dict[genotype][1], alpha=0.3, step=fill_style)
         if shuffle:
             # Shuffle curves definition
             tpr_mean_shuffle = data.groupby("Frame")["TPR_shuffle"].mean().values
@@ -511,46 +543,48 @@ def plot_hit_miss_classif(frame_model_df, title_precision="", shuffle=False):
             fpr_sem_shuffle = data.groupby("Frame")["FPR_shuffle"].sem().values
             # Shuffle curves plotting
             x = np.arange(len(tpr_mean))
-            ax[i].plot(x, tpr_mean_shuffle, label="Hit accuracy", color=color_dict[genotype][0], lw=1, ls="dotted", alpha=0.25)
-            ax[i].fill_between(x, tpr_mean_shuffle - tpr_sem_shuffle, tpr_mean_shuffle + tpr_sem_shuffle, color=color_dict[genotype][0], alpha=0.1)
-            ax[i].plot(x, fpr_mean_shuffle, label="Miss accuracy", color=color_dict[genotype][1], lw=1, ls="dotted", alpha=0.25)
-            ax[i].fill_between(x, fpr_mean_shuffle - fpr_sem_shuffle, fpr_mean_shuffle + fpr_sem_shuffle, color=color_dict[genotype][1], alpha=0.1)
-            # Computing the statistical difference with shuffle
-            pvals = {}
-            for frame in data.Frame.unique():
-                real_tpr = data[data.Frame == frame]["TPR"]
-                shuffle_tpr = data[data.Frame == frame]["TPR_shuffle"]
-                real_fpr = data[data.Frame == frame]["FPR"]
-                shuffle_fpr = data[data.Frame == frame]["FPR_shuffle"]
-                # paired test across animals
-                # drop any animals missing one of the two
-                idx = real_tpr.index.intersection(shuffle_tpr.index)
-                if len(idx) >= 3:
-                    stat, p_tpr = wilcoxon(real_tpr.loc[idx], shuffle_tpr.loc[idx], alternative="greater")
-                    stat, p_fpr = wilcoxon(real_fpr.loc[idx], shuffle_fpr.loc[idx], alternative="less")
-                else:
-                    p_tpr = np.nan
-                    p_fpr = np.nan
-                pvals[frame] = [p_tpr, p_fpr]
-            # Drawing a bar above significantly different frames
-            for f, p_list in pvals.items():
-                p_tpr = p_list[0]
-                p_fpr = p_list[1]
-                if p_tpr < 0.05:
-                    # draw a tiny horizontal line spanning the width of one frame
-                    ax[i].hlines(0.95, f - 0.4, f + 0.4, color=color_dict[genotype][0], linewidth=2)
-                if p_fpr < 0.05:
-                    # draw a tiny horizontal line spanning the width of one frame
-                    ax[i].hlines(0.05, f - 0.4, f + 0.4, color=color_dict[genotype][1], linewidth=2)
+            ax[i].plot(x, tpr_mean_shuffle, label="Hit accuracy", color=color_dict[genotype][0], lw=1, ls="dotted", alpha=0.25, drawstyle=draw_style)
+            ax[i].fill_between(x, tpr_mean_shuffle - tpr_sem_shuffle, tpr_mean_shuffle + tpr_sem_shuffle, color=color_dict[genotype][0], alpha=0.1, step=fill_style)
+            ax[i].plot(x, fpr_mean_shuffle, label="Miss accuracy", color=color_dict[genotype][1], lw=1, ls="dotted", alpha=0.25, drawstyle=draw_style)
+            ax[i].fill_between(x, fpr_mean_shuffle - fpr_sem_shuffle, fpr_mean_shuffle + fpr_sem_shuffle, color=color_dict[genotype][1], alpha=0.1, step=fill_style)
+            if shuffle_frame_significance:
+                # Computing the statistical difference with shuffle
+                pvals = {}
+                for frame in data.Frame.unique():
+                    real_tpr = data[data.Frame == frame]["TPR"]
+                    shuffle_tpr = data[data.Frame == frame]["TPR_shuffle"]
+                    real_fpr = data[data.Frame == frame]["FPR"]
+                    shuffle_fpr = data[data.Frame == frame]["FPR_shuffle"]
+                    # paired test across animals
+                    # drop any animals missing one of the two
+                    idx = real_tpr.index.intersection(shuffle_tpr.index)
+                    if len(idx) >= 3:
+                        stat, p_tpr = wilcoxon(real_tpr.loc[idx], shuffle_tpr.loc[idx], alternative="greater")
+                        stat, p_fpr = wilcoxon(real_fpr.loc[idx], shuffle_fpr.loc[idx], alternative="less")
+                    else:
+                        p_tpr = np.nan
+                        p_fpr = np.nan
+                    pvals[frame] = [p_tpr, p_fpr]
+                # Drawing a bar above significantly different frames
+                for f, p_list in pvals.items():
+                    p_tpr = p_list[0]
+                    p_fpr = p_list[1]
+                    if p_tpr < 0.05:
+                        # draw a tiny horizontal line spanning the width of one frame
+                        ax[i].hlines(0.95, f - 0.4, f + 0.4, color=color_dict[genotype][0], linewidth=2)
+                    if p_fpr < 0.05:
+                        # draw a tiny horizontal line spanning the width of one frame
+                        ax[i].hlines(0.05, f - 0.4, f + 0.4, color=color_dict[genotype][1], linewidth=2)
+
         # Delimitation of the stimulus period and chance level
-        ax[i].axvline(x=30, ls="--", lw=1, color="red")
-        ax[i].axvline(x=45, ls="--", lw=1, color="black")
+        ax[i].axvline(x=30/timescale_division_factor, ls="--", lw=1, color="red")
+        ax[i].axvline(x=45/timescale_division_factor, ls="--", lw=1, color="black")
         ax[i].axhline(y=0.5, ls="--", lw=1, color="gray")
         # Title and axes formatting
         ax[i].set_title(genotype, color=color_dict[genotype][0], fontsize=20)
         ax[i].set_ylim(0, 1)
         ax[i].set_xlabel("Time (s)")
-        ax[i].set_xticks([0, 15, 30, 45, 60])
+        ax[i].set_xticks(np.divide([0, 15, 30, 45, 60], timescale_division_factor))
         ax[i].set_xticklabels([-1, -0.5, 0, 0.5, 1])
     fig.suptitle(f"Hit versus Miss classification graph using the mean ΔF/F\n{title_precision}", fontsize=20)
     fig.canvas.manager.set_window_title(f"Hit_Miss_classif_{title_precision}")
@@ -593,6 +627,7 @@ def plot_hit_miss_classif_comp(frame_model_df, gp1="WT", gp2="KO-Hypo", title_pr
 def compare_accuracy(recs, random=42):
     """
     Train a logistic regression model with different subsets of neurons and compare the decoding accuracy.
+    The mean neuronal activity during the stimulus period is used to train the model
     Parameters
     ----------
     recs
@@ -631,7 +666,7 @@ def compare_accuracy(recs, random=42):
             rows.append({"ID": rec.filename, "Genotype": rec.genotype, "Fold": fold, "acc_all": acc_all, "acc_exc": acc_exc, "acc_inh": acc_inh})
     full_data = pd.DataFrame(rows)
     data = full_data.groupby(["Genotype", "ID"], as_index=False).mean()
-    fig, ax = plt.subplots(nrows=3, ncols=3, figsize=(18, 24), constrained_layout=True)
+    fig, ax = plt.subplots(nrows=3, ncols=4, figsize=(24, 24), constrained_layout=True)
     for row, (group, gp_label) in enumerate(zip([data, data[data["Genotype"] == "WT"], data[data["Genotype"] == "KO-Hypo"]],
                                                 ["all", "WT", "KO-Hypo"])):
         ppt.boxplot(ax[row, 0], group["acc_all"].values, group["acc_exc"].values, ylabel="Accuracy", paired=True, title=f"All neurons/EXC ({gp_label})", ylim=[0, 1],
@@ -640,6 +675,11 @@ def compare_accuracy(recs, random=42):
                     colors=["#859717", "#cba61b"], det_marker=False, force_markers_identity=False)
         ppt.boxplot(ax[row, 2], group["acc_exc"].values, group["acc_inh"].values, ylabel="Accuracy", paired=True, title=f"EXC/INH ({gp_label})", ylim=[0, 1],
                     colors=["#229708", "#cba61b"], det_marker=False, force_markers_identity=False)
+    wt = data[data["Genotype"] == "WT"]
+    hypo = data[data["Genotype"] == "KO-Hypo"]
+    for row, acc_type in enumerate(["acc_all", "acc_exc", "acc_inh"]):
+        ppt.boxplot(ax[row, 3], wt[acc_type].values, hypo[acc_type].values, ylabel="Accuracy", paired=False, title=f"WT/KO-Hypo ({acc_type})", ylim=[0, 1],
+                    colors=[ppt.wt_color, ppt.hypo_color], det_marker=False, force_markers_identity=False)
     fig.suptitle("Comparison of decoding accuracy between neuron types")
     fig.canvas.manager.set_window_title(f"Accuracy n_types")
     # plt.show()
@@ -902,14 +942,19 @@ if __name__ == '__main__':
     features_df = get_features(recs.values(), amp_delay=True, auc=True)
     # activity_long_df = get_mean_trial_activity_df(recs.values(), zscore=True)
     # ntn_df = ntn_cosine_similarity(activity_long_df, amplitude="all", nogo=False, metric="Resp", filter_out_nr=False)
+    frame_dff_3 = aggregate_every_3cols(frame_dff, ["Genotype", "ID", "Threshold", "Trial", "Amplitude", "Duration", "Behavior", "n_type", "resp", "n_ID"], window_size=3)
 
     frame_model_df_res = pd.read_csv("C:/Users/cvandromme/Desktop/Tactile_detection/Analysis_data/frame_model_df_res.csv")
-    frame_model_df_avg = pd.read_csv("C:/Users/cvandromme/Desktop/Tactile_detection/Analysis_data/frame_model_df_avg3.csv")
+    # frame_model_df_avg = pd.read_csv("C:/Users/cvandromme/Desktop/Tactile_detection/Analysis_data/frame_model_df_avg3.csv")
     # frame_model_df_res, frame_mean_sem_res = frame_model(frame_dff, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db_cv=True, balancing_method="resampling")
-    # frame_model_df_avg, frame_mean_sem_avg = frame_model(frame_dff, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1],
-    #                                                      db_cv=True, balancing_method="resampling", sliding_window=3, window_sum=False)
-    plot_df = plot_hit_miss_classif(frame_model_df_res, title_precision="All neurons, all patterns, doubleCV", shuffle=True)
-    plot_hit_miss_classif_comp(frame_model_df_avg, gp1="WT", gp2="KO", title_precision="All neurons, all patterns, doubleCV avg3")
+    # frame_model_df_avg, frame_mean_sem_avg = frame_model(frame_dff, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db_cv=True, balancing_method="resampling", sliding_window=3, window_sum=False)
+    # frame_model_df_3, frame_mean_sem_3 = frame_model(frame_dff, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db_cv=True, balancing_method="resampling", window=3)
+    # frame_model_df_5, frame_mean_sem_5 = frame_model(frame_dff, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db_cv=True, balancing_method="resampling", window=5)
+    # frame_model_df_2, frame_mean_sem_2 = frame_model(frame_dff, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db_cv=True, balancing_method="resampling", window=2)
+    frame_model_df_4, frame_mean_sem_4 = frame_model(frame_dff, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db_cv=True, balancing_method="resampling")
+    plot_df = plot_hit_miss_classif(frame_model_df_res, title_precision="All neurons, all patterns, doubleCV", shuffle=True, timescale_division_factor=1)
+    plot_df = plot_hit_miss_classif(frame_model_df_4, title_precision="All neurons, all patterns, doubleCV, non-sliding avg4", shuffle=True, timescale_division_factor=4)
+    # plot_hit_miss_classif_comp(frame_model_df_avg, gp1="WT", gp2="KO", title_precision="All neurons, all patterns, doubleCV avg3")
 
     # corr_acc_features_df, corr_results_df = correlate_frame_accuracy_metrics(frame_model_df_res, features_df, period="stim")
     # corr_acc_ntn_df, corr_ntn_results_df = correlate_frame_accuracy_ntn_df(frame_model_df_res, ntn_df, period="stim")
@@ -921,5 +966,5 @@ if __name__ == '__main__':
 
     # recs_wt = {k: v for k, v in recs.items() if v.genotype == "WT"}
     # recs_hypo = {k: v for k, v in recs.items() if v.genotype == "KO-Hypo"}
-    accuracy_comp_df = compare_accuracy(recs.values(), random=42)
+    # accuracy_comp_df = compare_accuracy(recs.values(), random=42)
     # acc_nb_df = correlate_nb_accuracy(recs, accuracy_comp_df[accuracy_comp_df["Genotype"] == "KO"], threshold="median")

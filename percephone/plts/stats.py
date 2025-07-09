@@ -134,9 +134,15 @@ def boxplot(ax, gp1, gp2, ylabel, paired=False, title="", ylim=[], colors=[wt_co
     min_y = min_y_0 if np.isfinite(min_y_0) else 0
 
     # Setting the ylim if specified
+    valid_ylim = True
     if len(ylim) != 0:
         if not (ylim[0] <= min_y and ylim[1] >= max_y):
             warnings.warn("The ylim you have set don't cover the data range.")
+            valid_ylim = False
+            if min_y < ylim[0]:
+                ylabel = "← " + ylabel
+            if max_y > ylim[1]:
+                ylabel = ylabel + " →"
         ax.set_ylim(ylim)
     else:
         y_lim_sup = ax.get_ylim()[1]
@@ -158,7 +164,7 @@ def boxplot(ax, gp1, gp2, ylabel, paired=False, title="", ylim=[], colors=[wt_co
     ax.set_yticks(sorted(yticks))
     ax.set_xticks([])
     ax.set_title(title)
-    ax.set_ylabel(ylabel)
+    ax.set_ylabel(ylabel) if valid_ylim else ax.set_ylabel(ylabel, fontweight="bold", color="red")
     ax.set_xlabel(None)
 
 
@@ -733,8 +739,8 @@ def curveplot(ax, data, between="Genotype", within="Trial", variable=None,
             test_results = pg.mixed_anova(data=data, dv=variable_col, between=between, within=within, subject="ID", correction=True)
             p_val_between = test_results[test_results["Source"] == between]["p-unc"].iloc[0].astype(float)
             p_val_within = test_results[test_results["Source"] == within][GG_col].iloc[0].astype(float)
-            p_val_inter = test_results[test_results["Source"] == "Interaction"][GG_col].iloc[0].astype(float)
-            test_stats = f"Mixed ANOVA ➜ between: {p_val_between:.3f} - within: {p_val_within:.3f}{GG_note} - interaction: {p_val_inter:.3f}{GG_note}"
+            p_val_inter = test_results[test_results["Source"] == "Interaction"]["p-unc"].iloc[0].astype(float)
+            test_stats = f"Mixed ANOVA ➜ between: {p_val_between:.3f} - within: {p_val_within:.3f}{GG_note} - interaction: {p_val_inter:.3f}"
         else:
             variable_col = variable
             # TODO: implement the case of non-normality

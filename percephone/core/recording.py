@@ -813,19 +813,26 @@ class RecordingAmplDet(Recording):
     def get_perc_resp(self, pattern=1, n_type="EXC"):
         """Returns an array of the percentage of responsive neurons per across trials"""
         assert n_type in ["EXC", "INH"], "Please provide a valid neuron type (EXC or INH)"
-        assert pattern in [-1, 0, 1], "Please provide a valid neuron type (-1, 0 or 1)"
+        assert pattern in [-1, 0, 1, 2], "Please provide a valid pattern (-1, 0, 1 or 2)"
         resp_mat = np.array(self.matrices[n_type]["Responsivity"])
         nb_neurons = self.zscore_exc.shape[0] if n_type == "EXC" else self.zscore_inh.shape[0]
-        count = np.sum(resp_mat == pattern, axis=0)
+        if pattern == 2:
+            count = np.sum(resp_mat != 0, axis=0)
+        else:
+            count = np.sum(resp_mat == pattern, axis=0)
         return count/nb_neurons * 100
 
     def get_mean_param(self, pattern=1, n_type="EXC", parameter="Peak_amplitude"):
         assert n_type in ["EXC", "INH"], "Please provide a valid neuron type (EXC or INH)"
-        assert pattern in [-1, 0, 1], "Please provide a valid neuron type (-1, 0 or 1)"
+        assert pattern in [-1, 0, 1, 2], "Please provide a valid pattern (-1, 0, 1 or 2)"
         assert parameter in ["Peak_amplitude", "Peak_delay", "AUC", "cum_AUC"], "Please provide a valid parameter (Peak_amplitude or Peak_delay)"
         resp_mat = np.array(self.matrices[n_type]["Responsivity"])
         para_mat = np.array(self.matrices[n_type][parameter])
-        filtered_para_mat = np.where(resp_mat == pattern, para_mat, np.nan)
+        if pattern == 2:
+            abs_inh_para_mat = np.absolute(np.where(resp_mat == -1, para_mat, np.nan))
+            filtered_para_mat = np.where(resp_mat == 1, para_mat, np.where(resp_mat == -1, abs_inh_para_mat, np.nan))
+        else:
+            filtered_para_mat = np.where(resp_mat == pattern, para_mat, np.nan)
         return np.nanmean(filtered_para_mat, axis=0)
 
     def get_estimated_activity(self, zscore=True, n_type="EXC", estimator="mean", real_duration=True):
