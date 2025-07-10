@@ -192,7 +192,7 @@ def compare_sub_supra_between(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo
     variables = [col for col in data.columns if col not in not_variables]
     variables = [var for var in variables if var.split("_")[-1] != "auc"]
     det_marker = True if behavior_filter in [None, True] else False
-    fig, axes = plt.subplots(nrows=3, ncols=4, figsize=(24, 24), constrained_layout=True)
+    fig, axes = plt.subplots(nrows=3, ncols=6, figsize=(36, 24), constrained_layout=True)
     axes_flat = axes.flatten()
     for variable, ax in zip(variables, axes_flat):
         if variable.split("_")[-1] == "perc":
@@ -209,7 +209,7 @@ def compare_sub_supra_between(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo
     title = f"comp_{gp1_amps}({gp1})_{gp2_amps}({gp2})_{behavior_filter}"
     fig.canvas.manager.set_window_title(title)
     # if save_fig:
-    # plt.savefig(f"{server_address}stimulus_encoding/Threshold_analysis/{title}.pdf")
+    plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/14/{title}.pdf", format="pdf")
     # plt.show()
     return data_gp1, data_gp2
 
@@ -286,11 +286,13 @@ def compare_det_undet(data_df, genotype="WT", amplitude="all"):
             gp1 = wt_ampl_data[wt_ampl_data["behavior"] == True]
             gp2 = ko_ampl_data[ko_ampl_data["behavior"] == True]
             trials = "detected"
+            det_marker = True
+            force_markers_identity = True
         else:
             gp1 = wt_ampl_data[wt_ampl_data["behavior"] == False]
             gp2 = ko_ampl_data[ko_ampl_data["behavior"] == False]
             trials = "undetected"
-        det_marker = False
+            det_marker = False
         paired = False
         suptitle = f"Comparison of {trials} trials in {condition} conditions between WT and KO"
     else:
@@ -336,7 +338,7 @@ def compare_det_undet(data_df, genotype="WT", amplitude="all"):
     fig.canvas.manager.set_window_title(title)
     # if save_fig:
     # plt.savefig(f"{server_address}stimulus_encoding/{title}.pdf")
-    # plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/8/{title}.pdf", format="pdf")
+    # plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/14/{title}.pdf", format="pdf")
     # plt.show()
     return gp1, gp2
 
@@ -567,7 +569,19 @@ def det_comp_param(recs, parameter, stim_ampl="all", ylim=[]):
     plt.show()
 
 
-def nogo_fa_cr(recs):
+def nogo_fa_cr(recs, condition=None):
+    if condition is None:
+        wt_geno = "WT"
+        ko_geno = "KO-Hypo"
+        colors = [ppt.wt_color, ppt.hypo_color]
+    elif condition == "DMSO":
+        wt_geno = "WT-DMSO"
+        ko_geno = "KO-DMSO"
+        colors = [ppt.wt_color, ppt.all_ko_color]
+    elif condition == "BMS":
+        wt_geno = "WT-BMS"
+        ko_geno = "KO-BMS"
+        colors = [ppt.wt_bms_color, ppt.all_ko_bms_color]
     rows = []
     for rec in recs:
         licks = rec.lick_time
@@ -590,22 +604,22 @@ def nogo_fa_cr(recs):
     gp_data = data.groupby(["ID", "Genotype", "FA"], as_index=False).mean()
     fig, ax = plt.subplots(nrows=3, ncols=6, figsize=(36, 24), constrained_layout=True)
     for col, metric in enumerate(gp_data.columns[-6:]):
-        ppt.boxplot(ax[0, col], gp_data_global[gp_data_global["Genotype"] == "WT"][metric].values,
-                    gp_data_global[gp_data_global["Genotype"] == "KO-Hypo"][metric].values, ylabel=metric,
+        ppt.boxplot(ax[0, col], gp_data_global[gp_data_global["Genotype"] == wt_geno][metric].values,
+                    gp_data_global[gp_data_global["Genotype"] == ko_geno][metric].values, ylabel=metric,
                     paired=False, title=f"All No-Go trials", ylim=[-10, 80],
-                    colors=[ppt.wt_color, ppt.hypo_color])
-        ppt.boxplot(ax[1, col], gp_data[(gp_data["Genotype"] == "WT") & (gp_data["FA"] == True)][metric].values,
-                    gp_data[(gp_data["Genotype"] == "KO-Hypo") & (gp_data["FA"] == True)][metric].values, ylabel=metric,
+                    colors=colors)
+        ppt.boxplot(ax[1, col], gp_data[(gp_data["Genotype"] == wt_geno) & (gp_data["FA"] == True)][metric].values,
+                    gp_data[(gp_data["Genotype"] == ko_geno) & (gp_data["FA"] == True)][metric].values, ylabel=metric,
                     paired=False, title=f"False Alarm", ylim=[-10, 80],
-                    colors=[ppt.wt_color, ppt.hypo_color])
-        ppt.boxplot(ax[2, col], gp_data[(gp_data["Genotype"] == "WT") & (gp_data["FA"] == False)][metric].values,
-                    gp_data[(gp_data["Genotype"] == "KO-Hypo") & (gp_data["FA"] == False)][metric].values, ylabel=metric,
+                    colors=colors)
+        ppt.boxplot(ax[2, col], gp_data[(gp_data["Genotype"] == wt_geno) & (gp_data["FA"] == False)][metric].values,
+                    gp_data[(gp_data["Genotype"] == ko_geno) & (gp_data["FA"] == False)][metric].values, ylabel=metric,
                     paired=False, title=f"Correct Rejection", ylim=[-10, 80],
-                    colors=[ppt.wt_color, ppt.hypo_color])
+                    colors=colors)
     fig.suptitle("Comparison between genotypes of neuronal recruitment during no-go trials")
     fig.canvas.manager.set_window_title("Recruitment NoGo")
-    plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/8/Recruitment_NoGo.pdf", format="pdf")
-    plt.show()
+    # plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/14/Recruitment_NoGo_{condition}.pdf", format="pdf")
+    # plt.show()
     return gp_data
 
 
@@ -660,7 +674,7 @@ def delta_hit_miss_comp(feature_df, threshold_only=False, wt_threshold=False, co
         delta[f'Δ{metric}_nogo'] = joined[f'{metric}_hit'] - joined[f'{metric}_nogo']
     delta = delta.reset_index()
     fig, axes = plt.subplots(4, 6, figsize=(36, 32), constrained_layout=True)
-    for big_row, metrics, ylim in zip([0, 2], [metrics_perc, metrics_amp], [[-20, 80], [-5, 5]]):
+    for big_row, metrics, ylim in zip([0, 2], [metrics_perc, metrics_amp], [[-30, 50], [-5, 5]]):
         for col_idx, m in enumerate(metrics):
             ax1 = axes[big_row + 0, col_idx]
             ax2 = axes[big_row + 1, col_idx]
@@ -679,7 +693,7 @@ def delta_hit_miss_comp(feature_df, threshold_only=False, wt_threshold=False, co
     fig.canvas.manager.set_window_title(f"Recruitment Delta (cond={condition})[threshold={threshold_only}_WT={wt_threshold}]")
     # fig.canvas.manager.set_window_title(f"Peak delay Delta [threshold={threshold_only}_WT={wt_threshold}]")
     # plt.savefig(f"{server_address}stimulus_encoding/delta_{condition}_thre={threshold_only}_wt={wt_threshold}.pdf")
-    plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/8/delta_{condition}_thre={threshold_only}_wt={wt_threshold}.pdf",format="pdf")
+    plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/14/delta_{condition}_thre={threshold_only}_wt={wt_threshold}.pdf",format="pdf")
     # plt.show()
     return delta
 
@@ -1412,7 +1426,7 @@ def neurons_hit_consistency(recs):
 # endregion ============================================================================================================
 
 if __name__ == '__main__':
-    BMS_analysis = False
+    BMS_analysis = True
     ### Initialisation of recs instances ###
     if BMS_analysis:
         directory = "C:/Users/cvandromme/Desktop/Tactile_detection/Data_DMSO_BMS/"
@@ -1454,7 +1468,8 @@ if __name__ == '__main__':
     if not BMS_analysis:
         data = full_data[full_data["ID"] != 5886] #(threshold == 3)
     else:
-        data = full_data[~full_data["ID"].isin([5893, 7539, 7554])]
+        data = full_data
+        # data = full_data[~full_data["ID"].isin([5893, 7539, 7554])] # Trying to exclude KO but not enough mice
         # data = full_data[~full_data["ID"].isin([6611])]
     #   --- Within ---
     # compare_sub_supra_within(data, behavior_filter=None, genotype="KO", comparison="all_supra")
@@ -1463,7 +1478,7 @@ if __name__ == '__main__':
     #         for comp in ["sub", "all_sub", "supra", "all_supra"]:
     #             compare_sub_supra_within(data, behavior_filter=filter, genotype=gen, comparison=comp)
     #   --- Between ---
-    # wt, hypo = compare_sub_supra_between(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo", gp1_amps="real_mean_genotype", gp2_amps="gp1_threshold", colors=[ppt.wt_color, ppt.hypo_color])
+    wt, hypo = compare_sub_supra_between(data, behavior_filter=None, gp1="WT-DMSO", gp2="KO-DMSO", gp1_amps="real_mean_genotype", gp2_amps="gp1_threshold", colors=[ppt.wt_color, ppt.all_ko_color])
     #   --- Between (Deltas) ---
     # sub_supra_delta_df = compare_sub_supra_deltas(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo")
     # sub_supra_delta_df_wt, sub_supra_delta_df_hypo = compare_sub_supra_deltas(data, behavior_filter=None, gp1="WT",
@@ -1471,7 +1486,7 @@ if __name__ == '__main__':
     # btw_det = compare_det_undet_between(full_data, gp1="WT", gp2="KO-Hypo", amplitude="all", behavior="miss")
 
     # --- Hit vs. Miss ---
-    det, undet = compare_det_undet(data, genotype="KO-Hypo", amplitude="threshold") # /!\ full_data for all amp and data for threshold analysis
+    # det, undet = compare_det_undet(data, genotype="DMSO_det", amplitude="threshold") # /!\ full_data for all amp and data for threshold analysis
 
     # mean_det = np.mean(det.drop(columns="Genotype"), axis=0)
     # mean_undet = np.mean(undet.drop(columns="Genotype"), axis=0)
@@ -1480,9 +1495,9 @@ if __name__ == '__main__':
     #                                nogo_norm=False, ylim=[], transformation="yeojohnson", normality=[True, True],
     #                                homogeneity=[False, True])
 
-    nogo_df = nogo_fa_cr(recs.values())
-    delta_df = delta_hit_miss_comp(data, threshold_only=True, wt_threshold=False)
-    # delta_df = delta_hit_miss_comp(data, threshold_only=False, wt_threshold=False, condition="BMS") #/!\ full_data for all amp and data for threshold analysis
+    nogo_df = nogo_fa_cr(recs.values(), condition="BMS")
+    # delta_df = delta_hit_miss_comp(data, threshold_only=True, wt_threshold=False)
+    # delta_df = delta_hit_miss_comp(data, threshold_only=False, wt_threshold=False, condition="DMSO") #/!\ full_data for all amp and data for threshold analysis
 
 
     # ====== Responsivity ======
