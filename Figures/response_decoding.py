@@ -515,7 +515,7 @@ def plot_hit_miss_classif(frame_model_df, title_precision="", shuffle=False, shu
     """
     color_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color], "KO": [ppt.ko_color, ppt.ko_light_color],
                   "WT-DMSO": [ppt.wt_color, ppt.wt_light_color], "WT-BMS": [ppt.wt_bms_color, ppt.wt_bms_light_color],
-                  "KO-DMSO": [ppt.all_ko_color, ppt.all_ko_light_color], "KO-BMS": [ppt.all_ko_bms_color, ppt.all_ko_bms_light_color]}
+                  "KO-DMSO": [ppt.hypo_color, ppt.hypo_light_color], "KO-BMS": [ppt.hypo_bms_color, ppt.hypo_bms_light_color]}
     draw_style = "default" if timescale_division_factor == 1 else "steps-post"
     fill_style = None if timescale_division_factor == 1 else "post"
     if "WT-BMS" in frame_model_df["Genotype"].unique():
@@ -595,34 +595,37 @@ def plot_hit_miss_classif(frame_model_df, title_precision="", shuffle=False, shu
 def plot_hit_miss_classif_comp(frame_model_df, gp1="WT", gp2="KO-Hypo", title_precision=""):
     color_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color], "KO": [ppt.ko_color, ppt.ko_light_color],
                   "WT-DMSO": [ppt.wt_color, ppt.wt_light_color], "WT-BMS": [ppt.wt_bms_color, ppt.wt_bms_light_color],
-                  "KO-DMSO": [ppt.all_ko_color, ppt.all_ko_light_color], "KO-BMS": [ppt.all_ko_bms_color, ppt.all_ko_bms_light_color]}
+                  "KO-DMSO": [ppt.hypo_color, ppt.hypo_light_color], "KO-BMS": [ppt.hypo_bms_color, ppt.hypo_bms_light_color]}
     period_dict = {"stim": [30, 45], "start_stim (250ms)": [30, 37], "end_stim (250ms)": [37, 45], "pre_stim (200ms)": [24, 30]}
     fig, ax = plt.subplots(nrows=2, ncols=4, figsize=(24, 16), constrained_layout=True)
     fig_shuf, ax_shuf = plt.subplots(nrows=4, ncols=4, figsize=(24, 32), constrained_layout=True)
+    data_dict = {}
     for col, period in enumerate(period_dict.keys()):
         start, end = period_dict[period]
         data = frame_model_df[frame_model_df["Frame"].isin(range(start, end))].groupby(["Genotype", "ID"], as_index=False).mean().drop(columns="Frame")
         # Plotting the comparison of accuracy between genotypes
         ppt.boxplot(ax[0, col], data[data["Genotype"] == gp1]["TPR"], data[data["Genotype"] == gp2]["TPR"], ylabel="Hit accuracy",
-                    paired=False, title=period, ylim=[0, 1], colors=[color_dict[gp1][0], color_dict[gp2][0]], det_marker=False, force_markers_identity=False)
+                    paired=False, title=period, ylim=[0, 1], colors=[color_dict[gp1][0], color_dict[gp2][0]], det_marker=True, force_markers_identity=True)
         ppt.boxplot(ax[1, col], data[data["Genotype"] == gp1]["FPR"], data[data["Genotype"] == gp2]["FPR"], ylabel="Miss error",
                     paired=False, title=period, ylim=[0, 1], colors=[color_dict[gp1][1], color_dict[gp2][1]], det_marker=False, force_markers_identity=False)
         # Plotting the comparisons with shuffled data
         ppt.boxplot(ax_shuf[0, col], data[data["Genotype"] == gp1]["TPR"].values, data[data["Genotype"] == gp1]["TPR_shuffle"].values, ylabel="Hit accuracy",
-                    paired=True, title=f"{period}\n{gp1}: Real vs. Shuffled", ylim=[0, 1], colors=[color_dict[gp1][0], "darkgray"], det_marker=False, force_markers_identity=False)
+                    paired=True, title=f"{period}\n{gp1}: Real vs. Shuffled", ylim=[0, 1], colors=[color_dict[gp1][0], "darkgray"], det_marker=True, force_markers_identity=True)
         ppt.boxplot(ax_shuf[1, col], data[data["Genotype"] == gp1]["FPR"].values, data[data["Genotype"] == gp1]["FPR_shuffle"].values, ylabel="Miss error",
-                    paired=True, title=f"{period}\n{gp1}: Real vs. Shuffled", ylim=[0, 1], colors=[color_dict[gp1][1], "gray"], det_marker=False, force_markers_identity=False)
+                    paired=True, title=f"{period}\n{gp1}: Real vs. Shuffled", ylim=[0, 1], colors=[color_dict[gp1][1], "gray"], det_marker=False, force_markers_identity=True)
         ppt.boxplot(ax_shuf[2, col], data[data["Genotype"] == gp2]["TPR"].values, data[data["Genotype"] == gp2]["TPR_shuffle"].values, ylabel="Hit accuracy",
-                    paired=True, title=f"{period}\n{gp2}: Real vs. Shuffled", ylim=[0, 1], colors=[color_dict[gp2][0], "darkgray"], det_marker=False, force_markers_identity=False)
+                    paired=True, title=f"{period}\n{gp2}: Real vs. Shuffled", ylim=[0, 1], colors=[color_dict[gp2][0], "darkgray"], det_marker=True, force_markers_identity=True)
         ppt.boxplot(ax_shuf[3, col], data[data["Genotype"] == gp2]["FPR"].values, data[data["Genotype"] == gp2]["FPR_shuffle"].values, ylabel="Miss error",
-                    paired=True, title=f"{period}\n{gp2}: Real vs. Shuffled", ylim=[0, 1], colors=[color_dict[gp2][1], "gray"], det_marker=False, force_markers_identity=False)
+                    paired=True, title=f"{period}\n{gp2}: Real vs. Shuffled", ylim=[0, 1], colors=[color_dict[gp2][1], "gray"], det_marker=False, force_markers_identity=True)
+        data_dict[period] = data
     fig.suptitle(f"Hit accuracy miss error comparison ({gp1}/{gp2})\n{title_precision}", fontsize=20)
     fig.canvas.manager.set_window_title(f"Hit_Miss_classif_comp_{gp1}_{gp2}_{title_precision}")
     fig_shuf.suptitle(f"Shuffle comparison\n{title_precision}", fontsize=20)
     fig_shuf.canvas.manager.set_window_title(f"Hit_Miss_classif_comp_shuffle{title_precision}")
-    plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/14/shuffle_{gp1}_{gp2}.pdf", format="pdf")
+    # plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/14/shuffle_{gp1}_{gp2}.pdf", format="pdf")
+    # plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/5_Figure2/shuffle_{gp1}_{gp2}.pdf", format="pdf")
     plt.show()
-    return data
+    return data_dict
 
 def compare_accuracy(recs, random=42):
     """
@@ -824,7 +827,7 @@ def correlate_frame_accuracy_metrics(frame_model_df, features_df, period="stim")
                              "r2_hypo": r2_hypo, "pval_hypo": results_hypo["pvalue"]})
     results = pd.DataFrame(rows)
     fig.suptitle(f"Correlation of the frame model accuracy during the whole {period} period with the different metrics computed on responsive neurons")
-    plt.savefig(f"{server_address}/response_decoding/corr_acc_model_features_{period}.pdf", format="pdf")
+    # plt.savefig(f"{server_address}/response_decoding/corr_acc_model_features_{period}.pdf", format="pdf")
     return data, results
 
 def correlate_frame_accuracy_ntn_df(frame_model_df, ntn_df, period="stim"):
@@ -894,7 +897,7 @@ def correlate_frame_accuracy_ntn_df(frame_model_df, ntn_df, period="stim"):
                              "r2_hypo": r2_hypo, "pval_hypo": results_hypo["pvalue"]})
     results = pd.DataFrame(rows)
     fig.suptitle(f"Correlation of the frame model accuracy during the whole {period} period with neuron to neuron global cosine similarity")
-    plt.savefig(f"{server_address}response_decoding/corr_acc_model_ntn_cosim_{period}.pdf", format="pdf")
+    # plt.savefig(f"{server_address}response_decoding/corr_acc_model_ntn_cosim_{period}.pdf", format="pdf")
     return data, results
 
 # endregion ============================================================================================================
@@ -902,7 +905,7 @@ def correlate_frame_accuracy_ntn_df(frame_model_df, ntn_df, period="stim"):
 
 
 if __name__ == '__main__':
-    BMS_analysis = True
+    BMS_analysis = False
     ### Initialisation of recs instances ###
     if BMS_analysis:
         directory = "C:/Users/cvandromme/Desktop/Tactile_detection/Data_DMSO_BMS/"
@@ -937,24 +940,28 @@ if __name__ == '__main__':
     # corr_data = correlate_mean_zscore_behavior_frame(frame_data[frame_data["Amplitude"] == 12])
     # plot_frame_correlation(corr_data)
 
-    frame_dff = get_activity_by_frame_df(recs.values(), zscore=False, BMS=True)
+    frame_dff = get_activity_by_frame_df(recs.values(), zscore=False, BMS=BMS_analysis)
     # features_df = get_features(recs.values(), amp_delay=True, auc=True)
     # activity_long_df = get_mean_trial_activity_df(recs.values(), zscore=True)
     # ntn_df = ntn_cosine_similarity(activity_long_df, amplitude="all", nogo=False, metric="Resp", filter_out_nr=False)
     # frame_dff_3 = aggregate_every_3cols(frame_dff, ["Genotype", "ID", "Threshold", "Trial", "Amplitude", "Duration", "Behavior", "n_type", "resp", "n_ID"], window_size=3)
 
-    # frame_model_df_res = pd.read_csv("C:/Users/cvandromme/Desktop/Tactile_detection/Analysis_data/frame_model_df_res.csv")
+    frame_model_df_res = pd.read_csv("Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/5_Figure2/frame_model_df_res.csv")
     # frame_model_df_avg = pd.read_csv("C:/Users/cvandromme/Desktop/Tactile_detection/Analysis_data/frame_model_df_avg3.csv")
-    frame_model_df_bms, frame_mean_sem_bms = frame_model(frame_dff, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db_cv=True, balancing_method="resampling")
+    # frame_model_df_bms, frame_mean_sem_bms = frame_model(frame_dff, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db_cv=True, balancing_method="resampling")
     # frame_model_df_res, frame_mean_sem_res = frame_model(frame_dff, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db_cv=True, balancing_method="resampling")
     # frame_model_df_avg, frame_mean_sem_avg = frame_model(frame_dff, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db_cv=True, balancing_method="resampling", sliding_window=3, window_sum=False)
     # frame_model_df_3, frame_mean_sem_3 = frame_model(frame_dff, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db_cv=True, balancing_method="resampling", window=3)
     # frame_model_df_5, frame_mean_sem_5 = frame_model(frame_dff, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db_cv=True, balancing_method="resampling", window=5)
     # frame_model_df_2, frame_mean_sem_2 = frame_model(frame_dff, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db_cv=True, balancing_method="resampling", window=2)
     # frame_model_df_4, frame_mean_sem_4 = frame_model(frame_dff, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db_cv=True, balancing_method="resampling")
-    plot_df = plot_hit_miss_classif(frame_model_df_bms, title_precision="All neurons, all patterns, doubleCV", shuffle=True, timescale_division_factor=1)
+    plot_df = plot_hit_miss_classif(frame_model_df_res, title_precision="All neurons, all patterns, doubleCV", shuffle=True, timescale_division_factor=1)
+    data_comp = plot_hit_miss_classif_comp(frame_model_df_res, gp1="WT", gp2="KO", title_precision="All neurons, all patterns, doubleCV")
     # plot_df = plot_hit_miss_classif(frame_model_df_4, title_precision="All neurons, all patterns, doubleCV, non-sliding avg4", shuffle=True, timescale_division_factor=4)
+    plot_hit_miss_classif_comp(frame_model_df_bms, gp1="WT-DMSO", gp2="WT-BMS", title_precision="All neurons, all patterns, doubleCV")
     plot_hit_miss_classif_comp(frame_model_df_bms, gp1="KO-DMSO", gp2="KO-BMS", title_precision="All neurons, all patterns, doubleCV")
+    plot_hit_miss_classif_comp(frame_model_df_bms, gp1="WT-DMSO", gp2="KO-DMSO", title_precision="All neurons, all patterns, doubleCV")
+    plot_hit_miss_classif_comp(frame_model_df_bms, gp1="WT-BMS", gp2="KO-BMS", title_precision="All neurons, all patterns, doubleCV")
 
     # corr_acc_features_df, corr_results_df = correlate_frame_accuracy_metrics(frame_model_df_res, features_df, period="stim")
     # corr_acc_ntn_df, corr_ntn_results_df = correlate_frame_accuracy_ntn_df(frame_model_df_res, ntn_df, period="stim")

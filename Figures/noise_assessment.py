@@ -21,10 +21,27 @@ from percephone.plts.utils import stat_boxplot
 # endregion
 # region ======================================== TBT variability ======================================================
 
-def get_mean_trial_activity_df(recs, zscore=True):
+color_dict = {
+    # WT
+    "WT": [ppt.wt_color, ppt.wt_light_color],
+    "WT-DMSO": [ppt.wt_color, ppt.wt_light_color],
+    "WT-BMS": [ppt.wt_bms_color, ppt.wt_bms_light_color],
+    # KO-Hypo
+    "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color],
+    "KO-DMSO": [ppt.hypo_color, ppt.hypo_light_color],
+    "KO-BMS": [ppt.hypo_bms_color, ppt.hypo_bms_light_color],
+    # KO
+    "KO": [ppt.ko_color, ppt.ko_light_color]}
+
+def get_mean_trial_activity_df(recs, zscore=True, BMS=False):
     prestim_frames = 15
     rows = []
     for rec in recs:
+        if BMS:
+            condition = rec.genotype.split("-")[-1]
+            rec_id = f"{rec.filename}-{condition}"
+        else:
+            rec_id = rec.filename
         exc_activity = rec.zscore_exc if zscore else rec.df_f_exc
         inh_activity = rec.zscore_inh if zscore else rec.df_f_inh
         behavior_vector = rec.detected_stim
@@ -60,7 +77,7 @@ def get_mean_trial_activity_df(recs, zscore=True):
                     prestim_activity = neuron_activity[stim_start - prestim_frames: stim_start]
                     prestim_mean_activity = np.mean(prestim_activity)
                     prestim_std_activity = np.std(prestim_activity)
-                    row = {"Genotype": rec.genotype, "ID": rec.filename, "Threshold": rec.session_threshold,
+                    row = {"Genotype": rec.genotype, "ID": rec_id, "Threshold": rec.session_threshold,
                            "Trial": trial_id, "Amplitude": amplitude_vector[trial_id],
                            "Behavior": behavior_vector[trial_id],
                            "FA": fa_vector[trial_id], "Neuron": f"{neuron_type}_{n_id}",
@@ -73,7 +90,7 @@ def get_mean_trial_activity_df(recs, zscore=True):
                     rows.append(row)
     activity_df = pd.DataFrame(rows)
     activity_df["Diff_mean"] = activity_df["Stim_mean"] - activity_df["Prestim_mean"]
-    activity_df["Abs_Diff_mean"] = abs(activity_df["Stim_mean"]) - abs(activity_df["Prestim_mean"])
+    activity_df["Abs_Diff_mean"] = abs(activity_df["Stim_mean"] - activity_df["Prestim_mean"])
     activity_df["Diff_std"] = activity_df["Stim_std"] - activity_df["Prestim_std"]
     activity_df["Ratio_mean"] = activity_df["Stim_mean"] / activity_df["Prestim_mean"]
     activity_df["Ratio_std"] = activity_df["Stim_std"] / activity_df["Prestim_std"]
@@ -878,17 +895,19 @@ def compute_neuronal_sensitivity(data_df, amplitude="All", n_type="all"):
     return curve_plot_data
 
 
-def ntn_cosine_similarity(mean_activity_df, amplitude="threshold", nogo=False, metric="Resp", filter_out_nr=False, n_type="all"):
+def ntn_cosine_similarity(mean_activity_df, amplitude="threshold", nogo=False, metric="Resp", filter_out_nr=False, n_type="all", gp1="WT", gp2="KO-Hypo"):
     """Computing and plotting each vector of neuronal activity across trials cosine similarity."""
-    nogo_data = mean_activity_df[mean_activity_df.Amplitude == 0].copy()
+    filtered_data = mean_activity_df[mean_activity_df["Genotype"].isin([gp1, gp2])]
+    nogo_data = filtered_data[filtered_data.Amplitude == 0].copy()
     # Filtering out the no-gos according to the specified parameter
     if not nogo:
-        data = mean_activity_df[mean_activity_df.Amplitude != 0].copy()
+        data = filtered_data[filtered_data.Amplitude != 0].copy()
     else:
-        data = mean_activity_df.copy()
+        data = filtered_data.copy()
     # Filtering the neuron type
     if n_type in ["EXC", "INH"]:
         data = data[data["Neuron"].str.startswith(n_type)]
+        nogo_data = nogo_data[nogo_data["Neuron"].str.startswith(n_type)]
     # Selection of trials, amplitude
     if amplitude == "threshold":
         data = data[data.Amplitude == data.Threshold].copy()
@@ -917,63 +936,70 @@ def ntn_cosine_similarity(mean_activity_df, amplitude="threshold", nogo=False, m
             matrix = np.array(rec_data)
             n_neurons = matrix.shape[0]
             n_trials = matrix.shape[1]
-            cos_sim_mat = cosine_similarity(matrix)
-            abs_cos_sim = np.abs(cos_sim_mat)
-            mean_cos_sim = abs_cos_sim[~np.eye(n_neurons, dtype=bool)].mean()
-            # Plotting the cosine similarity matrix
-            ax[i].imshow(abs_cos_sim, cmap="seismic", vmin=-1, vmax=+1, interpolation="none")
-            ax[i].set_xlabel("Neuron i", fontsize=10)
-            ax[i].set_ylabel("Neuron j", fontsize=10)
-            ax[i].set_title(f"{int(rec_id)} - {genotype}({threshold})[{mean_cos_sim:.2f}]", fontsize=12)
+            if n_neurons >= 1:
+                cos_sim_mat = cosine_similarity(matrix)
+                abs_cos_sim = np.abs(cos_sim_mat)
+                mean_cos_sim = abs_cos_sim[~np.eye(n_neurons, dtype=bool)].mean()
+                # Plotting the cosine similarity matrix
+                ax[i].imshow(abs_cos_sim, cmap="seismic", vmin=-1, vmax=+1, interpolation="none")
+                ax[i].set_xlabel("Neuron i", fontsize=10)
+                ax[i].set_ylabel("Neuron j", fontsize=10)
+                ax[i].set_title(f"{int(rec_id.split("-")[0])} - {genotype}({threshold})[{mean_cos_sim:.2f}]", fontsize=12)
+            else:
+                mean_cos_sim = np.nan
             rows.append({"ID": rec_id, "Genotype": genotype, "Threshold": threshold, "Behavior": label,
                          "n_neurons": n_neurons, "n_trials": n_trials, "mean_cos_sim": mean_cos_sim})
         fig.suptitle(f"Neuron to neuron {metric} cosine similarity between trials\n"
                      f"Amp: {amplitude} - Trials: {label} - No-Go: {nogo} - Neurons: {n_type}", fontsize=12)
-        fig.canvas.manager.set_window_title(f"ntn_cosim_{amplitude}_{label}_{nogo}_{n_type}")
+        fig.canvas.manager.set_window_title(f"ntn_cosim_{amplitude}_{label}_{nogo}_{n_type}_{gp1}_{gp2}")
     mean_cos_sim_data = pd.DataFrame(rows)
 
-    # WT
-    model_wt = smf.mixedlm("mean_cos_sim ~ C(Behavior, Treatment(reference='Miss')) + n_neurons + n_trials",
-                        mean_cos_sim_data[mean_cos_sim_data.Genotype == "WT"],
-                        groups=mean_cos_sim_data[mean_cos_sim_data.Genotype == "WT"]["ID"])
-    result_wt = model_wt.fit(reml=False)
-    print(f"====== WT ======")
-    print(result_wt.summary())
-    # KO-Hypo
-    model_hypo = smf.mixedlm("mean_cos_sim ~ C(Behavior, Treatment(reference='Miss')) + n_neurons + n_trials",
-                        mean_cos_sim_data[mean_cos_sim_data.Genotype == "KO-Hypo"],
-                        groups=mean_cos_sim_data[mean_cos_sim_data.Genotype == "KO-Hypo"]["ID"])
-    result_hypo = model_hypo.fit(reml=False)
-    print(f"====== KO-Hypo ======")
-    print(result_hypo.summary())
-    # Hit
-    model_hit = smf.mixedlm("mean_cos_sim ~ C(Genotype, Treatment(reference='WT')) + n_neurons + n_trials",
-                        mean_cos_sim_data[mean_cos_sim_data.Behavior == "Hit"],
-                        groups=mean_cos_sim_data[mean_cos_sim_data.Behavior == "Hit"]["ID"])
-    result_hit = model_hit.fit(reml=False)
-    print(f"====== Hit ======")
-    print(result_hit.summary())
-    # Miss
-    model_miss = smf.mixedlm("mean_cos_sim ~ C(Genotype, Treatment(reference='WT')) + n_neurons + n_trials",
-                        mean_cos_sim_data[mean_cos_sim_data.Behavior == "Miss"],
-                        groups=mean_cos_sim_data[mean_cos_sim_data.Behavior == "Miss"]["ID"])
-    result_miss = model_miss.fit(reml=False)
-    print(f"====== Miss ======")
-    print(result_miss.summary())
-    # No-Go
-    model_miss = smf.mixedlm("mean_cos_sim ~ C(Genotype, Treatment(reference='WT')) + n_neurons + n_trials",
-                        mean_cos_sim_data[mean_cos_sim_data.Behavior == "Nogo"],
-                        groups=mean_cos_sim_data[mean_cos_sim_data.Behavior == "Nogo"]["ID"])
-    result_miss = model_miss.fit(reml=False)
-    print(f"====== No-Go ======")
-    print(result_miss.summary())
-    # All
-    model_all = smf.mixedlm("mean_cos_sim ~ C(Genotype, Treatment(reference='WT')) + n_neurons + n_trials",
-                        mean_cos_sim_data[mean_cos_sim_data.Behavior == "All"],
-                        groups=mean_cos_sim_data[mean_cos_sim_data.Behavior == "All"]["ID"])
-    result_all = model_all.fit(reml=False)
-    print(f"====== All ======")
-    print(result_all.summary())
+    # Computing the SNR of neuronal correlation: ntn_corr all trials/ntn no-gos
+    snr_df = mean_cos_sim_data.pivot(index=["ID", "Genotype"], columns="Behavior", values="mean_cos_sim").reset_index()
+    snr_df["SNR"] = snr_df["All"] / snr_df["Nogo"]
+
+    # # WT
+    # model_wt = smf.mixedlm("mean_cos_sim ~ C(Behavior, Treatment(reference='Miss')) + n_neurons + n_trials",
+    #                     mean_cos_sim_data[mean_cos_sim_data.Genotype == "WT"],
+    #                     groups=mean_cos_sim_data[mean_cos_sim_data.Genotype == "WT"]["ID"])
+    # result_wt = model_wt.fit(reml=False)
+    # print(f"====== WT ======")
+    # print(result_wt.summary())
+    # # KO-Hypo
+    # model_hypo = smf.mixedlm("mean_cos_sim ~ C(Behavior, Treatment(reference='Miss')) + n_neurons + n_trials",
+    #                     mean_cos_sim_data[mean_cos_sim_data.Genotype == "KO-Hypo"],
+    #                     groups=mean_cos_sim_data[mean_cos_sim_data.Genotype == "KO-Hypo"]["ID"])
+    # result_hypo = model_hypo.fit(reml=False)
+    # print(f"====== KO-Hypo ======")
+    # print(result_hypo.summary())
+    # # Hit
+    # model_hit = smf.mixedlm("mean_cos_sim ~ C(Genotype, Treatment(reference='WT')) + n_neurons + n_trials",
+    #                     mean_cos_sim_data[mean_cos_sim_data.Behavior == "Hit"],
+    #                     groups=mean_cos_sim_data[mean_cos_sim_data.Behavior == "Hit"]["ID"])
+    # result_hit = model_hit.fit(reml=False)
+    # print(f"====== Hit ======")
+    # print(result_hit.summary())
+    # # Miss
+    # model_miss = smf.mixedlm("mean_cos_sim ~ C(Genotype, Treatment(reference='WT')) + n_neurons + n_trials",
+    #                     mean_cos_sim_data[mean_cos_sim_data.Behavior == "Miss"],
+    #                     groups=mean_cos_sim_data[mean_cos_sim_data.Behavior == "Miss"]["ID"])
+    # result_miss = model_miss.fit(reml=False)
+    # print(f"====== Miss ======")
+    # print(result_miss.summary())
+    # # No-Go
+    # model_miss = smf.mixedlm("mean_cos_sim ~ C(Genotype, Treatment(reference='WT')) + n_neurons + n_trials",
+    #                     mean_cos_sim_data[mean_cos_sim_data.Behavior == "Nogo"],
+    #                     groups=mean_cos_sim_data[mean_cos_sim_data.Behavior == "Nogo"]["ID"])
+    # result_miss = model_miss.fit(reml=False)
+    # print(f"====== No-Go ======")
+    # print(result_miss.summary())
+    # # All
+    # model_all = smf.mixedlm("mean_cos_sim ~ C(Genotype, Treatment(reference='WT')) + n_neurons + n_trials",
+    #                     mean_cos_sim_data[mean_cos_sim_data.Behavior == "All"],
+    #                     groups=mean_cos_sim_data[mean_cos_sim_data.Behavior == "All"]["ID"])
+    # result_all = model_all.fit(reml=False)
+    # print(f"====== All ======")
+    # print(result_all.summary())
 
     def resid_correct(group):
         # m = smf.ols('mean_cos_sim ~ n_neurons + n_trials', data=group).fit()
@@ -989,7 +1015,6 @@ def ntn_cosine_similarity(mean_activity_df, amplitude="threshold", nogo=False, m
     # Plotting the correlation of the mean cosine similarity with the nb of neurons and nb of trials
     for nb_variable in ["n_neurons", "n_trials"]:
         fig_corr, ax = plt.subplots(nrows=1, ncols=4, figsize=(20, 5), constrained_layout=True)
-        color_dict = {"WT": ppt.wt_color, "KO": ppt.ko_color, "KO-Hypo": ppt.hypo_color}
         for i, (label, corr_data) in enumerate(zip(["All", "Hit", "Miss", "Nogo"],
                                                 [corr_data_all, corr_data_hit, corr_data_miss, corr_data_nogo])):
             # --- Correlation global
@@ -998,68 +1023,75 @@ def ntn_cosine_similarity(mean_activity_df, amplitude="threshold", nogo=False, m
             results = dict(linregress(x_col, y_col)._asdict())
             r2 = results["rvalue"] ** 2
             line = results["slope"] * x_col + results["intercept"]
-            # --- Correlation WT
-            y_col_wt = corr_data[corr_data.Genotype == "WT"]["mean_cos_sim"]
-            x_col_wt = corr_data[corr_data.Genotype == "WT"][nb_variable]
-            results_wt = dict(linregress(x_col_wt, y_col_wt)._asdict())
-            r2_wt = results_wt["rvalue"] ** 2
-            line_wt = results_wt["slope"] * x_col_wt + results_wt["intercept"]
-            # --- Correlation KO-Hypo
-            y_col_hypo = corr_data[corr_data.Genotype == "KO-Hypo"]["mean_cos_sim"]
-            x_col_hypo = corr_data[corr_data.Genotype == "KO-Hypo"][nb_variable]
-            results_hypo = dict(linregress(x_col_hypo, y_col_hypo)._asdict())
-            r2_hypo = results_hypo["rvalue"] ** 2
-            line_hypo = results_hypo["slope"] * x_col_hypo + results_hypo["intercept"]
+            # --- Correlation gp1
+            y_col_gp1 = corr_data[corr_data.Genotype == gp1]["mean_cos_sim"]
+            x_col_gp1 = corr_data[corr_data.Genotype == gp1][nb_variable]
+            results_gp1 = dict(linregress(x_col_gp1, y_col_gp1)._asdict())
+            r2_gp1 = results_gp1["rvalue"] ** 2
+            line_gp1 = results_gp1["slope"] * x_col_gp1 + results_gp1["intercept"]
+            # --- Correlation gp2
+            y_col_gp2 = corr_data[corr_data.Genotype == gp2]["mean_cos_sim"]
+            x_col_gp2 = corr_data[corr_data.Genotype == gp2][nb_variable]
+            results_gp2 = dict(linregress(x_col_gp2, y_col_gp2)._asdict())
+            r2_gp2 = results_gp2["rvalue"] ** 2
+            line_gp2 = results_gp2["slope"] * x_col_gp2 + results_gp2["intercept"]
             # --- Plot the data points and regression lines
             ax[i].plot(x_col, line, color="black", lw=2)
-            ax[i].plot(x_col_wt, line_wt, color=ppt.wt_color, lw=2)
-            ax[i].plot(x_col_hypo, line_hypo, color=ppt.hypo_color, lw=2)
+            ax[i].plot(x_col_gp1, line_gp1, color=color_dict[gp1][0], lw=2)
+            ax[i].plot(x_col_gp2, line_gp2, color=color_dict[gp2][0], lw=2)
             for g in sorted(corr_data["Genotype"].unique()):
                 group = corr_data[corr_data["Genotype"] == g]
-                sc = ax[i].scatter(group[nb_variable], group["mean_cos_sim"], color=color_dict[g], alpha=0.7, s=10, marker="+")
+                sc = ax[i].scatter(group[nb_variable], group["mean_cos_sim"], color=color_dict[g][0], alpha=0.7, s=10, marker="+")
             # --- Annotate the plot with R² and p-value
             ax[i].text(0.05, 0.95, f"$r^2={r2:.3f}$ p-val={results["pvalue"]:.3f}", transform=ax[i].transAxes, fontsize=8, verticalalignment="top", color="black")
-            ax[i].text(0.05, 0.90, f"$r^2={r2_wt:.3f}$ p-val={results_wt["pvalue"]:.3f}", transform=ax[i].transAxes, fontsize=8, verticalalignment="top", color=ppt.wt_color)
-            ax[i].text(0.05, 0.85, f"$r^2={r2_hypo:.3f}$ p-val={results_hypo["pvalue"]:.3f}", transform=ax[i].transAxes, fontsize=8, verticalalignment="top", color=ppt.hypo_color)
+            ax[i].text(0.05, 0.90, f"$r^2={r2_gp1:.3f}$ p-val={results_gp1["pvalue"]:.3f}", transform=ax[i].transAxes, fontsize=8, verticalalignment="top", color=color_dict[gp1][0])
+            ax[i].text(0.05, 0.85, f"$r^2={r2_gp2:.3f}$ p-val={results_gp2["pvalue"]:.3f}", transform=ax[i].transAxes, fontsize=8, verticalalignment="top", color=color_dict[gp2][0])
             ax[i].set_title(f"{label} trials", fontsize=10)
             ax[i].set_xlabel(nb_variable, fontsize=10)
             ax[i].set_ylabel("mean_cos_sim", fontsize=10)
             ax[i].set_ylim(ymin=0, ymax=1)
             ax[i].tick_params(axis='both', which='major', labelsize=5)
         fig_corr.suptitle(f"Correlation of the {nb_variable} with the mean cosine similarity", fontsize=10)
-        fig_corr.canvas.manager.set_window_title(f"Corr_{nb_variable}_mean_cos_sim_{amplitude}_{metric}_{filter_out_nr}_{n_type}")
+        fig_corr.canvas.manager.set_window_title(f"Corr_{nb_variable}_mean_cos_sim_{amplitude}_{metric}_{filter_out_nr}_{n_type}_{gp1}_{gp2}")
     # Plotting the comparison between behavior labels and genotypes
-    fig_comp, ax_comp = plt.subplots(nrows=2, ncols=3, figsize=(18, 16), constrained_layout=True)
+    fig_comp, ax_comp = plt.subplots(nrows=2, ncols=4, figsize=(24, 16), constrained_layout=True)
     variable_col = "mean_cos_sim"
     # Within comparisons
-    ppt.boxplot(ax_comp[0, 0], mean_cos_sim_data[(mean_cos_sim_data.Genotype == "WT") & (mean_cos_sim_data.Behavior == "Hit")][variable_col].values,
-                mean_cos_sim_data[(mean_cos_sim_data.Genotype == "WT") & (mean_cos_sim_data.Behavior == "Miss")][variable_col].values,
-                ylabel=variable_col, paired=True, title=f"WT - Hit/Miss", ylim=[0, 0.8],
-                colors=[ppt.wt_color, ppt.wt_light_color], det_marker=True, force_markers_identity=False)
-    ppt.boxplot(ax_comp[1, 0], mean_cos_sim_data[(mean_cos_sim_data.Genotype == "KO-Hypo") & (mean_cos_sim_data.Behavior == "Hit")][variable_col].values,
-                mean_cos_sim_data[(mean_cos_sim_data.Genotype == "KO-Hypo") & (mean_cos_sim_data.Behavior == "Miss")][variable_col].values,
-                ylabel=variable_col, paired=True, title=f"KO-Hypo - Hit/Miss", ylim=[0, 0.8],
-                colors=[ppt.hypo_color, ppt.hypo_light_color], det_marker=True, force_markers_identity=False)
+    ppt.boxplot(ax_comp[0, 0], mean_cos_sim_data[(mean_cos_sim_data.Genotype == gp1) & (mean_cos_sim_data.Behavior == "Hit")][variable_col].values,
+                mean_cos_sim_data[(mean_cos_sim_data.Genotype == gp1) & (mean_cos_sim_data.Behavior == "Miss")][variable_col].values,
+                ylabel=variable_col, paired=True, title=f"{gp1} - Hit/Miss", ylim=[0, 1.1],
+                colors=color_dict[gp1], det_marker=True, force_markers_identity=False)
+    # ppt.boxplot(ax_comp[1, 0], mean_cos_sim_data[(mean_cos_sim_data.Genotype == gp2) & (mean_cos_sim_data.Behavior == "Hit")][variable_col].values,
+    #             mean_cos_sim_data[(mean_cos_sim_data.Genotype == gp2) & (mean_cos_sim_data.Behavior == "Miss")][variable_col].values,
+    #             ylabel=variable_col, paired=True, title=f"{gp2} - Hit/Miss", ylim=[0, 1.1],
+    #             colors=[ppt.hypo_color, ppt.hypo_light_color], det_marker=True, force_markers_identity=False)
     # Between Comparisons
-    ppt.boxplot(ax_comp[0, 1], mean_cos_sim_data[(mean_cos_sim_data.Genotype == "WT") & (mean_cos_sim_data.Behavior == "Nogo")][variable_col].values,
-                mean_cos_sim_data[(mean_cos_sim_data.Genotype == "KO-Hypo") & (mean_cos_sim_data.Behavior == "Nogo")][variable_col].values,
-                ylabel=variable_col, paired=False, title=f"WT/KO-Hypo (Nogo)", ylim=[0, 0.8],
-                colors=[ppt.wt_color, ppt.hypo_color], det_marker=False, force_markers_identity=False)
-    ppt.boxplot(ax_comp[1, 1], mean_cos_sim_data[(mean_cos_sim_data.Genotype == "WT") & (mean_cos_sim_data.Behavior == "All")][variable_col].values,
-                mean_cos_sim_data[(mean_cos_sim_data.Genotype == "KO-Hypo") & (mean_cos_sim_data.Behavior == "All")][variable_col].values,
-                ylabel=variable_col, paired=False, title=f"WT/KO-Hypo (All)", ylim=[0, 0.8],
-                colors=[ppt.wt_color, ppt.hypo_color], det_marker=False, force_markers_identity=False)
-    ppt.boxplot(ax_comp[0, 2], mean_cos_sim_data[(mean_cos_sim_data.Genotype == "WT") & (mean_cos_sim_data.Behavior == "Hit")][variable_col].values,
-                mean_cos_sim_data[(mean_cos_sim_data.Genotype == "KO-Hypo") & (mean_cos_sim_data.Behavior == "Hit")][variable_col].values,
-                ylabel=variable_col, paired=False, title=f"WT/KO-Hypo (Hit)", ylim=[0, 0.8],
-                colors=[ppt.wt_color, ppt.hypo_color], det_marker=False, force_markers_identity=False)
-    ppt.boxplot(ax_comp[1, 2], mean_cos_sim_data[(mean_cos_sim_data.Genotype == "WT") & (mean_cos_sim_data.Behavior == "Miss")][variable_col].values,
-                mean_cos_sim_data[(mean_cos_sim_data.Genotype == "KO-Hypo") & (mean_cos_sim_data.Behavior == "Miss")][variable_col].values,
-                ylabel=variable_col, paired=False, title=f"WT/KO-Hypo (Miss)", ylim=[0, 0.8],
-                colors=[ppt.wt_light_color, ppt.hypo_light_color], det_marker=False, force_markers_identity=False)
-    fig_comp.suptitle(f"Comparison of the {variable_col} between pairs of neurons between genotypes\n"
+    ppt.boxplot(ax_comp[0, 1], mean_cos_sim_data[(mean_cos_sim_data.Genotype == gp1) & (mean_cos_sim_data.Behavior == "Nogo")][variable_col].values,
+                mean_cos_sim_data[(mean_cos_sim_data.Genotype == gp2) & (mean_cos_sim_data.Behavior == "Nogo")][variable_col].values,
+                ylabel=variable_col, paired=False, title=f"{gp1}/{gp2} (Nogo)", ylim=[0, 1.1],
+                colors=[color_dict[gp1][0], color_dict[gp2][0]], det_marker=True, force_markers_identity=True)
+    ppt.boxplot(ax_comp[1, 1], mean_cos_sim_data[(mean_cos_sim_data.Genotype == gp1) & (mean_cos_sim_data.Behavior == "All")][variable_col].values,
+                mean_cos_sim_data[(mean_cos_sim_data.Genotype == gp2) & (mean_cos_sim_data.Behavior == "All")][variable_col].values,
+                ylabel=variable_col, paired=False, title=f"{gp1}/{gp2} (All)", ylim=[0, 1.1],
+                colors=[color_dict[gp1][0], color_dict[gp2][0]], det_marker=True, force_markers_identity=True)
+    ppt.boxplot(ax_comp[0, 2], mean_cos_sim_data[(mean_cos_sim_data.Genotype == gp1) & (mean_cos_sim_data.Behavior == "Hit")][variable_col].values,
+                mean_cos_sim_data[(mean_cos_sim_data.Genotype == gp2) & (mean_cos_sim_data.Behavior == "Hit")][variable_col].values,
+                ylabel=variable_col, paired=False, title=f"{gp1}/{gp2} (Hit)", ylim=[0, 1.1],
+                colors=[color_dict[gp1][0], color_dict[gp2][0]], det_marker=True, force_markers_identity=True)
+    ppt.boxplot(ax_comp[1, 2], mean_cos_sim_data[(mean_cos_sim_data.Genotype == gp1) & (mean_cos_sim_data.Behavior == "Miss")][variable_col].values,
+                mean_cos_sim_data[(mean_cos_sim_data.Genotype == gp2) & (mean_cos_sim_data.Behavior == "Miss")][variable_col].values,
+                ylabel=variable_col, paired=False, title=f"{gp1}/{gp2} (Miss)", ylim=[0, 1.1],
+                colors=[color_dict[gp1][1], color_dict[gp2][1]], det_marker=False, force_markers_identity=False)
+    # SNR
+    ppt.boxplot(ax_comp[0, 3], snr_df[snr_df.Genotype == gp1]["SNR"].values, snr_df[snr_df.Genotype == gp2]["SNR"].values,
+                ylabel="SNR", paired=False, title=f"{gp1}/{gp2} (SNR)", ylim=[0, 5],
+                colors=[color_dict[gp1][0], color_dict[gp2][0]], det_marker=True, force_markers_identity=True)
+    ax_comp[1, 3].set_axis_off()
+    fig_comp.suptitle(f"Comparison of the {variable_col} between pairs of neurons between {gp1} and {gp2}\n"
                       f"Amp: {amplitude} - No-Go: {nogo} - Neurons: {n_type} - NR filter: {filter_out_nr}", fontsize=12)
-    fig_comp.canvas.manager.set_window_title(f"ntn_cosim_comp_{amplitude}_{nogo}_{filter_out_nr}_{n_type}")
+    title = f"ntn_cosim_comp_{amplitude}_{nogo}_{filter_out_nr}_{n_type}_{gp1}_{gp2}"
+    fig_comp.canvas.manager.set_window_title(title)
+    # plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/9/{title}.pdf", format="pdf")
     plt.show()
     return mean_cos_sim_data
 
@@ -1217,9 +1249,9 @@ def temporal_correlation_neuron(frame_df):
     plt.show()
     return mean_mats
 
-frame_data = get_activity_by_frame_df(recs.values(), zscore=True, BMS=False)
+# frame_data = get_activity_by_frame_df(recs.values(), zscore=True, BMS=False)
 # temp_corr_df = temporal_correlation_neuron(frame_data[frame_data.ID.isin([4445]) & (frame_data.Amplitude == frame_data.Threshold)])
-temp_corr_df = temporal_correlation_neuron(frame_data)
+# temp_corr_df = temporal_correlation_neuron(frame_data)
 
 
 
@@ -1578,6 +1610,7 @@ def prestim_act_vector(activity_df, metric=None, hit_activated_only=False):
     return results
 
 
+
 # endregion ============================================================================================================
 # region ======================================== E/I Ratio ============================================================
 
@@ -1623,14 +1656,50 @@ def get_ei_ratio_df(recs):
             rows.append({"Genotype": rec.genotype, "ID": rec.filename, "Threshold": rec.session_threshold,
                          "Trial": trial_id, "Amplitude": amplitude_vector[trial_id],
                          "Behavior": behavior_vector[trial_id],
-                         "EI_ratio": ei_ratio_vector[trial_id],
-                         "EI_ratio_cste": cst_ei_ratio_vector[trial_id],
-                         "EI_ratio_norm": norm_ei_ratio_vector[trial_id],
-                         "EI_ratio_log_cste": log_cst_ei_ratio_vector[trial_id],
-                         "EI_ratio_log_norm": log_norm_ei_ratio_vector[trial_id],
-                         "EI_ratio_norm_dif": norm_dif_ei_vector[trial_id],
-                         "EI_ratio_dif": dif_ei_vector[trial_id]})
+                         "EI_ratio": ei_ratio_vector[trial_id],})
+                         # "EI_ratio_cste": cst_ei_ratio_vector[trial_id],
+                         # "EI_ratio_norm": norm_ei_ratio_vector[trial_id],
+                         # "EI_ratio_log_cste": log_cst_ei_ratio_vector[trial_id],
+                         # "EI_ratio_log_norm": log_norm_ei_ratio_vector[trial_id],
+                         # "EI_ratio_norm_dif": norm_dif_ei_vector[trial_id],
+                         # "EI_ratio_dif": dif_ei_vector[trial_id]})
     return pd.DataFrame(rows)
+
+
+def plot_ei_variance(ei_df):
+    data = ei_df[ei_df["Amplitude"] != 0]
+    data = data[np.isfinite(data["EI_ratio"])]
+    data_all = data.drop(columns=["Behavior", "Trial", "Amplitude"]).groupby(["Genotype", "ID"], as_index=False).std()
+    data_split = data.drop(columns=["Trial", "Amplitude"]).groupby(["Genotype", "ID", "Behavior"], as_index=False).std()
+    common_ids = set(data_split[data_split["Behavior"] == True]["ID"].values) & set(data_split[data_split["Behavior"] == False]["ID"].values)
+    fig, ax = plt.subplots(nrows=1, ncols=5, figsize=(30, 8), constrained_layout=True)
+    # All
+    ppt.boxplot(ax[0], data_all[data_all["Genotype"] == "WT"]["EI_ratio"].values,
+                data_all[data_all["Genotype"] == "KO-Hypo"]["EI_ratio"].values,
+                paired=False, ylabel="E:I ratio std", ylim=[0, 5], title="All trials",
+                colors=[ppt.wt_color, ppt.hypo_color], det_marker=True, force_markers_identity=True)
+    # Hit vs Miss
+    ppt.boxplot(ax[1], data_split[(data_split["Genotype"] == "WT") & (data_split["Behavior"] == True) & (data_split["ID"].isin(common_ids))]["EI_ratio"].values,
+                data_split[(data_split["Genotype"] == "WT") & (data_split["Behavior"] == False) & (data_split["ID"].isin(common_ids))]["EI_ratio"].values,
+                paired=True, ylabel="E:I ratio std", ylim=[0, 5], title="WT",
+                colors=[ppt.wt_color, ppt.wt_light_color], det_marker=True, force_markers_identity=False)
+    ppt.boxplot(ax[2], data_split[(data_split["Genotype"] == "KO-Hypo") & (data_split["Behavior"] == True) & (data_split["ID"].isin(common_ids))]["EI_ratio"].values,
+                data_split[(data_split["Genotype"] == "KO-Hypo") & (data_split["Behavior"] == False) & (data_split["ID"].isin(common_ids))]["EI_ratio"].values,
+                paired=True, ylabel="E:I ratio std", ylim=[0, 5], title="KO-Hypo",
+                colors=[ppt.hypo_color, ppt.hypo_light_color], det_marker=True, force_markers_identity=False)
+    # Hit
+    ppt.boxplot(ax[3], data_split[(data_split["Genotype"] == "WT") & (data_split["Behavior"] == True)]["EI_ratio"].values,
+                data_split[(data_split["Genotype"] == "KO-Hypo") & (data_split["Behavior"] == True)]["EI_ratio"].values,
+                paired=False, ylabel="E:I ratio std", ylim=[0, 5], title="Hit",
+                colors=[ppt.wt_color, ppt.hypo_color], det_marker=True, force_markers_identity=True)
+    # Miss
+    ppt.boxplot(ax[4], data_split[(data_split["Genotype"] == "WT") & (data_split["Behavior"] == False)]["EI_ratio"].values,
+                data_split[(data_split["Genotype"] == "KO-Hypo") & (data_split["Behavior"] == False)]["EI_ratio"].values,
+                paired=False, ylabel="E:I ratio std", ylim=[0, 5], title="Miss",
+                colors=[ppt.wt_light_color, ppt.hypo_light_color], det_marker=False, force_markers_identity=False)
+    fig.suptitle(f"EI ratio variance across trials")
+    plt.show()
+    return common_ids
 
 
 def correlate_behavior(data, column=None):
@@ -1683,13 +1752,23 @@ def compare_ei_ratio(ei_df, gp1="WT", gp2="KO-Hypo", column=None):
     return data
 
 
-def population_EI_ratio(recs, pyr_inhibition=False):
+def population_EI_ratio(recs, pyr_inhibition=False, amp="threshold", test_INH=False, gp1="WT", gp2="KO-Hypo"):
     """ Computes the averaged population E/I ratio in hit and miss trials for both genotypes and compare them"""
     rows = []
     for rec in recs:
         n_exc = rec.zscore_exc.shape[0]
         n_inh = rec.zscore_inh.shape[0]
-        threshold_stim_vector = rec.stim_ampl == rec.session_threshold
+        # Selection of the desired amplitude
+        if amp == "threshold":
+            amp_vector = rec.stim_ampl == rec.session_threshold
+        elif amp == "wt_threshold":
+            amp_vector = rec.stim_ampl == 4
+        elif amp == "all":
+            amp_vector = [True] * len(rec.stim_ampl)
+        # Selection of the hit and miss trials of the specified amplitude
+        hit_vector = rec.detected_stim & amp_vector
+        miss_vector = ~rec.detected_stim & amp_vector
+        # Selection of the method use to compute the E/I ratio
         if pyr_inhibition:
             I_type = "EXC"
             I_activity = -1
@@ -1700,45 +1779,95 @@ def population_EI_ratio(recs, pyr_inhibition=False):
             I_activity = 1
             I_nb = n_inh
             I_label = "% activated INH"
-        hit_exc = np.mean(
-            np.count_nonzero(rec.matrices["EXC"]["Responsivity"][:, (rec.detected_stim & threshold_stim_vector)] == 1,
-                             axis=0)) / n_exc
-        miss_exc = np.mean(
-            np.count_nonzero(rec.matrices["EXC"]["Responsivity"][:, (~rec.detected_stim & threshold_stim_vector)] == 1,
-                             axis=0)) / n_exc
-        hit_inh = np.mean(np.count_nonzero(
-            rec.matrices[I_type]["Responsivity"][:, (rec.detected_stim & threshold_stim_vector)] == I_activity,
-            axis=0)) / I_nb
-        miss_inh = np.mean(np.count_nonzero(
-            rec.matrices[I_type]["Responsivity"][:, (~rec.detected_stim & threshold_stim_vector)] == I_activity,
-            axis=0)) / I_nb
+        all_exc = np.mean(np.count_nonzero(rec.matrices["EXC"]["Responsivity"][:, amp_vector] == 1, axis=0)) / n_exc
+        hit_exc = np.mean(np.count_nonzero(rec.matrices["EXC"]["Responsivity"][:, hit_vector] == 1, axis=0)) / n_exc
+        miss_exc = np.mean(np.count_nonzero(rec.matrices["EXC"]["Responsivity"][:, miss_vector] == 1, axis=0)) / n_exc
+        all_inh = np.mean(np.count_nonzero(rec.matrices[I_type]["Responsivity"][:, amp_vector] == I_activity, axis=0)) / I_nb
+        hit_inh = np.mean(np.count_nonzero(rec.matrices[I_type]["Responsivity"][:, hit_vector] == I_activity, axis=0)) / I_nb
+        miss_inh = np.mean(np.count_nonzero(rec.matrices[I_type]["Responsivity"][:, miss_vector] == I_activity, axis=0)) / I_nb
+        ei_all = all_exc / all_inh
         ei_hit = hit_exc / hit_inh
         ei_miss = miss_exc / miss_inh
-        rows.append({"ID": rec.filename, "Genotype": rec.genotype, "EI_hit": ei_hit, "EI_miss": ei_miss})
+        if test_INH:
+            all_exc_INH = np.mean(np.count_nonzero(rec.matrices["EXC"]["Responsivity"][:, amp_vector] == -1, axis=0)) / n_exc
+            hit_exc_INH = np.mean(np.count_nonzero(rec.matrices["EXC"]["Responsivity"][:, hit_vector] == -1, axis=0)) / n_exc
+            miss_exc_INH = np.mean(np.count_nonzero(rec.matrices["EXC"]["Responsivity"][:, miss_vector] == -1, axis=0)) / n_exc
+            all_inh_INH = np.mean(np.count_nonzero(rec.matrices["INH"]["Responsivity"][:, amp_vector] == 1, axis=0)) / n_inh
+            hit_inh_INH = np.mean(np.count_nonzero(rec.matrices["INH"]["Responsivity"][:, hit_vector] == 1, axis=0)) / n_inh
+            miss_inh_INH = np.mean(np.count_nonzero(rec.matrices["INH"]["Responsivity"][:, miss_vector] == 1, axis=0)) / n_inh
+            ei_all = all_exc_INH / all_inh_INH
+            ei_hit = hit_exc_INH / hit_inh_INH
+            ei_miss = miss_exc_INH / miss_inh_INH
+            EI_label = "% inhibited EXC / % activated INH"
+        rows.append({"ID": rec.filename, "Genotype": rec.genotype, "EI_all": ei_all, "EI_hit": ei_hit, "EI_miss": ei_miss})
     data = pd.DataFrame(rows)
-    fig, ax = plt.subplots(nrows=1, ncols=4, figsize=(24, 8), constrained_layout=True)
-    wt_hit = data[data["Genotype"] == "WT"]["EI_hit"]
-    wt_hit_un = wt_hit[np.isfinite(wt_hit)].values
-    ko_hit = data[data["Genotype"] == "KO-Hypo"]["EI_hit"]
-    ko_hit_un = ko_hit[np.isfinite(ko_hit)].values
-    wt_miss = data[data["Genotype"] == "WT"]["EI_miss"]
-    wt_miss_un = wt_miss[np.isfinite(wt_miss)].values
-    ko_miss = data[data["Genotype"] == "KO-Hypo"]["EI_miss"]
-    ko_miss_un = ko_miss[np.isfinite(ko_miss)].values
-    wt_hit_paired = wt_hit[(np.isfinite(wt_hit) & np.isfinite(wt_miss))].values
-    wt_miss_paired = wt_miss[(np.isfinite(wt_hit) & np.isfinite(wt_miss))].values
-    ko_hit_paired = ko_hit[(np.isfinite(ko_hit) & np.isfinite(ko_miss))].values
-    ko_miss_paired = ko_miss[(np.isfinite(ko_hit) & np.isfinite(ko_miss))].values
-    ppt.boxplot(ax[0], wt_hit_un, ko_hit_un, paired=False, ylabel="E:I ratio", ylim=[], title="Hit trials",
-                colors=[ppt.wt_color, ppt.hypo_color], det_marker=False)
-    ppt.boxplot(ax[1], wt_miss_un, ko_miss_un, paired=False, ylabel="E:I ratio", ylim=[], title="Miss trials",
-                colors=[ppt.wt_light_color, ppt.hypo_light_color], det_marker=False)
-    ppt.boxplot(ax[2], wt_hit_paired, wt_miss_paired, paired=True, ylabel="E:I ratio", ylim=[], title="WT",
-                colors=[ppt.wt_color, ppt.wt_light_color], det_marker=True)
-    ppt.boxplot(ax[3], ko_hit_paired, ko_miss_paired, paired=True, ylabel="E:I ratio", ylim=[], title="KO-Hypo",
-                colors=[ppt.hypo_color, ppt.hypo_light_color], det_marker=True)
-    fig.suptitle(f"E:I ratio comparison between genotypes\n defined as % activated EXC/{I_label}", fontsize=12)
-    fig.canvas.manager.set_window_title(f"EI_comparison")
+    fig, ax = plt.subplots(nrows=1, ncols=5, figsize=(30, 8), constrained_layout=True)
+    gp1_all = data[data["Genotype"] == gp1]["EI_all"].values
+    gp2_all = data[data["Genotype"] == gp2]["EI_all"].values
+    gp1_hit = data[data["Genotype"] == gp1]["EI_hit"]
+    gp1_hit_un = gp1_hit[np.isfinite(gp1_hit)].values
+    gp2_hit = data[data["Genotype"] == gp2]["EI_hit"]
+    gp2_hit_un = gp2_hit[np.isfinite(gp2_hit)].values
+    gp1_miss = data[data["Genotype"] == gp1]["EI_miss"]
+    gp1_miss_un = gp1_miss[np.isfinite(gp1_miss)].values
+    gp2_miss = data[data["Genotype"] == gp2]["EI_miss"]
+    gp2_miss_un = gp2_miss[np.isfinite(gp2_miss)].values
+    gp1_hit_paired = gp1_hit[(np.isfinite(gp1_hit) & np.isfinite(gp1_miss))].values
+    gp1_miss_paired = gp1_miss[(np.isfinite(gp1_hit) & np.isfinite(gp1_miss))].values
+    gp2_hit_paired = gp2_hit[(np.isfinite(gp2_hit) & np.isfinite(gp2_miss))].values
+    gp2_miss_paired = gp2_miss[(np.isfinite(gp2_hit) & np.isfinite(gp2_miss))].values
+    ppt.boxplot(ax[0], gp1_all, gp2_all, paired=False, ylabel="E:I ratio", ylim=[0, 5], title="All trials",
+                colors=[color_dict[gp1][0], color_dict[gp2][0]], det_marker=True, force_markers_identity=True)
+    ppt.boxplot(ax[1], gp1_hit_un, gp2_hit_un, paired=False, ylabel="E:I ratio", ylim=[0, 5], title="Hit trials",
+                colors=[color_dict[gp1][0], color_dict[gp2][0]], det_marker=True, force_markers_identity=True)
+    ppt.boxplot(ax[2], gp1_miss_un, gp2_miss_un, paired=False, ylabel="E:I ratio", ylim=[0, 5], title="Miss trials",
+                colors=[color_dict[gp1][1], color_dict[gp2][1]], det_marker=False)
+    ppt.boxplot(ax[3], gp1_hit_paired, gp1_miss_paired, paired=True, ylabel="E:I ratio", ylim=[0, 5], title=gp1,
+                colors=color_dict[gp1], det_marker=True)
+    ppt.boxplot(ax[4], gp2_hit_paired, gp2_miss_paired, paired=True, ylabel="E:I ratio", ylim=[0, 5], title=gp2,
+                colors=color_dict[gp2], det_marker=True)
+    fig.suptitle(f"E:I ratio comparison between {gp1} and {gp2}\n defined as {"% activated EXC / " if not test_INH else EI_label}{I_label if not test_INH else ""}  \n amp = {amp}", fontsize=12)
+    fig.canvas.manager.set_window_title(f"EI_comparison_{gp1}_{gp2}")
+    plt.show()
+    return data
+
+
+def correlate_ntn_ei(ntn_df, ei_df, corr_threshold_ei=False):
+    variable = "Threshold" if corr_threshold_ei else "mean_cos_sim"
+    color_dict = {"WT": ppt.wt_color, "KO-Hypo": ppt.hypo_color, "KO": ppt.ko_color}
+    ntn = ntn_df[ntn_df["Behavior"] == "All"][["ID", "Threshold", "mean_cos_sim"]]
+    data = ei_df.merge(ntn, on="ID", how="left").drop(columns=["EI_hit", "EI_miss"])
+    fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(8, 8), constrained_layout=True)
+    for y_legend, geno in zip([0.95, 0.90, 0.85], ["WT", "KO-Hypo", "KO"]):
+        x = data[data["Genotype"] == geno]["EI_all"].values
+        y = data[data["Genotype"] == geno][variable].values
+        mask = ~np.isnan(x) & ~np.isnan(y)
+        x = x[mask]
+        y = y[mask]
+        results = dict(linregress(x, y)._asdict())
+        r2 = results["rvalue"] ** 2
+        line = results["slope"] * x + results["intercept"]
+        # Plot the data points and regression line
+        ax.scatter(x, y, color=color_dict[geno], alpha=0.7, s=10, marker="+")
+        ax.plot(x, line, color=color_dict[geno], lw=2)
+        ax.text(0.05, y_legend, f"$r^2 = {r2:.3f}$\np-value = {results["pvalue"]:.3f}", transform=ax.transAxes,
+                        fontsize=8, verticalalignment="top", color=color_dict[geno])
+    # Computing and plotting the global correlation
+    x = data["EI_all"].values
+    y = data[variable].values
+    mask = ~np.isnan(x) & ~np.isnan(y)
+    x = x[mask]
+    y = y[mask]
+    results = dict(linregress(x, y)._asdict())
+    r2 = results["rvalue"] ** 2
+    line = results["slope"] * x + results["intercept"]
+    # Plot the data points and regression line
+    ax.plot(x, line, color="black", lw=2)
+    ax.text(0.05, 0.80, f"$r^2 = {r2:.3f}$\np-value = {results["pvalue"]:.3f}", transform=ax.transAxes,
+            fontsize=8, verticalalignment="top", color="black")
+    ax.set_xlabel("EI_all", fontsize=12)
+    ax.set_ylabel(variable, fontsize=12)
+    fig.suptitle(f"Correlation of {variable} and EI ratio for all trials", fontsize=14)
     plt.show()
     return data
 
@@ -2073,7 +2202,7 @@ def population_SNR(mean_activity_df):
     plt.show()
     return amp_data
 
-pop_snr_df = population_SNR(activity_long_dff)
+# pop_snr_df = population_SNR(activity_long_dff)
 
 
 def overall_zscore_comp(mean_activity_df):
@@ -2082,10 +2211,229 @@ def overall_zscore_comp(mean_activity_df):
 
 
 # endregion ============================================================================================================
+# region ========================================== SNR ==============================================================
+def single_neuron_SNR(activity_df, n_type="EXC", amplitude="all", gp1="WT", gp2="KO-Hypo"):
+    """Computes and plot the SNR at the single neuron level using 2 different methods: prestim or mean NoGo as reference"""
+    full_data = activity_df.copy()
+    # Neuron type selection
+    if n_type in ["EXC", "INH"]:
+        full_data = full_data[full_data["Neuron"].str.startswith(n_type)]
+    # Amplitude selection
+    if amplitude == "all":
+        data = full_data[full_data["Amplitude"] != 0]
+    elif amplitude == "threshold":
+        data = full_data[full_data["Amplitude"] == full_data["Threshold"]]
+    elif isinstance(amplitude, list):
+        data = full_data[full_data["Amplitude"].isin(amplitude)]
+    # Isolate no go trials, remove them form activity and computing their mean used as the reference, merging the value back to the dataframe
+    all_no_go_long = full_data[full_data["Amplitude"] == 0]
+    all_no_go = all_no_go_long.drop(columns=["Behavior", "FA"]).groupby(["Genotype", "ID", "Neuron"], as_index=False).mean().rename(columns={"Stim_mean": "NoGo_mean"})
+        # Splitting FA/CR
+    no_go = all_no_go_long.drop(columns=["Behavior"]).groupby(["Genotype", "ID", "Neuron", "FA"], as_index=False).mean().rename(columns={"Stim_mean": "NoGo_mean"})
+    fa = no_go[no_go["FA"] == True].copy().rename(columns={"NoGo_mean": "FA_mean"})
+    cr = no_go[no_go["FA"] == False].copy().rename(columns={"NoGo_mean": "CR_mean"})
+        # Merging the mean activtiy of each neuron during No-Gos to the Dataframe
+    data = data.merge(all_no_go[["ID", "Neuron", "NoGo_mean"]], how="left", on=["ID", "Neuron"])
+    data = data.merge(fa[["ID", "Neuron", "FA_mean"]], how="left", on=["ID", "Neuron"])
+    data = data.merge(cr[["ID", "Neuron", "CR_mean"]], how="left", on=["ID", "Neuron"])
+    # Computing the SNR
+    data = data.rename(columns={"Abs_Diff_mean": "SNR_prestim"}).drop(columns=["FA"])
+    data["SNR_NoGo"] = abs(data["Stim_mean"] - data["NoGo_mean"])
+    data["SNR_FA"] = abs(data["Stim_mean"] - data["FA_mean"])
+    data["SNR_CR"] = abs(data["Stim_mean"] - data["CR_mean"])
+        # Averaging the values per animal
+    gp_data = data.drop(columns=["Neuron"]).groupby(["Genotype", "ID", "Behavior"], as_index=False).mean()
+    gp_data_all = data.drop(columns=["Neuron", "Behavior"]).groupby(["Genotype", "ID"], as_index=False).mean()
+    # Testing for outliers
+    mad_threshold = 20
+    stim = gp_data["Stim_mean"].values
+    med = np.median(stim)
+    mad = np.median(np.abs(stim - med))
+    if mad == 0:
+        print("MAD is zero: cannot compute modified z-scores. Skipping outlier filtering.")
+    else:
+        modified_z = 0.6745 * (stim - med) / mad
+        gp_data["mod_z"] = modified_z
+        outlier_mask = np.abs(modified_z) > mad_threshold
+        outliers = gp_data.loc[outlier_mask, ["ID", "Behavior", "mod_z"]]
+        if not outliers.empty:
+            for _, row in outliers.iterrows():
+                print(f"Excluding animal ID={row['ID']} (Behavior={row['Behavior']}) with modified_z={row['mod_z']:.2f} > {mad_threshold}")
+            # drop all rows for any outlier ID
+            exclude_ids = outliers["ID"].unique()
+            gp_data = gp_data[~gp_data["ID"].isin(exclude_ids)].copy()
+            gp_data_all = gp_data_all[~gp_data_all["ID"].isin(exclude_ids)].copy()
+        else:
+            print("No outliers detected by MAD test.")
+    # Is the SNR prestim/NoGo/FA/CR different between Hit/miss and gp1/KO
+    fig, ax = plt.subplots(nrows=3, ncols=5, figsize=(30, 24), constrained_layout=True)
+    for row, SNR_variable in enumerate(["SNR_prestim", "SNR_NoGo"]):
+        gp1_hit_raw = gp_data[(gp_data["Genotype"] == gp1) & (gp_data["Behavior"] == True)][SNR_variable]
+        gp1_miss_raw = gp_data[(gp_data["Genotype"] == gp1) & (gp_data["Behavior"] == False)][SNR_variable]
+        gp2_hit_raw = gp_data[(gp_data["Genotype"] == gp2) & (gp_data["Behavior"] == True)][SNR_variable]
+        gp2_miss_raw = gp_data[(gp_data["Genotype"] == gp2) & (gp_data["Behavior"] == False)][SNR_variable]
+        gp1_hit = gp1_hit_raw.values[np.isfinite(gp1_hit_raw)]
+        gp1_miss = gp1_miss_raw.values[np.isfinite(gp1_miss_raw)]
+        gp2_hit = gp2_hit_raw.values[np.isfinite(np.array(gp2_hit_raw))]
+        gp2_miss = gp2_miss_raw.values[np.isfinite(np.array(gp2_miss_raw))]
 
+        gp1_hit_ids = set(np.array(gp_data[(gp_data["Genotype"] == gp1) & (gp_data["Behavior"] == True)]["ID"]))
+        gp1_miss_ids = set(np.array(gp_data[(gp_data["Genotype"] == gp1) & (gp_data["Behavior"] == False)]["ID"]))
+        gp2_hit_ids = set(np.array(gp_data[(gp_data["Genotype"] == gp2) & (gp_data["Behavior"] == True)]["ID"]))
+        gp2_miss_ids = set(np.array(gp_data[(gp_data["Genotype"] == gp2) & (gp_data["Behavior"] == False)]["ID"]))
+
+        gp1_mask = gp1_hit_ids & gp1_miss_ids
+        gp2_mask = gp2_hit_ids & gp2_miss_ids
+        gp1_hit_paired = gp_data[(gp_data["Genotype"] == gp1) & (gp_data["Behavior"] == True) & gp_data["ID"].isin(gp1_mask)][SNR_variable].values
+        gp1_miss_paired = gp_data[(gp_data["Genotype"] == gp1) & (gp_data["Behavior"] == False) & gp_data["ID"].isin(gp1_mask)][SNR_variable].values
+        gp2_hit_paired = gp_data[(gp_data["Genotype"] == gp2) & (gp_data["Behavior"] == True) & gp_data["ID"].isin(gp2_mask)][SNR_variable].values
+        gp2_miss_paired = gp_data[(gp_data["Genotype"] == gp2) & (gp_data["Behavior"] == False) & gp_data["ID"].isin(gp2_mask)][SNR_variable].values
+
+        # All trials
+        ppt.boxplot(ax[row, 0],
+                    gp_data_all[gp_data_all["Genotype"] == gp1][SNR_variable].values,
+                    gp_data_all[gp_data_all["Genotype"] == gp2][SNR_variable].values,
+                    paired=False, ylabel=SNR_variable, ylim=[-10, 50], title="All trials",
+                    colors=[color_dict[gp1][0], color_dict[gp2][0]], det_marker=True, force_markers_identity=True)
+        # Hits
+        ppt.boxplot(ax[row, 1], gp1_hit, gp2_hit, paired=False, ylabel=SNR_variable, ylim=[-10, 50], title="Hit",
+                    colors=[color_dict[gp1][0], color_dict[gp2][0]], det_marker=True, force_markers_identity=True)
+        # Miss
+        ppt.boxplot(ax[row, 2], gp1_miss, gp2_miss, paired=False, ylabel=SNR_variable, ylim=[-10, 50], title="Miss",
+                    colors=[color_dict[gp1][1], color_dict[gp2][1]], det_marker=False, force_markers_identity=False)
+        # gp1 Hit/Miss
+        ppt.boxplot(ax[row, 3], gp1_hit_paired, gp1_miss_paired, paired=True, ylabel=SNR_variable, ylim=[-10, 50], title=gp1,
+                    colors=color_dict[gp1], det_marker=True, force_markers_identity=False)
+        # gp2 Hit/Miss
+        ppt.boxplot(ax[row, 4], gp2_hit_paired, gp2_miss_paired, paired=True, ylabel=SNR_variable, ylim=[-10, 50], title=gp2,
+                    colors=color_dict[gp2], det_marker=True, force_markers_identity=False)
+    # FA and CR
+    ppt.boxplot(ax[2, 0],
+                gp_data[(gp_data["Genotype"] == gp1) & (gp_data["Behavior"] == True)]["SNR_FA"].values,
+                gp_data[(gp_data["Genotype"] == gp2) & (gp_data["Behavior"] == True)]["SNR_FA"].values,
+                paired=False, ylabel="SNR_FA", ylim=[-10, 50], title="False Alarm",
+                colors=[color_dict[gp1][0], color_dict[gp2][0]], det_marker=True, force_markers_identity=True)
+    ppt.boxplot(ax[2, 1],
+                gp_data[(gp_data["Genotype"] == gp1) & (gp_data["Behavior"] == False)]["SNR_CR"].values,
+                gp_data[(gp_data["Genotype"] == gp2) & (gp_data["Behavior"] == False)]["SNR_CR"].values,
+                paired=False, ylabel="SNR_CR", ylim=[-10, 50], title="Correct Rejection",
+                colors=[color_dict[gp1][0], color_dict[gp2][0]], det_marker=True, force_markers_identity=True)
+    ax[2, 2].set_axis_off()
+    ax[2, 3].set_axis_off()
+    ax[2, 4].set_axis_off()
+    fig.suptitle(f"Single neuron SNR comparison for {n_type} neurons ({gp1}/{gp2}), {amplitude} amplitude", fontsize=14)
+    fig.canvas.manager.set_window_title(f"single_neuron_SNR_{n_type}_{gp1}_{gp2}")
+    plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/10_SNR/single_neuron_SNR_{n_type}_{amplitude}_{gp1}_{gp2}.pdf", format="pdf")
+    plt.show()
+    return gp_data
+
+# single_SNR_df = single_neuron_SNR(activity_long_dff, n_type="all", amplitude=[4], gp1="WT-BMS", gp2="KO-BMS")
+
+def pop_SNR(activity_df, recruitment_df, amplitude="all", gp1="WT", gp2="KO-Hypo"):
+    full_data = recruitment_df.merge(activity_df[["ID", "Trial", "FA"]].drop_duplicates(), how='left', on=["ID", "Trial"]).copy()
+    full_data = full_data[full_data["Genotype"].isin([gp1, gp2])]
+    # Amplitude selection
+    if amplitude == "all":
+        all_data = full_data[full_data["amplitude"] != 0]
+    elif amplitude == "threshold":
+        all_data = full_data[full_data["amplitude"] == full_data["Threshold"]]
+    elif isinstance(amplitude, list):
+        all_data = full_data[full_data["amplitude"].isin(amplitude)]
+    # No-Go
+    all_no_go_long = full_data[full_data["amplitude"] == 0]
+    all_no_go = all_no_go_long.drop(columns=["behavior", "FA"]).groupby(["Genotype", "ID"], as_index=False).mean()
+    # Splitting FA/CR
+    no_go = all_no_go_long.drop(columns=["behavior"]).groupby(["Genotype", "ID", "FA"], as_index=False).mean()
+    gp_all_data = all_data.drop(columns=["behavior", "FA"]).groupby(["Genotype", "ID"], as_index=False).mean()
+    gp_data = all_data.drop(columns=["FA"]).groupby(["Genotype", "ID", "behavior"], as_index=False).mean()
+    # Hit/miss and no-go data frame can be merged:
+    # all_no_go with gp_all_data & gp_data with no_go (need to rename either behavior or FA to merge on this column)
+        # All trials together
+    full_nogo_to_merge = all_no_go.drop(columns=["Genotype", "threshold", "bounded_x0", "Trial", "amplitude"])
+    full_nogo_to_merge.columns = [col if col == "ID" else f"{col}_Nogo" for col in full_nogo_to_merge.columns]
+    grouped = gp_all_data.merge(full_nogo_to_merge, how="left", on=["ID"]).drop(columns=["bounded_x0", "Trial", "amplitude"])
+    for col in grouped.columns:
+        if col not in ["ID", "Genotype", "threshold"] and not col.endswith("_Nogo"):
+            grouped[f"{col}_SNR"] = grouped[col] / grouped[f"{col}_Nogo"]
+        # Hit and miss seprated (FA/CR)
+    nogo_to_merge = no_go.drop(columns=["Genotype", "threshold", "bounded_x0", "Trial", "amplitude"]).rename(columns={"FA": "behavior"})
+    nogo_to_merge.columns = [col if col in ["ID", "behavior"] else f"{col}_Nogo" for col in nogo_to_merge.columns]
+    grouped_behavior = gp_data.merge(nogo_to_merge, how="left", on=["ID", "behavior"]).drop(columns=["bounded_x0", "Trial", "amplitude"])
+    for col in grouped_behavior.columns:
+        if col not in ["ID", "Genotype", "threshold", "behavior"] and not col.endswith("_Nogo"):
+            grouped_behavior[f"{col}_SNR"] = grouped_behavior[col] / grouped_behavior[f"{col}_Nogo"]
+        # Hit and miss with all no-go
+    grouped_beh_no_go = gp_data.merge(full_nogo_to_merge, how="left", on=["ID"]).drop(columns=["bounded_x0", "Trial", "amplitude"])
+    for col in grouped_beh_no_go.columns:
+        if col not in ["ID", "Genotype", "threshold", "behavior"] and not col.endswith("_Nogo"):
+            grouped_beh_no_go[f"{col}_SNR"] = grouped_beh_no_go[col] / grouped_beh_no_go[f"{col}_Nogo"]
+    # Now the Pop SNR can be plotted
+    fig, ax = plt.subplots(nrows=5, ncols=6, figsize=(36, 40), constrained_layout=True)
+    # Global pop SNR
+    for col_id, rec_metric in enumerate([col for col in grouped.columns if col.endswith("_SNR")]):
+        # All trials
+        gp1_raw = grouped[grouped["Genotype"] == gp1][rec_metric]
+        gp2_raw = grouped[grouped["Genotype"] == gp2][rec_metric]
+        grp1 = gp1_raw.values[np.isfinite(gp1_raw)]
+        grp2 = gp2_raw.values[np.isfinite(gp2_raw)]
+        ppt.boxplot(ax[0, col_id], grp1, grp2, paired=False, ylabel=rec_metric, ylim=[-10, 30], title="All Trials/No-Gos",
+                    colors=[color_dict[gp1][0], color_dict[gp2][0]], det_marker=True, force_markers_identity=True)
+        # Hit and Miss
+        gp1_hit_raw = grouped_beh_no_go[(grouped_beh_no_go["Genotype"] == gp1) & (grouped_beh_no_go["behavior"] == True)][rec_metric]
+        gp1_miss_raw = grouped_beh_no_go[(grouped_beh_no_go["Genotype"] == gp1) & (grouped_beh_no_go["behavior"] == False)][rec_metric]
+        gp2_hit_raw = grouped_beh_no_go[(grouped_beh_no_go["Genotype"] == gp2) & (grouped_beh_no_go["behavior"] == True)][rec_metric]
+        gp2_miss_raw = grouped_beh_no_go[(grouped_beh_no_go["Genotype"] == gp2) & (grouped_beh_no_go["behavior"] == False)][rec_metric]
+        gp1_hit = gp1_hit_raw.values[np.isfinite(gp1_hit_raw)]
+        gp1_miss = gp1_miss_raw.values[np.isfinite(gp1_miss_raw)]
+        gp2_hit = gp2_hit_raw.values[np.isfinite(np.array(gp2_hit_raw))]
+        gp2_miss = gp2_miss_raw.values[np.isfinite(np.array(gp2_miss_raw))]
+
+        gp1_hit_id = set(np.array(grouped_beh_no_go[(grouped_beh_no_go["Genotype"] == gp1) & (grouped_beh_no_go["behavior"] == True) & (np.isfinite(grouped_beh_no_go[rec_metric]))]["ID"]))
+        gp1_miss_ids = set(np.array(grouped_beh_no_go[(grouped_beh_no_go["Genotype"] == gp1) & (grouped_beh_no_go["behavior"] == False) & (np.isfinite(grouped_beh_no_go[rec_metric]))]["ID"]))
+        gp2_hit_ids = set(np.array(grouped_beh_no_go[(grouped_beh_no_go["Genotype"] == gp2) & (grouped_beh_no_go["behavior"] == True) & (np.isfinite(grouped_beh_no_go[rec_metric]))]["ID"]))
+        gp2_miss_ids = set(np.array(grouped_beh_no_go[(grouped_beh_no_go["Genotype"] == gp2) & (grouped_beh_no_go["behavior"] == False) & (np.isfinite(grouped_beh_no_go[rec_metric]))]["ID"]))
+        gp1_ids = gp1_hit_id & gp1_miss_ids
+        gp2_ids = gp2_hit_ids & gp2_miss_ids
+
+        gp1_hit_paired = grouped_beh_no_go[(grouped_beh_no_go["ID"].isin(gp1_ids)) & (grouped_beh_no_go["behavior"] == True)][rec_metric].values
+        gp1_miss_paired = grouped_beh_no_go[(grouped_beh_no_go["ID"].isin(gp1_ids)) & (grouped_beh_no_go["behavior"] == False)][rec_metric].values
+        gp2_hit_paired = grouped_beh_no_go[(grouped_beh_no_go["ID"].isin(gp2_ids)) & (grouped_beh_no_go["behavior"] == True)][rec_metric].values
+        gp2_miss_paired = grouped_beh_no_go[(grouped_beh_no_go["ID"].isin(gp2_ids)) & (grouped_beh_no_go["behavior"] == False)][rec_metric].values
+
+            # Hit vs Miss
+        ppt.boxplot(ax[1, col_id], gp1_hit_paired, gp1_miss_paired, paired=True, ylabel=rec_metric, ylim=[-10, 30], title=f"Hit/NoGo vs. Miss/Nogo ({gp1})",
+                    colors=color_dict[gp1], det_marker=True, force_markers_identity=False)
+        ppt.boxplot(ax[2, col_id], gp2_hit_paired, gp2_miss_paired, paired=True, ylabel=rec_metric, ylim=[-10, 30], title=f"Hit/NoGo vs. Miss/Nogo ({gp2})",
+                    colors=color_dict[gp2], det_marker=True, force_markers_identity=False)
+            # Between genotypes
+        ppt.boxplot(ax[3, col_id], gp1_hit, gp2_hit, paired=False, ylabel=rec_metric, ylim=[-10, 30], title="Hit/NoGo",
+                    colors=[color_dict[gp1][0], color_dict[gp2][0]], det_marker=True, force_markers_identity=True)
+        ppt.boxplot(ax[4, col_id], gp1_miss, gp2_miss, paired=False, ylabel=rec_metric, ylim=[-10, 30], title="Miss/NoGo",
+                    colors=[color_dict[gp1][1], color_dict[gp2][1]], det_marker=False, force_markers_identity=False)
+        # FA and CR
+        gp1_fa_raw = grouped_behavior[(grouped_behavior["Genotype"] == gp1) & (grouped_behavior["behavior"] == True)][rec_metric]
+        gp1_cr_raw = grouped_behavior[(grouped_behavior["Genotype"] == gp1) & (grouped_behavior["behavior"] == False)][rec_metric]
+        gp2_fa_raw = grouped_behavior[(grouped_behavior["Genotype"] == gp2) & (grouped_behavior["behavior"] == True)][rec_metric]
+        gp2_cr_raw = grouped_behavior[(grouped_behavior["Genotype"] == gp2) & (grouped_behavior["behavior"] == False)][rec_metric]
+        gp1_fa = gp1_fa_raw.values[np.isfinite(gp1_fa_raw)]
+        gp1_cr = gp1_cr_raw.values[np.isfinite(gp1_cr_raw)]
+        gp2_fa = gp2_fa_raw.values[np.isfinite(gp2_fa_raw)]
+        gp2_cr = gp2_cr_raw.values[np.isfinite(gp2_cr_raw)]
+        # ppt.boxplot(ax[5, col_id], gp1_fa, gp2_fa, paired=False, ylabel=rec_metric, ylim=[-10, 30], title="Hit/FA",
+        #             colors=[ppt.wt_color, ppt.hypo_color], det_marker=True, force_markers_identity=True)
+        # ppt.boxplot(ax[6, col_id], gp1_cr, gp2_cr, paired=False, ylabel=rec_metric, ylim=[-10, 30], title="Miss/CR",
+        #             colors=[ppt.wt_light_color, ppt.hypo_light_color], det_marker=False, force_markers_identity=False)
+    fig.suptitle(f"Comparison of the population SNR (mean recruitment) between {gp1} and {gp2}\nAmplitude == {amplitude}", fontsize=12)
+    fig.canvas.manager.set_window_title(f"Pop_SNR_comp_{amplitude}_{gp1}_{gp2}")
+    plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/11_SNR_pop/pop_SNR_{amplitude}_{gp1}_{gp2}.pdf", format="pdf")
+    return grouped_behavior
+
+# pop_SNR_df = pop_SNR(activity_long_df, recruitment_df, amplitude="all", gp1="WT-BMS", gp2="KO-BMS")
+
+# endregion ============================================================================================================
 
 if __name__ == '__main__':
-    BMS_analysis = False
+    BMS_analysis = True
     # region ====== Initialisation of recs instances ======
     if BMS_analysis:
         directory = "C:/Users/cvandromme/Desktop/Tactile_detection/Data_DMSO_BMS/"
@@ -2098,11 +2446,9 @@ if __name__ == '__main__':
     files = os.listdir(directory)
     files_ = [file for file in files if file.endswith("synchro")]
 
-
     def opening_rec(fil, i):
         rec = pc.RecordingAmplDet(directory + fil + "/", 0, roi_path)
         return rec
-
 
     workers = cpu_count()
     pool = pool.ThreadPool(processes=workers)
@@ -2121,6 +2467,7 @@ if __name__ == '__main__':
     # region ====== Comparison of threshold to session threshold ======
     rows = []
     for rec in recs.values():
+        rec.auc()
         rec.auc_neg()
         rows.append({"ID": rec.filename, "Genotype": rec.genotype, "threshold": rec.threshold,
                      "session_threshold": rec.session_threshold, "session_x0": rec.x0_psy})
@@ -2144,18 +2491,21 @@ if __name__ == '__main__':
     # region ====== TBT variability ======
     recruitment_df = get_features(recs.values(), amp_delay=False, auc=False)
     # hit_test, hit_posthoc, miss_test, miss_posthoc = compare_tbt_var_per_amp(recruitment_df)
-    activity_long_df = get_mean_trial_activity_df(recs.values(), zscore=True)
-    activity_long_dff = get_mean_trial_activity_df(recs.values(), zscore=False)
+    activity_long_df = get_mean_trial_activity_df(recs.values(), zscore=True, BMS=BMS_analysis)
+    activity_long_dff = get_mean_trial_activity_df(recs.values(), zscore=False, BMS=BMS_analysis)
 
     # compute_neuronal_sensitivity(activity_long_df, amplitude="All", n_type="EXC")
 
-    ntn_df = ntn_cosine_similarity(activity_long_df, amplitude="all", nogo=False, metric="Resp", filter_out_nr=True, n_type="INH")
+    ntn_df = ntn_cosine_similarity(activity_long_df, amplitude=[4], nogo=False, metric="Resp", filter_out_nr=True, n_type="INH", gp1="WT-BMS", gp2="KO-BMS")
     # activity_long_dff = get_mean_trial_activity_df(recs.values(), zscore=False)
     # prestim_df = prestim_activated_neurons(filtered_activity_df)
     # prestim_vector_df = prestim_act_vector(activity_long_df, metric="Stim_mean", hit_activated_only=False)
     # prestim_vector_dff = prestim_act_vector(activity_long_dff, metric="Diff_mean", hit_activated_only=True)
     # tbt_recr_var_df = compare_tbt_var_per_amp(recruitement_df)
     # pca_df = pca(activity_long_df, split="Miss_CR")
+
+    # pop_SNR_df = pop_SNR(activity_long_df, recruitment_df, amplitude=[4], gp1="WT-BMS", gp2="KO-BMS")
+    # single_SNR_df = single_neuron_SNR(activity_long_dff, n_type="EXC", amplitude=[4])
 
     # nb_reliable_df = compare_nb_reliable_responders(recs.values())
     # reliable_activity_df = filter_reliable(activity_long_df[~activity_long_df["ID"].isin([6606, 6611])], recs.values(),
@@ -2189,10 +2539,12 @@ if __name__ == '__main__':
 
     # region ====== E/I Ratio ======
     # ei_df = get_ei_ratio_df(recs.values())
+    # ei_var_df = plot_ei_variance(ei_df)
     # ei_behavior_df = correlate_behavior(ei_df, column="EI_ratio_cste")
     # ei_comp_df = compare_ei_ratio(ei_df, column="EI_ratio_norm")
 
-    # ei_data = population_EI_ratio(recs.values(), pyr_inhibition=True)
+    # ei_data = population_EI_ratio(recs.values(), pyr_inhibition=False, amp="all", test_INH=False, gp1="WT-BMS", gp2="KO-BMS")
+    # ntn_ei_cor_df = correlate_ntn_ei(ntn_df, ei_data, corr_threshold_ei=True)
     # inh_corr_data = correlation_gaba_act_pyr_inh(recs.values())
     # endregion
 

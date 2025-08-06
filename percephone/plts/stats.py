@@ -70,6 +70,8 @@ all_ko_bms_light_color = "#e3a1ba"
 
 hypo_color = "firebrick"
 hypo_light_color = "#e18282"
+hypo_bms_color = "#da004a"
+hypo_bms_light_color = "#f17581"
 
 ko_color = "#c57c9a"
 ko_light_color = "#fda7ca"  # I defined this one
@@ -894,13 +896,16 @@ if __name__ == "__main__":
     ko_bms =  [11, 21, 18, 19, 20, 22]           # KO BMS
     cond = [["WT", "DMSO"], ["WT", "BMS"], ["KO", "BMS"], ["KO", "DMSO"]]
     labs = ["Genotype", "Treatment"]
-    fig, ax = plt.subplots(figsize=(8, 8))
-
-    # dmso_bms(ax, wt_dmso, wt_bms, ko_dmso, ko_bms, "Variable", "Titre", ylim=[],
-    #          colors=[wt_color, wt_bms_color, all_ko_color, all_ko_bms_color])
-    boxplot(ax, ko_dmso, ko_bms, "ylabel", paired=True, title="", ylim=[0, 20], colors=[wt_color, wt_light_color])
-    # plt.tight_layout()
-    # plt.show()
-    gp1 = [[1, 2, np.nan, 3], [1, np.nan, 3, 5], [1, 2, 3, 5]]
-    gp2 = [[1, 2, 4, 3], [np.nan, 3, 5, 6], [1, np.NaN, np.NaN, 5]]
-    boxplot_3_conditions(gp1, gp2)
+    fig, ax = plt.subplots(nrows=2, ncols=4, figsize=(24, 16), constrained_layout=True)
+    boxplot(ax[0, 0], ko_dmso, ko_bms, "ylabel", paired=True, title="WT", ylim=[], colors=[wt_color, wt_light_color])
+    boxplot(ax[1, 0], ko_dmso, ko_bms, "ylabel", paired=True, title="WT [BMS]", ylim=[], colors=[wt_bms_color, wt_bms_light_color])
+    boxplot(ax[0, 1], ko_dmso, ko_bms, "ylabel", paired=True, title="All KO", ylim=[], colors=[all_ko_color, all_ko_light_color])
+    boxplot(ax[1, 1], ko_dmso, ko_bms, "ylabel", paired=True, title="All KO [BMS]", ylim=[], colors=[all_ko_bms_color, all_ko_bms_light_color])
+    boxplot(ax[0, 2], ko_dmso, ko_bms, "ylabel", paired=True, title="KO-Hypo", ylim=[], colors=[hypo_color, hypo_light_color])
+    boxplot(ax[1, 2], ko_dmso, ko_bms, "ylabel", paired=True, title="KO-Hypo [BMS]", ylim=[], colors=[hypo_bms_color, hypo_bms_light_color])
+    boxplot(ax[0, 3], ko_dmso, ko_bms, "ylabel", paired=True, title="KO", ylim=[], colors=[ko_color, ko_light_color])
+    ax[1, 3].set_axis_off()
+    plt.show()
+    # gp1 = [[1, 2, np.nan, 3], [1, np.nan, 3, 5], [1, 2, 3, 5]]
+    # gp2 = [[1, 2, 4, 3], [np.nan, 3, 5, 6], [1, np.NaN, np.NaN, 5]]
+    # boxplot_3_conditions(gp1, gp2)

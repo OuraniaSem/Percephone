@@ -74,7 +74,7 @@ def get_features(recs, amp_delay=True, auc=False):
                     "inh_INH_cum_auc": rec.get_mean_param(pattern=-1, n_type="INH", parameter="cum_AUC")})
         nb_trials = len(feature_vectors["behavior"])
         for trial_id in range(nb_trials):
-            row = {"ID": rec.filename, "Genotype": rec.genotype, "threshold": rec.session_threshold, "bounded_x0": rec.bounded_x0}
+            row = {"ID": rec.filename, "Genotype": rec.genotype, "threshold": rec.session_threshold, "bounded_x0": rec.bounded_x0, "Trial": trial_id}
             for feature, vector in feature_vectors.items():
                 row[feature] = vector[trial_id]
             rows.append(row)
@@ -181,6 +181,7 @@ def compare_sub_supra_within(data, behavior_filter=None, genotype="WT", comparis
 
 def compare_sub_supra_between(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo", gp1_amps="sub", gp2_amps="sub",
                               colors=[ppt.wt_color, ppt.hypo_color]):
+    data = data.drop(columns=["Trial"])
     gp1_threshold, gp1_non_threshold = get_sub_supra_threshold(data, behavior_filter=behavior_filter, genotype=gp1, comparison=gp1_amps if gp1_amps != "threshold" else "sub")
     if (gp1_amps in ["rounded_mean_genotype", "real_mean_genotype", "rounded_median_genotype", "real_median_genotype"] and gp2_amps == "gp1_threshold"):
         gp2_amps = [gp1_non_threshold["amplitude"].values[0]]
@@ -268,12 +269,12 @@ def compare_sub_supra_deltas(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo"
 def compare_det_undet(data_df, genotype="WT", amplitude="all"):
     colors_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color],
                    "KO": [ppt.ko_color, ppt.ko_light_color],
-                   "WT-DMSO": [ppt.wt_color, ppt.wt_light_color], "KO-DMSO": [ppt.all_ko_color, ppt.all_ko_light_color],
-                   "WT-BMS": [ppt.wt_bms_color, ppt.wt_bms_light_color], "KO-BMS": [ppt.all_ko_bms_color, ppt.all_ko_bms_light_color],
-                   "DMSO_det": [ppt.wt_color, ppt.all_ko_color], "DMSO_undet": [ppt.wt_light_color, ppt.all_ko_light_color],
-                   "BMS_det": [ppt.wt_bms_color, ppt.all_ko_bms_color], "BMS_undet": [ppt.wt_bms_light_color, ppt.all_ko_bms_light_color]}
+                   "WT-DMSO": [ppt.wt_color, ppt.wt_light_color], "KO-DMSO": [ppt.hypo_color, ppt.hypo_light_color],
+                   "WT-BMS": [ppt.wt_bms_color, ppt.wt_bms_light_color], "KO-BMS": [ppt.hypo_bms_color, ppt.hypo_bms_light_color],
+                   "DMSO_det": [ppt.wt_color, ppt.hypo_color], "DMSO_undet": [ppt.wt_light_color, ppt.hypo_light_color],
+                   "BMS_det": [ppt.wt_bms_color, ppt.hypo_bms_color], "BMS_undet": [ppt.wt_bms_light_color, ppt.hypo_bms_light_color]}
     grouping_cols = ["Genotype", "ID", "behavior"]
-    data = data_df.copy()
+    data = data_df.drop(columns=["Trial"]).copy()
     # Filtering the amplitude
     if genotype[-3:] == "det":
         condition = genotype.split("_")[0]
@@ -577,11 +578,11 @@ def nogo_fa_cr(recs, condition=None):
     elif condition == "DMSO":
         wt_geno = "WT-DMSO"
         ko_geno = "KO-DMSO"
-        colors = [ppt.wt_color, ppt.all_ko_color]
+        colors = [ppt.wt_color, ppt.hypo_color]
     elif condition == "BMS":
         wt_geno = "WT-BMS"
         ko_geno = "KO-BMS"
-        colors = [ppt.wt_bms_color, ppt.all_ko_bms_color]
+        colors = [ppt.wt_bms_color, ppt.hypo_bms_color]
     rows = []
     for rec in recs:
         licks = rec.lick_time
@@ -618,7 +619,7 @@ def nogo_fa_cr(recs, condition=None):
                     colors=colors)
     fig.suptitle("Comparison between genotypes of neuronal recruitment during no-go trials")
     fig.canvas.manager.set_window_title("Recruitment NoGo")
-    # plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/14/Recruitment_NoGo_{condition}.pdf", format="pdf")
+    plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/14/Recruitment_NoGo_{condition}.pdf", format="pdf")
     # plt.show()
     return gp_data
 
@@ -642,11 +643,11 @@ def delta_hit_miss_comp(feature_df, threshold_only=False, wt_threshold=False, co
     elif condition == "DMSO":
         wt_geno = "WT-DMSO"
         ko_geno = "KO-DMSO"
-        colors = [ppt.wt_color, ppt.all_ko_color]
+        colors = [ppt.wt_color, ppt.hypo_color]
     elif condition == "BMS":
         wt_geno = "WT-BMS"
         ko_geno = "KO-BMS"
-        colors = [ppt.wt_bms_color, ppt.all_ko_bms_color]
+        colors = [ppt.wt_bms_color, ppt.hypo_bms_color]
     # Filtering out no go trials
     if threshold_only:
         if wt_threshold:
@@ -655,6 +656,7 @@ def delta_hit_miss_comp(feature_df, threshold_only=False, wt_threshold=False, co
             data = feature_df[feature_df["amplitude"] == feature_df["threshold"]]
     else:
         data = feature_df[feature_df["amplitude"] != 0]
+    data = data.drop(columns=["Trial"])
     hits = data[data["behavior"] == True]
     miss = data[data["behavior"] == False]
     nogo = feature_df[feature_df["amplitude"] == 0]
@@ -1426,7 +1428,7 @@ def neurons_hit_consistency(recs):
 # endregion ============================================================================================================
 
 if __name__ == '__main__':
-    BMS_analysis = True
+    BMS_analysis = False
     ### Initialisation of recs instances ###
     if BMS_analysis:
         directory = "C:/Users/cvandromme/Desktop/Tactile_detection/Data_DMSO_BMS/"
@@ -1478,7 +1480,7 @@ if __name__ == '__main__':
     #         for comp in ["sub", "all_sub", "supra", "all_supra"]:
     #             compare_sub_supra_within(data, behavior_filter=filter, genotype=gen, comparison=comp)
     #   --- Between ---
-    wt, hypo = compare_sub_supra_between(data, behavior_filter=None, gp1="WT-DMSO", gp2="KO-DMSO", gp1_amps="real_mean_genotype", gp2_amps="gp1_threshold", colors=[ppt.wt_color, ppt.all_ko_color])
+    # wt, hypo = compare_sub_supra_between(data, behavior_filter=None, gp1="WT-DMSO", gp2="WT-BMS", gp1_amps="real_mean_genotype", gp2_amps="gp1_threshold", colors=[ppt.wt_color, ppt.wt_bms_color])
     #   --- Between (Deltas) ---
     # sub_supra_delta_df = compare_sub_supra_deltas(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo")
     # sub_supra_delta_df_wt, sub_supra_delta_df_hypo = compare_sub_supra_deltas(data, behavior_filter=None, gp1="WT",
@@ -1486,18 +1488,21 @@ if __name__ == '__main__':
     # btw_det = compare_det_undet_between(full_data, gp1="WT", gp2="KO-Hypo", amplitude="all", behavior="miss")
 
     # --- Hit vs. Miss ---
-    # det, undet = compare_det_undet(data, genotype="DMSO_det", amplitude="threshold") # /!\ full_data for all amp and data for threshold analysis
+    det, undet = compare_det_undet(full_data, genotype="KO-Hypo", amplitude="all") # /!\ full_data for all amp and data for threshold analysis
 
     # mean_det = np.mean(det.drop(columns="Genotype"), axis=0)
     # mean_undet = np.mean(undet.drop(columns="Genotype"), axis=0)
 
-    # results = plot_neuron_perc_amp(recs.values(), pattern="inhibited", detected_trials=True, undetected_trials=False,
-    #                                nogo_norm=False, ylim=[], transformation="yeojohnson", normality=[True, True],
-    #                                homogeneity=[False, True])
+    # results = plot_neuron_perc_amp(recs.values(), pattern="recruited", detected_trials=True, undetected_trials=False,
+    #                                nogo_norm=False, ylim=[0, 60], transformation="yeojohnson", normality=[True, False],
+    #                                homogeneity=[False, False], colors=[ppt.hypo_bms_color, ppt.hypo_color, ppt.wt_bms_color, ppt.wt_color])
+    # results = plot_neuron_perc_amp(recs.values(), pattern="recruited", detected_trials=True, undetected_trials=False,
+    #                                nogo_norm=False, ylim=[0, 60], transformation="yeojohnson", normality=[False, True],
+    #                                homogeneity=[False, True], colors=[ppt.ko_color, ppt.hypo_color, ppt.wt_color])
 
-    nogo_df = nogo_fa_cr(recs.values(), condition="BMS")
+    # nogo_df = nogo_fa_cr(recs.values(), condition="DMSO")
     # delta_df = delta_hit_miss_comp(data, threshold_only=True, wt_threshold=False)
-    # delta_df = delta_hit_miss_comp(data, threshold_only=False, wt_threshold=False, condition="DMSO") #/!\ full_data for all amp and data for threshold analysis
+    # delta_df = delta_hit_miss_comp(data, threshold_only=False, wt_threshold=False, condition="BMS") #/!\ full_data for all amp and data for threshold analysis
 
 
     # ====== Responsivity ======
