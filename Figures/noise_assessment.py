@@ -2248,6 +2248,8 @@ def single_neuron_SNR(activity_df, n_type="EXC", amplitude="all", gp1="WT", gp2=
         data = full_data[full_data["Amplitude"] == full_data["Threshold"]]
     elif isinstance(amplitude, list):
         data = full_data[full_data["Amplitude"].isin(amplitude)]
+    # Non-responsive neurons filtering out
+    data = data.groupby(['ID', 'Neuron']).filter(lambda g: g['Resp'].ne(0).any()).reset_index(drop=True)
     # Isolate no go trials, remove them form activity and computing their mean used as the reference, merging the value back to the dataframe
     all_no_go_long = full_data[full_data["Amplitude"] == 0]
     all_no_go = all_no_go_long.drop(columns=["Behavior", "FA"]).groupby(["Genotype", "ID", "Neuron"], as_index=False).mean().rename(columns={"Stim_mean": "NoGo_mean"})
@@ -2316,39 +2318,39 @@ def single_neuron_SNR(activity_df, n_type="EXC", amplitude="all", gp1="WT", gp2=
         ppt.boxplot(ax[row, 0],
                     gp_data_all[gp_data_all["Genotype"] == gp1][SNR_variable].values,
                     gp_data_all[gp_data_all["Genotype"] == gp2][SNR_variable].values,
-                    paired=False, ylabel=SNR_variable, ylim=[-10, 50], title="All trials",
+                    paired=False, ylabel=SNR_variable, ylim=[0, 2], title="All trials",
                     colors=[color_dict[gp1][0], color_dict[gp2][0]], det_marker=True, force_markers_identity=True)
         # Hits
-        ppt.boxplot(ax[row, 1], gp1_hit, gp2_hit, paired=False, ylabel=SNR_variable, ylim=[-10, 50], title="Hit",
+        ppt.boxplot(ax[row, 1], gp1_hit, gp2_hit, paired=False, ylabel=SNR_variable, ylim=[0, 2], title="Hit",
                     colors=[color_dict[gp1][0], color_dict[gp2][0]], det_marker=True, force_markers_identity=True)
         # Miss
-        ppt.boxplot(ax[row, 2], gp1_miss, gp2_miss, paired=False, ylabel=SNR_variable, ylim=[-10, 50], title="Miss",
+        ppt.boxplot(ax[row, 2], gp1_miss, gp2_miss, paired=False, ylabel=SNR_variable, ylim=[0, 2], title="Miss",
                     colors=[color_dict[gp1][1], color_dict[gp2][1]], det_marker=False, force_markers_identity=False)
         # gp1 Hit/Miss
-        ppt.boxplot(ax[row, 3], gp1_hit_paired, gp1_miss_paired, paired=True, ylabel=SNR_variable, ylim=[-10, 50], title=gp1,
+        ppt.boxplot(ax[row, 3], gp1_hit_paired, gp1_miss_paired, paired=True, ylabel=SNR_variable, ylim=[0, 2], title=gp1,
                     colors=color_dict[gp1], det_marker=True, force_markers_identity=False)
         # gp2 Hit/Miss
-        ppt.boxplot(ax[row, 4], gp2_hit_paired, gp2_miss_paired, paired=True, ylabel=SNR_variable, ylim=[-10, 50], title=gp2,
+        ppt.boxplot(ax[row, 4], gp2_hit_paired, gp2_miss_paired, paired=True, ylabel=SNR_variable, ylim=[0, 2], title=gp2,
                     colors=color_dict[gp2], det_marker=True, force_markers_identity=False)
     # FA and CR
     ppt.boxplot(ax[2, 0],
                 gp_data[(gp_data["Genotype"] == gp1) & (gp_data["Behavior"] == True)]["SNR_FA"].values,
                 gp_data[(gp_data["Genotype"] == gp2) & (gp_data["Behavior"] == True)]["SNR_FA"].values,
-                paired=False, ylabel="SNR_FA", ylim=[-10, 50], title="False Alarm",
+                paired=False, ylabel="SNR_FA", ylim=[0, 2], title="False Alarm",
                 colors=[color_dict[gp1][0], color_dict[gp2][0]], det_marker=True, force_markers_identity=True)
     ppt.boxplot(ax[2, 1],
                 gp_data[(gp_data["Genotype"] == gp1) & (gp_data["Behavior"] == False)]["SNR_CR"].values,
                 gp_data[(gp_data["Genotype"] == gp2) & (gp_data["Behavior"] == False)]["SNR_CR"].values,
-                paired=False, ylabel="SNR_CR", ylim=[-10, 50], title="Correct Rejection",
+                paired=False, ylabel="SNR_CR", ylim=[0, 2], title="Correct Rejection",
                 colors=[color_dict[gp1][0], color_dict[gp2][0]], det_marker=True, force_markers_identity=True)
     ax[2, 2].set_axis_off()
     ax[2, 3].set_axis_off()
     ax[2, 4].set_axis_off()
     fig.suptitle(f"Single neuron SNR comparison for {n_type} neurons ({gp1}/{gp2}), {amplitude} amplitude", fontsize=14)
     fig.canvas.manager.set_window_title(f"single_neuron_SNR_{n_type}_{gp1}_{gp2}")
-    # plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/10_SNR/single_neuron_SNR_{n_type}_{amplitude}_{gp1}_{gp2}.pdf", format="pdf")
+    # plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/Including 5886/single_neuron_SNR_{n_type}_{amplitude}_{gp1}_{gp2}.pdf", format="pdf")
     plt.show()
-    return gp_data
+    return gp_data_all, gp_data
 
 # single_SNR_df = single_neuron_SNR(activity_long_dff, n_type="all", amplitude=[4], gp1="WT-BMS", gp2="KO-BMS")
 
@@ -2453,6 +2455,70 @@ def pop_SNR(activity_df, recruitment_df, amplitude="all", gp1="WT", gp2="KO-Hypo
 
 # pop_SNR_df = pop_SNR(activity_long_df, recruitment_df, amplitude="all", gp1="WT-BMS", gp2="KO-BMS")
 
+def correlate_single_SNR(activity_df, recruitment_df, amplitude="all", gp1="WT", gp2="KO-Hypo", filter_out_nr=False):
+    single_all_exc, single_beh_exc = single_neuron_SNR(activity_df, n_type="EXC", amplitude=amplitude, gp1=gp1, gp2=gp2, filter_out_nr=filter_out_nr)
+    single_all_inh, single_beh_inh = single_neuron_SNR(activity_df, n_type="INH", amplitude=amplitude, gp1=gp1, gp2=gp2, filter_out_nr=filter_out_nr)
+    pop_all, pop_beh = pop_SNR(activity_df, recruitment_df, amplitude=amplitude, gp1=gp1, gp2=gp2)
+    # Merging the single neuron SNR to the population SNR df
+        # All trials grouped
+    single_all_exc.rename(columns={"SNR_NoGo": "single_SNR_exc"}, inplace=True)
+    single_all_inh.rename(columns={"SNR_NoGo": "single_SNR_inh"}, inplace=True)
+    col_to_keep = ["Genotype", "ID", "Threshold", "rec_EXC_perc", "rec_INH_perc", "rec_EXC_perc_SNR", "rec_INH_perc_SNR"]
+    data_all = pop_all.drop(columns=[col for col in pop_all.columns if col not in col_to_keep])
+    data_all = data_all.merge(single_all_exc[["ID", "single_SNR_exc"]], how="left", on="ID")
+    data_all = data_all.merge(single_all_inh[["ID", "single_SNR_inh"]], how="left", on="ID")
+        # Hit and Miss independently
+    single_beh_exc.rename(columns={"SNR_NoGo": "single_SNR_exc"}, inplace=True)
+    single_beh_inh.rename(columns={"SNR_NoGo": "single_SNR_inh"}, inplace=True)
+    pop_beh.rename(columns={"behavior": "Behavior"}, inplace=True)
+    print(pop_beh.columns)
+    col_to_keep_beh = ["Genotype", "ID", "Behavior", "Threshold", "rec_EXC_perc", "rec_INH_perc", "rec_EXC_perc_SNR", "rec_INH_perc_SNR"]
+    data_beh = pop_beh.drop(columns=[col for col in pop_beh.columns if col not in col_to_keep_beh])
+    data_beh = data_beh.merge(single_beh_exc[["ID", "Behavior", "single_SNR_exc"]], how="left", on=["ID", "Behavior"])
+    data_beh = data_beh.merge(single_beh_inh[["ID", "Behavior", "single_SNR_inh"]], how="left", on=["ID", "Behavior"])
+    data_hit = data_beh[data_beh.Behavior == True]
+    data_miss = data_beh[data_beh.Behavior == False]
+    # Doing the correlation
+    fig, ax = plt.subplots(nrows=3, ncols=4, figsize=(24, 18), constrained_layout=True)
+    beh_list = ["All", "Hit", "Miss"]
+    for row, data in enumerate([data_all, data_hit, data_miss]):
+        col_id = 0
+        for single_col, pop_cols_list in zip(["single_SNR_exc", "single_SNR_inh"], [["rec_EXC_perc", "rec_EXC_perc_SNR"],
+                                                                                    ["rec_INH_perc", "rec_INH_perc_SNR"]]):
+            for pop_col in pop_cols_list:
+                x = data[single_col]
+                y = data[pop_col]
+                results = dict(linregress(x, y)._asdict())
+                r2 = results["rvalue"] ** 2
+                line = results["slope"] * x + results["intercept"]
+                # Plot the data points and regression line
+                ax[row, col_id].plot(x, line, color="black", lw=2)
+                ax[row, col_id].text(0.05, 0.95, f"$r^2 = {r2:.3f}$\np-value = {results["pvalue"]:.3f}",
+                                     transform=ax[row, col_id].transAxes, fontsize=8,
+                                     verticalalignment="top", color="black")
+                ax[row, col_id].set_title(beh_list[row])
+                ax[row, col_id].set_xlabel(single_col, fontsize=10)
+                ax[row, col_id].set_ylabel(pop_col, fontsize=10)
+                offset = 0.1
+                for gp in [gp1, gp2]:
+                    x = data[data.Genotype == gp][single_col]
+                    y = data[data.Genotype == gp][pop_col]
+                    results = dict(linregress(x, y)._asdict())
+                    r2 = results["rvalue"] ** 2
+                    line = results["slope"] * x + results["intercept"]
+                    # Plot the data points and regression line
+                    ax[row, col_id].plot(x, line, color=color_dict[gp][0], lw=2)
+                    ax[row, col_id].scatter(x, y, color=color_dict[gp][0], alpha=0.7, s=10, marker="+")
+                    ax[row, col_id].text(0.05, 0.95 - offset, f"$r^2 = {r2:.3f}$\np-value = {results["pvalue"]:.3f}",
+                                         transform=ax[row, col_id].transAxes, fontsize=8,
+                                         verticalalignment="top", color=color_dict[gp][0])
+                    offset += 0.1
+                col_id +=1
+    fig.suptitle(f"Correlation of single neuron SNR with the number of recruited neurons and population snr", fontsize=12)
+    plt.show()
+    return data_all, data_beh
+
+sing_pop_SNR_corr = correlate_single_SNR(activity_long_df, recruitment_df, amplitude="all", gp1="WT", gp2="KO-Hypo", filter_out_nr=True)
 # endregion ============================================================================================================
 
 if __name__ == '__main__':
@@ -2529,9 +2595,9 @@ if __name__ == '__main__':
     # tbt_recr_var_df = compare_tbt_var_per_amp(recruitement_df)
     # pca_df = pca(activity_long_df, split="Miss_CR")
 
-    # pop_SNR_df_all, pop_snr_df_behavior = pop_SNR(activity_long_df, recruitment_df, amplitude="all", gp1="WT", gp2="KO-Hypo")
-    single_SNR_df = single_neuron_SNR(activity_long_dff, n_type="EXC", amplitude="all", gp1="WT", gp2="KO-Hypo")
-    single_SNR_df = single_neuron_SNR(activity_long_dff, n_type="EXC", amplitude="all", gp1="WT-DMSO", gp2="KO-DMSO")
+    pop_SNR_df_all, pop_snr_df_behavior = pop_SNR(activity_long_df, recruitment_df, amplitude="all", gp1="WT", gp2="KO-Hypo")
+    single_SNR_all_df, single_SNR_df = single_neuron_SNR(activity_long_df, n_type="EXC", amplitude="all", gp1="WT", gp2="KO-Hypo", filter_out_nr=True)
+    # single_SNR_df = single_neuron_SNR(activity_long_dff, n_type="EXC", amplitude="all", gp1="WT-DMSO", gp2="KO-DMSO")
 
     # nb_reliable_df = compare_nb_reliable_responders(recs.values())
     # reliable_activity_df = filter_reliable(activity_long_df[~activity_long_df["ID"].isin([6606, 6611])], recs.values(),
