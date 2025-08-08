@@ -210,7 +210,7 @@ def compare_sub_supra_between(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo
     title = f"comp_{gp1_amps}({gp1})_{gp2_amps}({gp2})_{behavior_filter}"
     fig.canvas.manager.set_window_title(title)
     # if save_fig:
-    plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/14/{title}.pdf", format="pdf")
+    # plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/14/{title}.pdf", format="pdf")
     # plt.show()
     return data_gp1, data_gp2
 
@@ -348,7 +348,7 @@ def compare_det_undet_between(data_df, gp1="WT", gp2="KO-Hypo", amplitude="all",
                    "KO-Hypo": {"all": ppt.hypo_color, "hit": ppt.hypo_color, "miss": ppt.hypo_light_color},
                    "KO": {"all": ppt.ko_color, "hit": ppt.ko_color, "miss": ppt.ko_light_color}}
     grouping_cols = ["Genotype", "ID", "behavior"]
-    data = data_df.copy()
+    data = data_df.drop(columns=["Trial"]).copy()
     # Filtering the amplitude
     gp1_full_data = data[data["Genotype"] == gp1]
     gp1_all = filter_amplitude(gp1_full_data, amplitude=amplitude, no_go=False).groupby(grouping_cols, as_index=False).mean()
@@ -695,7 +695,7 @@ def delta_hit_miss_comp(feature_df, threshold_only=False, wt_threshold=False, co
     fig.canvas.manager.set_window_title(f"Recruitment Delta (cond={condition})[threshold={threshold_only}_WT={wt_threshold}]")
     # fig.canvas.manager.set_window_title(f"Peak delay Delta [threshold={threshold_only}_WT={wt_threshold}]")
     # plt.savefig(f"{server_address}stimulus_encoding/delta_{condition}_thre={threshold_only}_wt={wt_threshold}.pdf")
-    plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/14/delta_{condition}_thre={threshold_only}_wt={wt_threshold}.pdf",format="pdf")
+    # plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/14/delta_{condition}_thre={threshold_only}_wt={wt_threshold}.pdf",format="pdf")
     # plt.show()
     return delta
 
@@ -1467,10 +1467,6 @@ if __name__ == '__main__':
         # rec.hit_tuned()
         # rec.amp_tuned()
     full_data = get_features(recs.values(), amp_delay=True, auc=False)
-    if not BMS_analysis:
-        data = full_data[full_data["ID"] != 5886] #(threshold == 3)
-    else:
-        data = full_data
         # data = full_data[~full_data["ID"].isin([5893, 7539, 7554])] # Trying to exclude KO but not enough mice
         # data = full_data[~full_data["ID"].isin([6611])]
     #   --- Within ---
@@ -1481,11 +1477,12 @@ if __name__ == '__main__':
     #             compare_sub_supra_within(data, behavior_filter=filter, genotype=gen, comparison=comp)
     #   --- Between ---
     # wt, hypo = compare_sub_supra_between(data, behavior_filter=None, gp1="WT-DMSO", gp2="WT-BMS", gp1_amps="real_mean_genotype", gp2_amps="gp1_threshold", colors=[ppt.wt_color, ppt.wt_bms_color])
+    wt, hypo = compare_sub_supra_between(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo", gp1_amps="real_mean_genotype", gp2_amps="gp1_threshold", colors=[ppt.wt_color, ppt.hypo_color])
     #   --- Between (Deltas) ---
     # sub_supra_delta_df = compare_sub_supra_deltas(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo")
     # sub_supra_delta_df_wt, sub_supra_delta_df_hypo = compare_sub_supra_deltas(data, behavior_filter=None, gp1="WT",
     #                                                                           gp2="KO-Hypo", delta="sub")
-    # btw_det = compare_det_undet_between(full_data, gp1="WT", gp2="KO-Hypo", amplitude="all", behavior="miss")
+    btw_wt, btw_hypo = compare_det_undet_between(full_data, gp1="WT", gp2="KO-Hypo", amplitude="all", behavior="miss")
 
     # --- Hit vs. Miss ---
     det, undet = compare_det_undet(full_data, genotype="KO-Hypo", amplitude="all") # /!\ full_data for all amp and data for threshold analysis
@@ -1501,7 +1498,7 @@ if __name__ == '__main__':
     #                                homogeneity=[False, True], colors=[ppt.ko_color, ppt.hypo_color, ppt.wt_color])
 
     # nogo_df = nogo_fa_cr(recs.values(), condition="DMSO")
-    # delta_df = delta_hit_miss_comp(data, threshold_only=True, wt_threshold=False)
+    delta_df = delta_hit_miss_comp(full_data, threshold_only=False, wt_threshold=False, condition=None)
     # delta_df = delta_hit_miss_comp(data, threshold_only=False, wt_threshold=False, condition="BMS") #/!\ full_data for all amp and data for threshold analysis
 
 

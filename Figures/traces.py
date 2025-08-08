@@ -52,6 +52,44 @@ def plot_mean_neuronal_trace(frame_df, rec=None, n_type="EXC", trial_avg=True, s
     return mean_traces
 
 
+def plot_neuronal_corr(frame_df, rec=None, neurons=[], trials=[]):
+    n_neurons = len(neurons)
+    n_trials = len(trials)
+    data = frame_df[(frame_df.ID == rec) & (frame_df.n_type == "EXC")].copy()
+    numeric_cols = [c for c in data.columns if isinstance(c, int)]
+    keep = [c for c in numeric_cols if 15 <= c < 30]
+    data["trace"] = data[keep].values.tolist()
+    data = data.drop(columns=numeric_cols)
+
+    resp_col = {0: "#828282", 1: "#db4d00", -1: "#6a00e0"}
+    trial_name_dict = {True: "Hit", False: "Miss"}
+
+    fig, ax = plt.subplots(nrows=n_neurons, ncols=n_trials, figsize=(n_trials * 1, n_neurons * 1),
+                           constrained_layout=True, sharex=True, sharey=True)
+    for row, neuron in enumerate(neurons):
+        for col, trial in enumerate(trials):
+            data_row = data[(data.Trial == trial) & (data.n_ID == neuron)]
+            trace = data_row.trace.values.tolist()[0]
+            smoothed_trace = savgol_filter(trace, window_length=5, polyorder=3)
+            ax[row, col].plot(np.arange(0, 15, 1), smoothed_trace, color=resp_col[data_row.resp.values[0]])
+            # Frame
+            ax[row, col].spines[["right", "top", "bottom"]].set_visible(False)
+            ax[row, col].set_xticks([])
+            ax[row, col].set_yticks([])
+
+            ax[row, col].axhline(y=0, ls="--", lw=1, color="grey")
+            if row == 0:
+                trial_label = trial_name_dict[data_row.Behavior.values[0]]
+                ax[row, col].set_title(f"Trial n°{trial}\n{trial_label}", fontsize=10)
+
+            if col == 0:
+                ax[row, col].set_ylabel(f"Neuron {neuron}", fontsize=10)
+    plt.show()
+    return data
+
+neurons_corr_data = plot_neuronal_corr(frame_df, 7553, neurons=[1, 2, 3, 4, 5, 6, 7, 8], trials=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
+
+
 if __name__ == '__main__':
     BMS_analysis = False
     ### Initialisation of recs instances ###
@@ -76,10 +114,9 @@ if __name__ == '__main__':
     else:
         recs = {ar.get().filename: ar.get() for ar in async_results}
 
-    frame_dff = get_activity_by_frame_df(recs.values(), zscore=True)
-
+    frame_df = get_activity_by_frame_df(recs.values(), zscore=True)
 
     # for rec in [recs[7553], recs[5890]]:
-    for rec in recs.values():
-        if rec.genotype != "KO":
-            mean_traces_df = plot_mean_neuronal_trace(frame_dff, rec=rec.filename, n_type="INH", trial_avg=True, smoothing=10)
+    # for rec in recs.values():
+    #     if rec.genotype != "KO":
+    #         mean_traces_df = plot_mean_neuronal_trace(frame_df, rec=rec.filename, n_type="INH", trial_avg=True, smoothing=10)
