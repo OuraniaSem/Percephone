@@ -210,7 +210,7 @@ def compare_sub_supra_between(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo
     title = f"comp_{gp1_amps}({gp1})_{gp2_amps}({gp2})_{behavior_filter}"
     fig.canvas.manager.set_window_title(title)
     # if save_fig:
-    # plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/14/{title}.pdf", format="pdf")
+    plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/Including 5886/{title}.pdf", format="pdf")
     # plt.show()
     return data_gp1, data_gp2
 
@@ -1477,7 +1477,7 @@ if __name__ == '__main__':
     #             compare_sub_supra_within(data, behavior_filter=filter, genotype=gen, comparison=comp)
     #   --- Between ---
     # wt, hypo = compare_sub_supra_between(data, behavior_filter=None, gp1="WT-DMSO", gp2="WT-BMS", gp1_amps="real_mean_genotype", gp2_amps="gp1_threshold", colors=[ppt.wt_color, ppt.wt_bms_color])
-    wt, hypo = compare_sub_supra_between(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo", gp1_amps="real_mean_genotype", gp2_amps="gp1_threshold", colors=[ppt.wt_color, ppt.hypo_color])
+    wt, hypo = compare_sub_supra_between(full_data, behavior_filter=None, gp1="WT", gp2="KO-Hypo", gp1_amps="real_mean_genotype", gp2_amps="gp1_threshold", colors=[ppt.wt_color, ppt.hypo_color])
     #   --- Between (Deltas) ---
     # sub_supra_delta_df = compare_sub_supra_deltas(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo")
     # sub_supra_delta_df_wt, sub_supra_delta_df_hypo = compare_sub_supra_deltas(data, behavior_filter=None, gp1="WT",

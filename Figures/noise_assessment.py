@@ -800,23 +800,23 @@ def compute_neuronal_sensitivity(data_df, amplitude="All", n_type="all", filter_
     fig.canvas.manager.set_window_title(f"Sensitivity_{amplitude}")
     # Plotting the curveplot of mean d' per mouse as a function of the amplitude
     curve_plot_data = data[~data["Amplitude"].isin(["All", 0])].copy()
-    # curve_fig, curve_ax = plt.subplots(nrows=2, ncols=1, figsize=(10, 16), constrained_layout=True)
-    # sorted_groups = sorted([gp1, gp2])
-    # exc_test, exc_posthoc = ppt.curveplot(curve_ax[0], curve_plot_data[curve_plot_data["Genotype"].isin([gp1, gp2])], between="Genotype", within="Amplitude",
-    #                                       variable="Mean_sensitivity_exc", data_points=True,
-    #                                       title=f"Variation of the mean sensitivity per animal for EXC neurons across amplitudes",
-    #                                       ylabel=None, xlabel=None, ylim=[-0.75, 1], colors=[color_dict[sorted_groups[0]][0], color_dict[sorted_groups[1]][0]],
-    #                                       id_display=False, legend_display=True,
-    #                                       qq_show=True, transformation=None, consider_normality=True,
-    #                                       consider_homogeneity=True)
-    # inh_test, inh_posthoc = ppt.curveplot(curve_ax[1], curve_plot_data[curve_plot_data["Genotype"].isin([gp1, gp2])], between="Genotype", within="Amplitude",
-    #                                       variable="Mean_sensitivity_inh", data_points=True,
-    #                                       title=f"Variation of the mean sensitivity per animal for INH neurons across amplitudes",
-    #                                       ylabel=None, xlabel=None, ylim=[-0.75, 1], colors=[color_dict[sorted_groups[0]][0], color_dict[sorted_groups[1]][0]],
-    #                                       id_display=False, legend_display=True,
-    #                                       qq_show=True, transformation=None, consider_normality=True,
-    #                                       consider_homogeneity=True)
-    # curve_fig.canvas.manager.set_window_title(f"Curv_Sensitivity")
+    curve_fig, curve_ax = plt.subplots(nrows=2, ncols=1, figsize=(10, 16), constrained_layout=True)
+    sorted_groups = sorted([gp1, gp2])
+    exc_test, exc_posthoc = ppt.curveplot(curve_ax[0], curve_plot_data[curve_plot_data["Genotype"].isin([gp1, gp2])], between="Genotype", within="Amplitude",
+                                          variable="Mean_sensitivity_exc", data_points=True,
+                                          title=f"Variation of the mean sensitivity per animal for EXC neurons across amplitudes",
+                                          ylabel=None, xlabel=None, ylim=[-0.75, 1], colors=[color_dict[sorted_groups[0]][0], color_dict[sorted_groups[1]][0]],
+                                          id_display=False, legend_display=True,
+                                          qq_show=True, transformation=None, consider_normality=True,
+                                          consider_homogeneity=True)
+    inh_test, inh_posthoc = ppt.curveplot(curve_ax[1], curve_plot_data[curve_plot_data["Genotype"].isin([gp1, gp2])], between="Genotype", within="Amplitude",
+                                          variable="Mean_sensitivity_inh", data_points=True,
+                                          title=f"Variation of the mean sensitivity per animal for INH neurons across amplitudes",
+                                          ylabel=None, xlabel=None, ylim=[-0.75, 1], colors=[color_dict[sorted_groups[0]][0], color_dict[sorted_groups[1]][0]],
+                                          id_display=False, legend_display=True,
+                                          qq_show=True, transformation=None, consider_normality=True,
+                                          consider_homogeneity=True)
+    curve_fig.canvas.manager.set_window_title(f"Curv_Sensitivity")
     # Plotting the number of sensitive neurons (d' > 1) between both genotypes
     fig_stats, axs_stats = plt.subplots(nrows=2, ncols=5, figsize=(30, 16), constrained_layout=True)
     ax_stats = axs_stats.flatten()
@@ -843,7 +843,7 @@ def compute_neuronal_sensitivity(data_df, amplitude="All", n_type="all", filter_
         # Mean
         ppt.boxplot(ax_mean[i], data[(data["Genotype"] == gp1) & (data["Amplitude"] == amp)][mean_sens_col].values,
                     data[(data["Genotype"] == gp2) & (data["Amplitude"] == amp)][mean_sens_col].values,
-                    ylabel="Mean d'", paired=False, title=f"Amplitude = {amp}", ylim=[-0.2, 0.8],
+                    ylabel="Mean d'", paired=False, title=f"Amplitude = {amp}", ylim=[-0.7, 0.7],
                     colors=[color_dict[gp1][0], color_dict[gp2][0]],
                     det_marker=False, force_markers_identity=False)
         # Mean - sensitive neurons
@@ -1106,8 +1106,10 @@ def ntn_cosine_similarity(mean_activity_df, amplitude="threshold", nogo=False, m
                 ylabel=variable_col, paired=False, title=f"{gp1}/{gp2} (Miss)", ylim=[0, 1.1],
                 colors=[color_dict[gp1][1], color_dict[gp2][1]], det_marker=False, force_markers_identity=False)
     # SNR
-    ppt.boxplot(ax_comp[0, 3], snr_df[snr_df.Genotype == gp1]["SNR"].values, snr_df[snr_df.Genotype == gp2]["SNR"].values,
-                ylabel="SNR", paired=False, title=f"{gp1}/{gp2} (SNR)", ylim=[0, 2],
+    snr_gp1 = snr_df[snr_df.Genotype == gp1]["SNR"].values
+    snr_gp2 = snr_df[snr_df.Genotype == gp2]["SNR"].values
+    ppt.boxplot(ax_comp[0, 3], snr_gp1[np.isfinite(snr_gp1)], snr_gp2[np.isfinite(snr_gp2)],
+                ylabel="SNR", paired=False, title=f"{gp1}/{gp2} (SNR)", ylim=[0, 5],
                 colors=[color_dict[gp1][0], color_dict[gp2][0]], det_marker=True, force_markers_identity=True)
     ax_comp[1, 3].set_axis_off()
     fig_comp.suptitle(f"Comparison of the {variable_col} between pairs of neurons between {gp1} and {gp2}\n"
@@ -2348,14 +2350,18 @@ def single_neuron_SNR(activity_df, n_type="EXC", amplitude="all", gp1="WT", gp2=
     ax[2, 4].set_axis_off()
     fig.suptitle(f"Single neuron SNR comparison for {n_type} neurons ({gp1}/{gp2}), {amplitude} amplitude", fontsize=14)
     fig.canvas.manager.set_window_title(f"single_neuron_SNR_{n_type}_{gp1}_{gp2}")
-    # plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/Including 5886/single_neuron_SNR_{n_type}_{amplitude}_{gp1}_{gp2}.pdf", format="pdf")
+    # plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/14/Zscore_SNR/single_neuron_SNR_{n_type}_{amplitude}_{gp1}_{gp2}.pdf", format="pdf")
     plt.show()
     return gp_data_all, gp_data
 
-# single_SNR_df = single_neuron_SNR(activity_long_dff, n_type="all", amplitude=[4], gp1="WT-BMS", gp2="KO-BMS")
+single_SNR_df = single_neuron_SNR(activity_long_df, n_type="all", amplitude="all", gp1="WT-BMS", gp2="KO-BMS")
 
 def pop_SNR(activity_df, recruitment_df, amplitude="all", gp1="WT", gp2="KO-Hypo"):
-    full_data = recruitment_df.merge(activity_df[["ID", "Trial", "FA"]].drop_duplicates(), how='left', on=["ID", "Trial"]).copy()
+    recruitment = recruitment_df.copy()
+    if gp1.split("-")[-1] in ["DMSO", "BMS"]:
+        condition = recruitment["Genotype"].astype("string").str.rsplit("-", n=1).str[-1]
+        recruitment["ID"] = recruitment["ID"].astype("string") + "-" + condition
+    full_data = recruitment.merge(activity_df[["ID", "Trial", "FA"]].drop_duplicates(), how='left', on=["ID", "Trial"]).copy()
     full_data = full_data[full_data["Genotype"].isin([gp1, gp2])]
     # Amplitude selection
     if amplitude == "all":
@@ -2450,10 +2456,10 @@ def pop_SNR(activity_df, recruitment_df, amplitude="all", gp1="WT", gp2="KO-Hypo
         #             colors=[ppt.wt_light_color, ppt.hypo_light_color], det_marker=False, force_markers_identity=False)
     fig.suptitle(f"Comparison of the population SNR (mean recruitment) between {gp1} and {gp2}\nAmplitude == {amplitude}", fontsize=12)
     fig.canvas.manager.set_window_title(f"Pop_SNR_comp_{amplitude}_{gp1}_{gp2}")
-    # plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/Including 5886/pop_SNR_{amplitude}_{gp1}_{gp2}.pdf", format="pdf")
+    # plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/14/Zscore_SNR/pop_SNR_{amplitude}_{gp1}_{gp2}.pdf", format="pdf")
     return grouped, grouped_beh_no_go
 
-# pop_SNR_df = pop_SNR(activity_long_df, recruitment_df, amplitude="all", gp1="WT-BMS", gp2="KO-BMS")
+pop_SNR_df = pop_SNR(activity_long_df, recruitment_df, amplitude="all", gp1="WT-BMS", gp2="KO-BMS")
 
 def correlate_single_SNR(activity_df, recruitment_df, amplitude="all", gp1="WT", gp2="KO-Hypo", filter_out_nr=False):
     single_all_exc, single_beh_exc = single_neuron_SNR(activity_df, n_type="EXC", amplitude=amplitude, gp1=gp1, gp2=gp2, filter_out_nr=filter_out_nr)
@@ -2499,6 +2505,8 @@ def correlate_single_SNR(activity_df, recruitment_df, amplitude="all", gp1="WT",
                 ax[row, col_id].set_title(beh_list[row])
                 ax[row, col_id].set_xlabel(single_col, fontsize=10)
                 ax[row, col_id].set_ylabel(pop_col, fontsize=10)
+                ax[row, col_id].spines[["bottom", "left"]].set_linewidth(2)
+                ax[row, col_id].spines[["top", "right"]].set_visible(False)
                 offset = 0.1
                 for gp in [gp1, gp2]:
                     x = data[data.Genotype == gp][single_col]
@@ -2515,14 +2523,15 @@ def correlate_single_SNR(activity_df, recruitment_df, amplitude="all", gp1="WT",
                     offset += 0.1
                 col_id +=1
     fig.suptitle(f"Correlation of single neuron SNR with the number of recruited neurons and population snr", fontsize=12)
+    # plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/14/Zscore_SNR/Corr_single_SNR_{gp1}_{gp2}.pdf", format="pdf")
     plt.show()
     return data_all, data_beh
 
-sing_pop_SNR_corr = correlate_single_SNR(activity_long_df, recruitment_df, amplitude="all", gp1="WT", gp2="KO-Hypo", filter_out_nr=True)
+# sing_pop_SNR_corr = correlate_single_SNR(activity_long_df, recruitment_df, amplitude="all", gp1="WT", gp2="KO-Hypo", filter_out_nr=True)
 # endregion ============================================================================================================
 
 if __name__ == '__main__':
-    BMS_analysis = False
+    BMS_analysis = True
     # region ====== Initialisation of recs instances ======
     if BMS_analysis:
         directory = "C:/Users/cvandromme/Desktop/Tactile_detection/Data_DMSO_BMS/"
@@ -2581,9 +2590,9 @@ if __name__ == '__main__':
     activity_long_dff = get_mean_trial_activity_df(recs.values(), zscore=False, BMS=BMS_analysis)
 
     # Sensitivity
-    # gp1 = "WT-BMS"
-    # gp2 = "KO-BMS"
-    # sens_data = compute_neuronal_sensitivity(activity_long_df, amplitude="All", n_type="INH", filter_out_nr=True, gp1=gp1, gp2=gp2)
+    gp1 = "WT"
+    gp2 = "KO-Hypo"
+    sens_data = compute_neuronal_sensitivity(activity_long_df, amplitude="All", n_type="EXC", filter_out_nr=True, gp1=gp1, gp2=gp2)
     # sens_export = sens_data[sens_data["Amplitude"] == "All"]
     # sens_export = sens_export[sens_export["Genotype"].isin([gp1, gp2])].sort_values("Genotype")
 
@@ -2595,8 +2604,10 @@ if __name__ == '__main__':
     # tbt_recr_var_df = compare_tbt_var_per_amp(recruitement_df)
     # pca_df = pca(activity_long_df, split="Miss_CR")
 
-    pop_SNR_df_all, pop_snr_df_behavior = pop_SNR(activity_long_df, recruitment_df, amplitude="all", gp1="WT", gp2="KO-Hypo")
-    single_SNR_all_df, single_SNR_df = single_neuron_SNR(activity_long_df, n_type="EXC", amplitude="all", gp1="WT", gp2="KO-Hypo", filter_out_nr=True)
+    sing_pop_SNR_corr, sing_pop_SNR_corr_beh = correlate_single_SNR(activity_long_df, recruitment_df, amplitude="all", gp1="WT-BMS", gp2="KO-BMS", filter_out_nr=True)
+
+    # pop_SNR_df_all, pop_snr_df_behavior = pop_SNR(activity_long_df, recruitment_df, amplitude="all", gp1="WT", gp2="KO-Hypo")
+    # single_SNR_all_df, single_SNR_df = single_neuron_SNR(activity_long_df, n_type="EXC", amplitude="all", gp1="WT", gp2="KO-Hypo", filter_out_nr=True)
     # single_SNR_df = single_neuron_SNR(activity_long_dff, n_type="EXC", amplitude="all", gp1="WT-DMSO", gp2="KO-DMSO")
 
     # nb_reliable_df = compare_nb_reliable_responders(recs.values())
