@@ -830,15 +830,16 @@ def compute_neuronal_sensitivity(data_df, amplitude="All", n_type="all", filter_
     fig_d_mean, axs_d_mean = plt.subplots(nrows=2, ncols=5, figsize=(30, 16), constrained_layout=True)
     ax_d_mean = axs_d_mean.flatten()
     for i, amp in enumerate(data["Amplitude"].unique()):
+
         # Number
         ppt.boxplot(ax_stats[i], data[(data["Genotype"] == gp1) & (data["Amplitude"] == amp)][nb_sens_col].values,
                     data[(data["Genotype"] == gp2) & (data["Amplitude"] == amp)][nb_sens_col].values,
-                    ylabel="Nb neurons with d'>1", paired=False, title=f"Amplitude = {amp}", ylim=[], colors=[color_dict[gp1][0], color_dict[gp2][0]],
+                    ylabel="Nb neurons with d'>1", paired=False, title=f"Amplitude = {amp}", ylim=[0, 50], colors=[color_dict[gp1][0], color_dict[gp2][0]],
                     det_marker=False, force_markers_identity=False)
         # Percentage
         ppt.boxplot(ax_perc[i], data[(data["Genotype"] == gp1) & (data["Amplitude"] == amp)][perc_sens_col].values,
                     data[(data["Genotype"] == gp2) & (data["Amplitude"] == amp)][perc_sens_col].values,
-                    ylabel="% neurons with d'>1", paired=False, title=f"Amplitude = {amp}", ylim=[0, 60], colors=[color_dict[gp1][0], color_dict[gp2][0]],
+                    ylabel="% neurons with d'>1", paired=False, title=f"Amplitude = {amp}", ylim=[-10, 60], colors=[color_dict[gp1][0], color_dict[gp2][0]],
                     det_marker=False, force_markers_identity=False)
         # Mean
         ppt.boxplot(ax_mean[i], data[(data["Genotype"] == gp1) & (data["Amplitude"] == amp)][mean_sens_col].values,
@@ -915,7 +916,7 @@ def compute_neuronal_sensitivity(data_df, amplitude="All", n_type="all", filter_
     fig_d_mean.suptitle(f"Comparison mean {n_type} sensitivity of sensitive neurons per mouse for different amplitudes", fontsize=14)
     fig_d_mean.canvas.manager.set_window_title(f"Mean_sens_d1_comp")
     plt.show()
-    return data
+    return exc_test, inh_test, curve_plot_data, data
 
 
 def ntn_cosine_similarity(mean_activity_df, amplitude="threshold", nogo=False, metric="Resp", filter_out_nr=False, n_type="all", gp1="WT", gp2="KO-Hypo"):
@@ -2459,7 +2460,7 @@ def pop_SNR(activity_df, recruitment_df, amplitude="all", gp1="WT", gp2="KO-Hypo
     # plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/14/Zscore_SNR/pop_SNR_{amplitude}_{gp1}_{gp2}.pdf", format="pdf")
     return grouped, grouped_beh_no_go
 
-pop_SNR_df = pop_SNR(activity_long_df, recruitment_df, amplitude="all", gp1="WT-BMS", gp2="KO-BMS")
+pop_SNR_df, pop_SNR_df_beh = pop_SNR(activity_long_df, recruitment_df, amplitude="all", gp1="WT", gp2="KO-Hypo")
 
 def correlate_single_SNR(activity_df, recruitment_df, amplitude="all", gp1="WT", gp2="KO-Hypo", filter_out_nr=False):
     single_all_exc, single_beh_exc = single_neuron_SNR(activity_df, n_type="EXC", amplitude=amplitude, gp1=gp1, gp2=gp2, filter_out_nr=filter_out_nr)
@@ -2592,7 +2593,7 @@ if __name__ == '__main__':
     # Sensitivity
     gp1 = "WT"
     gp2 = "KO-Hypo"
-    sens_data = compute_neuronal_sensitivity(activity_long_df, amplitude="All", n_type="EXC", filter_out_nr=True, gp1=gp1, gp2=gp2)
+    exc_test, inh_test, sens_curv_data, sens_data = compute_neuronal_sensitivity(activity_long_df, amplitude="All", n_type="EXC", filter_out_nr=True, gp1=gp1, gp2=gp2)
     # sens_export = sens_data[sens_data["Amplitude"] == "All"]
     # sens_export = sens_export[sens_export["Genotype"].isin([gp1, gp2])].sort_values("Genotype")
 
@@ -2604,7 +2605,7 @@ if __name__ == '__main__':
     # tbt_recr_var_df = compare_tbt_var_per_amp(recruitement_df)
     # pca_df = pca(activity_long_df, split="Miss_CR")
 
-    sing_pop_SNR_corr, sing_pop_SNR_corr_beh = correlate_single_SNR(activity_long_df, recruitment_df, amplitude="all", gp1="WT-BMS", gp2="KO-BMS", filter_out_nr=True)
+    sing_pop_SNR_corr, sing_pop_SNR_corr_beh = correlate_single_SNR(activity_long_df, recruitment_df, amplitude="all", gp1="WT", gp2="KO-Hypo", filter_out_nr=True)
 
     # pop_SNR_df_all, pop_snr_df_behavior = pop_SNR(activity_long_df, recruitment_df, amplitude="all", gp1="WT", gp2="KO-Hypo")
     # single_SNR_all_df, single_SNR_df = single_neuron_SNR(activity_long_df, n_type="EXC", amplitude="all", gp1="WT", gp2="KO-Hypo", filter_out_nr=True)

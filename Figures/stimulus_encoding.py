@@ -175,7 +175,7 @@ def compare_sub_supra_within(data, behavior_filter=None, genotype="WT", comparis
     title = f"comp_{genotype}_threshold_{comparison}_{behavior_filter}"
     fig.canvas.manager.set_window_title(title)
     if save_fig:
-        plt.savefig(f"{server_address}Threshold_analysis/{title}.pdf")
+        # plt.savefig(f"{server_address}Threshold_analysis/{title}.pdf")
     plt.show()
 
 
@@ -210,7 +210,7 @@ def compare_sub_supra_between(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo
     title = f"comp_{gp1_amps}({gp1})_{gp2_amps}({gp2})_{behavior_filter}"
     fig.canvas.manager.set_window_title(title)
     # if save_fig:
-    plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/Including 5886/{title}.pdf", format="pdf")
+    # plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/Including 5886/{title}.pdf", format="pdf")
     # plt.show()
     return data_gp1, data_gp2
 
@@ -619,7 +619,7 @@ def nogo_fa_cr(recs, condition=None):
                     colors=colors)
     fig.suptitle("Comparison between genotypes of neuronal recruitment during no-go trials")
     fig.canvas.manager.set_window_title("Recruitment NoGo")
-    plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/14/Recruitment_NoGo_{condition}.pdf", format="pdf")
+    # plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/14/Recruitment_NoGo_{condition}.pdf", format="pdf")
     # plt.show()
     return gp_data
 
@@ -1348,7 +1348,7 @@ def hit_tuned_neurons(recs, normalize=True):
                     ylim=[], colors=[ppt.wt_color, ppt.ko_color])
     fig.suptitle(f"Comparison between genotypes of the number of Hit tuned neurons\n[Normalization by recruited = {normalize}]", fontsize=12)
     fig.canvas.manager.set_window_title(f"Hit tuned neurons_norm={normalize}")
-    plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/Figures_april_2025/Hit_tuned_neurons_{normalize}.pdf")
+    # plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/Figures_april_2025/Hit_tuned_neurons_{normalize}.pdf")
     plt.show()
     return data
 
@@ -1493,11 +1493,11 @@ if __name__ == '__main__':
     # results = plot_neuron_perc_amp(recs.values(), pattern="recruited", detected_trials=True, undetected_trials=False,
     #                                nogo_norm=False, ylim=[0, 60], transformation="yeojohnson", normality=[True, False],
     #                                homogeneity=[False, False], colors=[ppt.hypo_bms_color, ppt.hypo_color, ppt.wt_bms_color, ppt.wt_color])
-    # results = plot_neuron_perc_amp(recs.values(), pattern="recruited", detected_trials=True, undetected_trials=False,
-    #                                nogo_norm=False, ylim=[0, 60], transformation="yeojohnson", normality=[False, True],
-    #                                homogeneity=[False, True], colors=[ppt.ko_color, ppt.hypo_color, ppt.wt_color])
+    results = plot_neuron_perc_amp(recs.values(), pattern="recruited", detected_trials=True, undetected_trials=False,
+                                   nogo_norm=False, ylim=[0, 60], transformation="yeojohnson", normality=[False, True],
+                                   homogeneity=[False, True], colors=[ppt.ko_color, ppt.hypo_color, ppt.wt_color])
 
-    # nogo_df = nogo_fa_cr(recs.values(), condition="DMSO")
+    nogo_df = nogo_fa_cr(recs.values(), condition=None)
     delta_df = delta_hit_miss_comp(full_data, threshold_only=False, wt_threshold=False, condition=None)
     # delta_df = delta_hit_miss_comp(data, threshold_only=False, wt_threshold=False, condition="BMS") #/!\ full_data for all amp and data for threshold analysis
 
