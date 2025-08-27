@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import statsmodels.formula.api as smf
 import statsmodels.api as sm
+import pingouin as pg
 from imblearn.under_sampling import RandomUnderSampler
 from matplotlib import pyplot as plt
 from multiprocessing import cpu_count, pool
@@ -20,6 +21,7 @@ from tqdm import tqdm
 
 import percephone.core.recording as pc
 import percephone.plts.stats as ppt
+import percephone.plts.style as sty
 # from Figures.noise_assessment import get_mean_trial_activity_df, ntn_cosine_similarity
 from Figures.stimulus_encoding import get_features
 
@@ -513,9 +515,6 @@ def plot_hit_miss_classif(frame_model_df, title_precision="", shuffle=False, shu
     -------
 
     """
-    color_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color], "KO": [ppt.ko_color, ppt.ko_light_color],
-                  "WT-DMSO": [ppt.wt_color, ppt.wt_light_color], "WT-BMS": [ppt.wt_bms_color, ppt.wt_bms_light_color],
-                  "KO-DMSO": [ppt.hypo_color, ppt.hypo_light_color], "KO-BMS": [ppt.hypo_bms_color, ppt.hypo_bms_light_color]}
     draw_style = "default" if timescale_division_factor == 1 else "steps-post"
     fill_style = None if timescale_division_factor == 1 else "post"
     if "WT-BMS" in frame_model_df["Genotype"].unique():
@@ -531,10 +530,10 @@ def plot_hit_miss_classif(frame_model_df, title_precision="", shuffle=False, shu
         fpr_sem = data.groupby("Frame")["FPR"].sem().values
         # Curves plotting
         x = np.arange(len(tpr_mean))
-        ax[i].plot(x, tpr_mean, label="Hit accuracy", color=color_dict[genotype][0], lw=2, drawstyle=draw_style)
-        ax[i].fill_between(x, tpr_mean - tpr_sem, tpr_mean + tpr_sem, color=color_dict[genotype][0], alpha=0.3, step=fill_style)
-        ax[i].plot(x, fpr_mean, label="Miss accuracy", color=color_dict[genotype][1], lw=2, drawstyle=draw_style)
-        ax[i].fill_between(x, fpr_mean - fpr_sem, fpr_mean + fpr_sem, color=color_dict[genotype][1], alpha=0.3, step=fill_style)
+        ax[i].plot(x, tpr_mean, label="Hit accuracy", color=sty.color_dict[genotype][0], lw=2, drawstyle=draw_style)
+        ax[i].fill_between(x, tpr_mean - tpr_sem, tpr_mean + tpr_sem, color=sty.color_dict[genotype][0], alpha=0.3, step=fill_style)
+        ax[i].plot(x, fpr_mean, label="Miss accuracy", color=sty.color_dict[genotype][1], lw=2, drawstyle=draw_style)
+        ax[i].fill_between(x, fpr_mean - fpr_sem, fpr_mean + fpr_sem, color=sty.color_dict[genotype][1], alpha=0.3, step=fill_style)
         if shuffle:
             # Shuffle curves definition
             tpr_mean_shuffle = data.groupby("Frame")["TPR_shuffle"].mean().values
@@ -543,10 +542,10 @@ def plot_hit_miss_classif(frame_model_df, title_precision="", shuffle=False, shu
             fpr_sem_shuffle = data.groupby("Frame")["FPR_shuffle"].sem().values
             # Shuffle curves plotting
             x = np.arange(len(tpr_mean))
-            ax[i].plot(x, tpr_mean_shuffle, label="Hit accuracy", color=color_dict[genotype][0], lw=1, ls="dotted", alpha=0.25, drawstyle=draw_style)
-            ax[i].fill_between(x, tpr_mean_shuffle - tpr_sem_shuffle, tpr_mean_shuffle + tpr_sem_shuffle, color=color_dict[genotype][0], alpha=0.1, step=fill_style)
-            ax[i].plot(x, fpr_mean_shuffle, label="Miss accuracy", color=color_dict[genotype][1], lw=1, ls="dotted", alpha=0.25, drawstyle=draw_style)
-            ax[i].fill_between(x, fpr_mean_shuffle - fpr_sem_shuffle, fpr_mean_shuffle + fpr_sem_shuffle, color=color_dict[genotype][1], alpha=0.1, step=fill_style)
+            ax[i].plot(x, tpr_mean_shuffle, label="Hit accuracy", color=sty.color_dict[genotype][0], lw=1, ls="dotted", alpha=0.25, drawstyle=draw_style)
+            ax[i].fill_between(x, tpr_mean_shuffle - tpr_sem_shuffle, tpr_mean_shuffle + tpr_sem_shuffle, color=sty.color_dict[genotype][0], alpha=0.1, step=fill_style)
+            ax[i].plot(x, fpr_mean_shuffle, label="Miss accuracy", color=sty.color_dict[genotype][1], lw=1, ls="dotted", alpha=0.25, drawstyle=draw_style)
+            ax[i].fill_between(x, fpr_mean_shuffle - fpr_sem_shuffle, fpr_mean_shuffle + fpr_sem_shuffle, color=sty.color_dict[genotype][1], alpha=0.1, step=fill_style)
             if shuffle_frame_significance:
                 # Computing the statistical difference with shuffle
                 pvals = {}
@@ -571,17 +570,17 @@ def plot_hit_miss_classif(frame_model_df, title_precision="", shuffle=False, shu
                     p_fpr = p_list[1]
                     if p_tpr < 0.05:
                         # draw a tiny horizontal line spanning the width of one frame
-                        ax[i].hlines(0.95, f - 0.4, f + 0.4, color=color_dict[genotype][0], linewidth=2)
+                        ax[i].hlines(0.95, f - 0.4, f + 0.4, color=sty.color_dict[genotype][0], linewidth=2)
                     if p_fpr < 0.05:
                         # draw a tiny horizontal line spanning the width of one frame
-                        ax[i].hlines(0.05, f - 0.4, f + 0.4, color=color_dict[genotype][1], linewidth=2)
+                        ax[i].hlines(0.05, f - 0.4, f + 0.4, color=sty.color_dict[genotype][1], linewidth=2)
 
         # Delimitation of the stimulus period and chance level
         ax[i].axvline(x=30/timescale_division_factor, ls="--", lw=1, color="red")
         ax[i].axvline(x=45/timescale_division_factor, ls="--", lw=1, color="black")
         ax[i].axhline(y=0.5, ls="--", lw=1, color="gray")
         # Title and axes formatting
-        ax[i].set_title(genotype, color=color_dict[genotype][0], fontsize=20)
+        ax[i].set_title(genotype, color=sty.color_dict[genotype][0], fontsize=20)
         ax[i].set_ylim(0, 1)
         ax[i].set_xlabel("Time (s)")
         ax[i].set_xticks(np.divide([0, 15, 30, 45, 60], timescale_division_factor))
@@ -593,9 +592,6 @@ def plot_hit_miss_classif(frame_model_df, title_precision="", shuffle=False, shu
 
 
 def plot_hit_miss_classif_comp(frame_model_df, gp1="WT", gp2="KO-Hypo", title_precision=""):
-    color_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color], "KO": [ppt.ko_color, ppt.ko_light_color],
-                  "WT-DMSO": [ppt.wt_color, ppt.wt_light_color], "WT-BMS": [ppt.wt_bms_color, ppt.wt_bms_light_color],
-                  "KO-DMSO": [ppt.hypo_color, ppt.hypo_light_color], "KO-BMS": [ppt.hypo_bms_color, ppt.hypo_bms_light_color]}
     period_dict = {"stim": [30, 45], "start_stim (250ms)": [30, 37], "end_stim (250ms)": [37, 45], "pre_stim (200ms)": [24, 30]}
     fig, ax = plt.subplots(nrows=2, ncols=4, figsize=(24, 16), constrained_layout=True)
     fig_shuf, ax_shuf = plt.subplots(nrows=4, ncols=4, figsize=(24, 32), constrained_layout=True)
@@ -605,18 +601,18 @@ def plot_hit_miss_classif_comp(frame_model_df, gp1="WT", gp2="KO-Hypo", title_pr
         data = frame_model_df[frame_model_df["Frame"].isin(range(start, end))].groupby(["Genotype", "ID"], as_index=False).mean().drop(columns="Frame")
         # Plotting the comparison of accuracy between genotypes
         ppt.boxplot(ax[0, col], data[data["Genotype"] == gp1]["TPR"], data[data["Genotype"] == gp2]["TPR"], ylabel="Hit accuracy",
-                    paired=False, title=period, ylim=[0, 1], colors=[color_dict[gp1][0], color_dict[gp2][0]], det_marker=True, force_markers_identity=True)
+                    paired=False, title=period, ylim=[0, 1], colors=[sty.color_dict[gp1][0], sty.color_dict[gp2][0]], det_marker=True, force_markers_identity=True)
         ppt.boxplot(ax[1, col], data[data["Genotype"] == gp1]["FPR"], data[data["Genotype"] == gp2]["FPR"], ylabel="Miss error",
-                    paired=False, title=period, ylim=[0, 1], colors=[color_dict[gp1][1], color_dict[gp2][1]], det_marker=False, force_markers_identity=False)
+                    paired=False, title=period, ylim=[0, 1], colors=[sty.color_dict[gp1][1], sty.color_dict[gp2][1]], det_marker=False, force_markers_identity=False)
         # Plotting the comparisons with shuffled data
         ppt.boxplot(ax_shuf[0, col], data[data["Genotype"] == gp1]["TPR"].values, data[data["Genotype"] == gp1]["TPR_shuffle"].values, ylabel="Hit accuracy",
-                    paired=True, title=f"{period}\n{gp1}: Real vs. Shuffled", ylim=[0, 1], colors=[color_dict[gp1][0], "darkgray"], det_marker=True, force_markers_identity=True)
+                    paired=True, title=f"{period}\n{gp1}: Real vs. Shuffled", ylim=[0, 1], colors=[sty.color_dict[gp1][0], "darkgray"], det_marker=True, force_markers_identity=True)
         ppt.boxplot(ax_shuf[1, col], data[data["Genotype"] == gp1]["FPR"].values, data[data["Genotype"] == gp1]["FPR_shuffle"].values, ylabel="Miss error",
-                    paired=True, title=f"{period}\n{gp1}: Real vs. Shuffled", ylim=[0, 1], colors=[color_dict[gp1][1], "gray"], det_marker=False, force_markers_identity=True)
+                    paired=True, title=f"{period}\n{gp1}: Real vs. Shuffled", ylim=[0, 1], colors=[sty.color_dict[gp1][1], "gray"], det_marker=False, force_markers_identity=True)
         ppt.boxplot(ax_shuf[2, col], data[data["Genotype"] == gp2]["TPR"].values, data[data["Genotype"] == gp2]["TPR_shuffle"].values, ylabel="Hit accuracy",
-                    paired=True, title=f"{period}\n{gp2}: Real vs. Shuffled", ylim=[0, 1], colors=[color_dict[gp2][0], "darkgray"], det_marker=True, force_markers_identity=True)
+                    paired=True, title=f"{period}\n{gp2}: Real vs. Shuffled", ylim=[0, 1], colors=[sty.color_dict[gp2][0], "darkgray"], det_marker=True, force_markers_identity=True)
         ppt.boxplot(ax_shuf[3, col], data[data["Genotype"] == gp2]["FPR"].values, data[data["Genotype"] == gp2]["FPR_shuffle"].values, ylabel="Miss error",
-                    paired=True, title=f"{period}\n{gp2}: Real vs. Shuffled", ylim=[0, 1], colors=[color_dict[gp2][1], "gray"], det_marker=False, force_markers_identity=True)
+                    paired=True, title=f"{period}\n{gp2}: Real vs. Shuffled", ylim=[0, 1], colors=[sty.color_dict[gp2][1], "gray"], det_marker=False, force_markers_identity=True)
         data_dict[period] = data
     fig.suptitle(f"Hit accuracy miss error comparison ({gp1}/{gp2})\n{title_precision}", fontsize=20)
     fig.canvas.manager.set_window_title(f"Hit_Miss_classif_comp_{gp1}_{gp2}_{title_precision}")
@@ -626,6 +622,21 @@ def plot_hit_miss_classif_comp(frame_model_df, gp1="WT", gp2="KO-Hypo", title_pr
     # plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/202507/5_Figure2/shuffle_{gp1}_{gp2}.pdf", format="pdf")
     plt.show()
     return data_dict
+
+def anova_accuracy(frame_model_df):
+    period_dict = {"stim": [30, 45], "start_stim (250ms)": [30, 37], "end_stim (250ms)": [37, 45],
+                   "pre_stim (200ms)": [24, 30]}
+    start, end = period_dict["stim"]
+    data = frame_model_df[frame_model_df["Frame"].isin(range(start, end))].groupby(["Genotype", "ID"], as_index=False).mean().drop(columns="Frame")
+    aov_hit = pg.anova(data=data, dv="TPR", between="Genotype")
+    aov_miss = pg.anova(data=data, dv="FPR", between="Genotype")
+    print("=== Hit accuracy ===")
+    print(aov_hit)
+    print("=== Miss error ===")
+    print(aov_miss)
+    return data
+
+# anova_data = anova_accuracy(frame_model_df_res)
 
 def compare_accuracy(recs, random=42):
     """
@@ -673,16 +684,16 @@ def compare_accuracy(recs, random=42):
     for row, (group, gp_label) in enumerate(zip([data, data[data["Genotype"] == "WT"], data[data["Genotype"] == "KO-Hypo"]],
                                                 ["all", "WT", "KO-Hypo"])):
         ppt.boxplot(ax[row, 0], group["acc_all"].values, group["acc_exc"].values, ylabel="Accuracy", paired=True, title=f"All neurons/EXC ({gp_label})", ylim=[0, 1],
-                    colors=["#859717", "#229708"], det_marker=False, force_markers_identity=False)
+                    colors=[sty.exc_inh_color, sty.exc_color], det_marker=False, force_markers_identity=False)
         ppt.boxplot(ax[row, 1], group["acc_all"].values, group["acc_inh"].values, ylabel="Accuracy", paired=True, title=f"All neurons/INH ({gp_label})", ylim=[0, 1],
-                    colors=["#859717", "#cba61b"], det_marker=False, force_markers_identity=False)
+                    colors=[sty.exc_inh_color, sty.inh_color], det_marker=False, force_markers_identity=False)
         ppt.boxplot(ax[row, 2], group["acc_exc"].values, group["acc_inh"].values, ylabel="Accuracy", paired=True, title=f"EXC/INH ({gp_label})", ylim=[0, 1],
-                    colors=["#229708", "#cba61b"], det_marker=False, force_markers_identity=False)
+                    colors=[sty.exc_color, sty.inh_color], det_marker=False, force_markers_identity=False)
     wt = data[data["Genotype"] == "WT"]
     hypo = data[data["Genotype"] == "KO-Hypo"]
     for row, acc_type in enumerate(["acc_all", "acc_exc", "acc_inh"]):
         ppt.boxplot(ax[row, 3], wt[acc_type].values, hypo[acc_type].values, ylabel="Accuracy", paired=False, title=f"WT/KO-Hypo ({acc_type})", ylim=[0, 1],
-                    colors=[ppt.wt_color, ppt.hypo_color], det_marker=False, force_markers_identity=False)
+                    colors=[sty.wt_color, sty.hypo_color], det_marker=False, force_markers_identity=False)
     fig.suptitle("Comparison of decoding accuracy between neuron types")
     fig.canvas.manager.set_window_title(f"Accuracy n_types")
     # plt.show()
@@ -697,7 +708,7 @@ def correlate_nb_accuracy(recs, accuracy_df, threshold="median"):
     def plot_lin_reg(ax, data, x_col=None, y_col=None, id_col="ID", group_col=None,
                      title=None, xlab=None, ylab=None, colors=None, line_color="red", id_display=True):
         if colors is None:
-            colors = {"WT": ppt.wt_color, "KO": ppt.ko_color, "KO-Hypo": ppt.hypo_color}
+            colors = {"WT": sty.wt_color, "KO": sty.ko_color, "KO-Hypo": sty.hypo_color}
         xlab = xlab or x_col
         ylab = ylab or y_col
         # Correlation
@@ -747,13 +758,13 @@ def correlate_nb_accuracy(recs, accuracy_df, threshold="median"):
         high_perf = accuracy_df[accuracy_df[accuracy_metric] >= t_val]
         ppt.boxplot(ax[1, col], low_perf["n_EXC"].values, high_perf["n_EXC"].values, ylabel="n_EXC", paired=False,
                     title=f"{accuracy_metric} Low/High acc", ylim=[],
-                    colors=["#229708", "#229708"], det_marker=False, force_markers_identity=False)
+                    colors=[sty.exc_color, sty.exc_color], det_marker=False, force_markers_identity=False)
         ppt.boxplot(ax[2, col], low_perf["n_INH"].values, high_perf["n_INH"].values, ylabel="n_INH", paired=False,
                     title=f"{accuracy_metric} Low/High acc", ylim=[],
-                    colors=["#cba61b", "#cba61b"], det_marker=False, force_markers_identity=False)
+                    colors=[sty.inh_color, sty.inh_color], det_marker=False, force_markers_identity=False)
         ppt.boxplot(ax[3, col], low_perf["n_all"].values, high_perf["n_all"].values, ylabel="n_all", paired=False,
                     title=f"{accuracy_metric} Low/High acc", ylim=[],
-                    colors=["#859717", "#859717"], det_marker=False, force_markers_identity=False)
+                    colors=[sty.exc_inh_color, sty.exc_inh_color], det_marker=False, force_markers_identity=False)
 
 
     fig.suptitle(f"Correlation of the model accuracy with the number of neurons.\nComparison of the number of neurons "
@@ -781,7 +792,6 @@ def correlate_frame_accuracy_metrics(frame_model_df, features_df, period="stim")
     cols_acc = ["Accuracy", "TPR", "FPR"]
     cols_features = [col for col in data.columns if ((col not in cols_id) and (col not in cols_acc))]
     # Plotting the correlation of the different features with the model accuracy for all genotypes
-    color_dict = {"WT": ppt.wt_color, "KO-Hypo": ppt.hypo_color, "KO": ppt.ko_color}
     fig, ax = plt.subplots(nrows=9, ncols=20, figsize=(100, 45), constrained_layout=True)
     rows = []
     for row, (data, trial_type) in enumerate(zip([data_all, data_hit, data_miss], ["All", "Hit", "Miss"])):
@@ -807,15 +817,15 @@ def correlate_frame_accuracy_metrics(frame_model_df, features_df, period="stim")
                 line_hypo = results_hypo["slope"] * x_col_hypo + results_hypo["intercept"]
                 # Plot the data points and regression lines
                 ax[3 * row + sub_row, col].plot(x_col, line, color="black", lw=2)
-                ax[3 * row + sub_row, col].plot(x_col_wt, line_wt, color=ppt.wt_color, lw=2)
-                ax[3 * row + sub_row, col].plot(x_col_hypo, line_hypo, color=ppt.hypo_color, lw=2)
+                ax[3 * row + sub_row, col].plot(x_col_wt, line_wt, color=sty.wt_color, lw=2)
+                ax[3 * row + sub_row, col].plot(x_col_hypo, line_hypo, color=sty.hypo_color, lw=2)
                 for g in sorted(data["Genotype"].unique()):
                     group = data[data["Genotype"] == g]
-                    sc = ax[3 * row + sub_row, col].scatter(group[feature], group[acc], color=color_dict[g], alpha=0.7, s=10, marker="+")
+                    sc = ax[3 * row + sub_row, col].scatter(group[feature], group[acc], color=sty.color_dict[g][0], alpha=0.7, s=10, marker="+")
                 # Annotate the plot with R² and p-value
                 ax[3 * row + sub_row, col].text(0.05, 0.95, f"$r^2={r2:.3f}$ p-val={results["pvalue"]:.3f}", transform=ax[3 * row + sub_row, col].transAxes, fontsize=8, verticalalignment="top", color="black")
-                ax[3 * row + sub_row, col].text(0.05, 0.90, f"$r^2={r2_wt:.3f}$ p-val={results_wt["pvalue"]:.3f}", transform=ax[3 * row + sub_row, col].transAxes, fontsize=8, verticalalignment="top", color=ppt.wt_color)
-                ax[3 * row + sub_row, col].text(0.05, 0.85, f"$r^2={r2_hypo:.3f}$ p-val={results_hypo["pvalue"]:.3f}", transform=ax[3 * row + sub_row, col].transAxes, fontsize=8, verticalalignment="top", color=ppt.hypo_color)
+                ax[3 * row + sub_row, col].text(0.05, 0.90, f"$r^2={r2_wt:.3f}$ p-val={results_wt["pvalue"]:.3f}", transform=ax[3 * row + sub_row, col].transAxes, fontsize=8, verticalalignment="top", color=sty.wt_color)
+                ax[3 * row + sub_row, col].text(0.05, 0.85, f"$r^2={r2_hypo:.3f}$ p-val={results_hypo["pvalue"]:.3f}", transform=ax[3 * row + sub_row, col].transAxes, fontsize=8, verticalalignment="top", color=sty.hypo_color)
                 ax[3 * row + sub_row, col].set_title(f"{trial_type} trials", fontsize=10)
                 ax[3 * row + sub_row, col].set_xlabel(feature, fontsize=10)
                 ax[3 * row + sub_row, col].set_ylabel(acc, fontsize=10)
@@ -846,7 +856,6 @@ def correlate_frame_accuracy_ntn_df(frame_model_df, ntn_df, period="stim"):
     cols_features = [col for col in data.columns if ((col not in cols_id) and (col not in cols_acc))]
     n_features = len(cols_features)
     # Plotting the correlation of the different features with the model accuracy for all genotypes
-    color_dict = {"WT": ppt.wt_color, "KO-Hypo": ppt.hypo_color, "KO": ppt.ko_color}
     fig, ax = plt.subplots(nrows=9, ncols=n_features, figsize=(n_features * 5, 45), constrained_layout=True)
     rows = []
     for row, (data, trial_type) in enumerate(zip([data_all, data_hit, data_miss], ["All", "Hit", "Miss"])):
@@ -877,15 +886,15 @@ def correlate_frame_accuracy_ntn_df(frame_model_df, ntn_df, period="stim"):
                     axis = ax[3 * row + sub_row, col]
                 # Plot the data points and regression lines
                 axis.plot(x_col, line, color="black", lw=2)
-                axis.plot(x_col_wt, line_wt, color=ppt.wt_color, lw=2)
-                axis.plot(x_col_hypo, line_hypo, color=ppt.hypo_color, lw=2)
+                axis.plot(x_col_wt, line_wt, color=sty.wt_color, lw=2)
+                axis.plot(x_col_hypo, line_hypo, color=sty.hypo_color, lw=2)
                 for g in sorted(data["Genotype"].unique()):
                     group = data[data["Genotype"] == g]
-                    sc = axis.scatter(group[feature], group[acc], color=color_dict[g], alpha=0.7, s=10, marker="+")
+                    sc = axis.scatter(group[feature], group[acc], color=sty.color_dict[g][0], alpha=0.7, s=10, marker="+")
                 # Annotate the plot with R² and p-value
                 axis.text(0.05, 0.95, f"$r^2={r2:.3f}$ p-val={results["pvalue"]:.3f}", transform=axis.transAxes, fontsize=8, verticalalignment="top", color="black")
-                axis.text(0.05, 0.90, f"$r^2={r2_wt:.3f}$ p-val={results_wt["pvalue"]:.3f}", transform=axis.transAxes, fontsize=8, verticalalignment="top", color=ppt.wt_color)
-                axis.text(0.05, 0.85, f"$r^2={r2_hypo:.3f}$ p-val={results_hypo["pvalue"]:.3f}", transform=axis.transAxes, fontsize=8, verticalalignment="top", color=ppt.hypo_color)
+                axis.text(0.05, 0.90, f"$r^2={r2_wt:.3f}$ p-val={results_wt["pvalue"]:.3f}", transform=axis.transAxes, fontsize=8, verticalalignment="top", color=sty.wt_color)
+                axis.text(0.05, 0.85, f"$r^2={r2_hypo:.3f}$ p-val={results_hypo["pvalue"]:.3f}", transform=axis.transAxes, fontsize=8, verticalalignment="top", color=sty.hypo_color)
                 axis.set_title(f"{trial_type} trials", fontsize=10)
                 axis.set_xlabel(feature, fontsize=10)
                 axis.set_ylabel(acc, fontsize=10)
@@ -905,7 +914,7 @@ def correlate_frame_accuracy_ntn_df(frame_model_df, ntn_df, period="stim"):
 
 
 if __name__ == '__main__':
-    BMS_analysis = False
+    BMS_analysis = True
     ### Initialisation of recs instances ###
     if BMS_analysis:
         directory = "C:/Users/cvandromme/Desktop/Tactile_detection/Data_DMSO_BMS/"
@@ -960,7 +969,7 @@ if __name__ == '__main__':
     # plot_df = plot_hit_miss_classif(frame_model_df_4, title_precision="All neurons, all patterns, doubleCV, non-sliding avg4", shuffle=True, timescale_division_factor=4)
     plot_hit_miss_classif_comp(frame_model_df_bms, gp1="WT-DMSO", gp2="WT-BMS", title_precision="All neurons, all patterns, doubleCV")
     plot_hit_miss_classif_comp(frame_model_df_bms, gp1="KO-DMSO", gp2="KO-BMS", title_precision="All neurons, all patterns, doubleCV")
-    plot_hit_miss_classif_comp(frame_model_df_bms, gp1="WT-DMSO", gp2="KO-DMSO", title_precision="All neurons, all patterns, doubleCV")
+    data_comp = plot_hit_miss_classif_comp(frame_model_df_bms, gp1="WT-DMSO", gp2="KO-DMSO", title_precision="All neurons, all patterns, doubleCV")
     plot_hit_miss_classif_comp(frame_model_df_bms, gp1="WT-BMS", gp2="KO-BMS", title_precision="All neurons, all patterns, doubleCV")
 
     # corr_acc_features_df, corr_results_df = correlate_frame_accuracy_metrics(frame_model_df_res, features_df, period="stim")
@@ -973,5 +982,5 @@ if __name__ == '__main__':
 
     # recs_wt = {k: v for k, v in recs.items() if v.genotype == "WT"}
     # recs_hypo = {k: v for k, v in recs.items() if v.genotype == "KO-Hypo"}
-    # accuracy_comp_df = compare_accuracy(recs.values(), random=42)
+    accuracy_comp_df = compare_accuracy(recs.values(), random=42)
     # acc_nb_df = correlate_nb_accuracy(recs, accuracy_comp_df[accuracy_comp_df["Genotype"] == "KO"], threshold="median")

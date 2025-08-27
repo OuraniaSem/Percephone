@@ -13,21 +13,37 @@ from tqdm import tqdm
 
 import percephone.core.recording as pc
 import percephone.plts.stats as ppt
+import percephone.plts.style as sty
 # endregion ============================================================================================================
 # region ======================================== Response features ====================================================
 
 def get_features(recs, amp_delay=True, auc=False):
     """
-    Get the neuronal percentage of recruited neurons for both neuron type for all trials for all recordings and build a
-    DataFrame.
+    Extract neuronal response features from multiple recordings and compile them into a structured DataFrame.
+    For each trial in each recording, compute the percentage of recruited neurons, optionally their mean peak
+    amplitude, peak delay, and AUC-based measures, separated by neuron type and response pattern.
 
     Parameters
     ----------
-    recs
+    recs : list
+        List of recording objects containing neuronal response data and metadata. Each recording must implement
+        attributes (`detected_stim`, `stim_ampl`, `filename`, `genotype`, `session_threshold`, `bounded_x0`)
+        and methods (`get_perc_resp`, `get_mean_param`).
+    amp_delay : bool, default=True
+        Whether to include mean peak amplitude and peak delay features for responsive neurons
+    auc : bool, default=False
+        Whether to include mean AUC and cumulative AUC features for responsive neurons (only considered if
+        `amp_delay` is True)
 
     Returns
     -------
     pd.DataFrame
+        A DataFrame where each row corresponds to a trial in a recording, containing:
+            - Recording metadata (ID, Genotype, threshold, bounded_x0, Trial)
+            - Behavioral outcome and stimulus amplitude
+            - Neuronal recruitment percentages by neuron type and response pattern
+            - (Optional) mean peak amplitude and peak delay
+            - (Optional) mean AUC and cumulative AUC
     """
     # === === Building the DataFrame === ===
     rows = []
@@ -81,10 +97,31 @@ def get_features(recs, amp_delay=True, auc=False):
     return pd.DataFrame(rows)
 
 
+# Not used in the final paper
 def compare_x0_psy_threshold(recs):
-    """Controlling that there is no difference between the rounding of the x0_psy to session threshold in both genotypes
-    → Useless because, threshold as be set to 12 for KO-Hypo even if the computed x0_psy was way greater"""
-    colors_dict = {"WT": ppt.wt_color, "KO": ppt.ko_color, "KO-Hypo": ppt.hypo_color}
+    """
+    Compare the difference between psychometric x0 (x0_psy) and session threshold across genotypes.
+    For each recording, compute the absolute difference between x0_psy and threshold, and visualize
+    the distributions using customized boxplots for pairwise genotype comparisons.
+    → Useless because threshold as to be set to 12 for KO-Hypo even if the computed x0_psy was way greater
+
+    Parameters
+    ----------
+    recs : list
+        List of recording objects. Each recording must provide attributes
+        (`filename`, `genotype`, `x0_psy`, `session_threshold`).
+
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame containing, for each recording:
+            - Recording ID
+            - Genotype
+            - Psychometric x0 (x0_psy)
+            - Session threshold
+            - Absolute difference (Delta) between x0_psy and threshold
+    """
+    colors_dict = {"WT": sty.wt_color, "KO": sty.ko_color, "KO-Hypo": sty.hypo_color}
     rows = []
     for rec in recs:
         rows.append({"ID": rec.filename, "Genotype": rec.genotype, "x0": rec.x0_psy, "Threshold": rec.session_threshold})
@@ -100,6 +137,32 @@ def compare_x0_psy_threshold(recs):
 
 
 def filter_amplitude(data, amplitude="all", no_go=False):
+    """
+    Filter trials from a dataset based on their stimulus amplitude relative to the detection threshold.
+    Supports selecting specific conditions (threshold, sub-threshold, supra-threshold, all below, all above)
+    or custom amplitude values.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        DataFrame containing at least the columns `amplitude` and `threshold`
+    amplitude : {"all", "threshold", "sub", "supra", "all_sub", "all_supra"} or list of int, default="all"
+        Filtering condition:
+            - "all"       : keep all amplitudes
+            - "threshold" : keep only trials at threshold amplitude
+            - "sub"       : keep only trials at (threshold - 2)
+            - "supra"     : keep only trials at (threshold + 2)
+            - "all_sub"   : keep all trials below threshold
+            - "all_supra" : keep all trials above threshold
+            - list        : keep trials matching specific amplitude values
+    no_go : bool, default=False
+        If False, exclude "no-go" trials (amplitude = 0). If True, keep them
+
+    Returns
+    -------
+    pd.DataFrame or None
+        Filtered DataFrame. Returns None if an invalid `amplitude` argument is provided
+    """
     if amplitude == "all":
         filt_data = data
     elif amplitude == "threshold":
@@ -122,6 +185,38 @@ def filter_amplitude(data, amplitude="all", no_go=False):
 
 
 def get_sub_supra_threshold(data, behavior_filter=None, genotype="WT", comparison="sub"):
+    """
+    Retrieve threshold and non-threshold trials for a given genotype, with optional filtering by behavior
+    and different methods for selecting comparison amplitudes (sub-/supra-threshold or genotype-level
+    mean/median thresholds).
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        DataFrame containing at least the columns:
+        `Genotype`, `ID`, `amplitude`, `threshold`, `bounded_x0`, and optionally `behavior`
+    behavior_filter : bool or None, default=None
+        If provided, keep only trials matching the specified behavior.
+        If None, all behaviors are included
+    genotype : str, default="WT"
+        Genotype to filter the dataset on
+    comparison : {"sub", "supra", "rounded_mean_genotype", "real_mean_genotype",
+                  "rounded_median_genotype", "real_median_genotype"} or list of int, default="sub"
+        Method to select non-threshold trials:
+            - "sub"                     : threshold - 2
+            - "supra"                   : threshold + 2
+            - "rounded_mean_genotype"   : rounded mean threshold amplitude across genotype
+            - "real_mean_genotype"      : rounded mean bounded_x0 across genotype
+            - "rounded_median_genotype" : rounded median threshold amplitude across genotype
+            - "real_median_genotype"    : rounded median bounded_x0 across genotype
+            - list of int               : custom amplitude values
+
+    Returns
+    -------
+    tuple of (pd.DataFrame, pd.DataFrame)
+        - threshold_trials     : DataFrame of averaged trials at threshold amplitude
+        - non_threshold_trials : DataFrame of averaged trials at comparison amplitude(s)
+    """
     # Filtering the genotype
     data = data[data["Genotype"] == genotype]
     # Filtering the behavior
@@ -151,11 +246,33 @@ def get_sub_supra_threshold(data, behavior_filter=None, genotype="WT", compariso
 
 
 def compare_sub_supra_within(data, behavior_filter=None, genotype="WT", comparison="sub"):
+    """
+    Compare neuronal features between threshold and non-threshold trials within a given genotype.
+    The function extracts trials at threshold and at a specified comparison amplitude, ensures matching
+    animal IDs between conditions, and visualizes paired comparisons for all feature variables.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        DataFrame containing trial-level features. Must include columns:
+        `ID`, `Genotype`, `amplitude`, `threshold`, `bounded_x0`, and optionally `behavior`,
+        along with feature columns to be compared
+    behavior_filter : bool or None, default=None
+        If provided, keep only trials matching the specified behavior.
+        If None, all behaviors are included
+    genotype : str, default="WT"
+        Genotype to filter the dataset on
+    comparison : {"sub", "supra", "rounded_mean_genotype", "real_mean_genotype",
+                  "rounded_median_genotype", "real_median_genotype"} or list of int, default="sub"
+        Method to select non-threshold trials (see `get_sub_supra_threshold` for details)
+
+    Returns
+    -------
+    None
+        Displays a multi-panel figure (4x4 grid) of boxplots comparing threshold vs non-threshold trials
+        across all feature variables for the specified genotype
+    """
     threshold_trials, non_threshold_trials = get_sub_supra_threshold(data, behavior_filter=behavior_filter, genotype=genotype, comparison=comparison)
-    colors_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color],
-                   "KO": [ppt.ko_color, ppt.ko_light_color],
-                   "WT-DMSO": [ppt.wt_color, ppt.wt_light_color], "WT-BMS": [ppt.wt_bms_color, ppt.wt_bms_light_color],
-                   "KO-DMSO": [ppt.all_ko_color, ppt.all_ko_light_color], "KO-BMS": [ppt.all_ko_bms_color, ppt.all_ko_bms_light_color]}
     # Asserting that the match between threshold and non-threshold trials for each animal
     common_IDs = set(threshold_trials["ID"]).intersection(non_threshold_trials["ID"])
     threshold_trials = threshold_trials[threshold_trials["ID"].isin(common_IDs)]
@@ -169,18 +286,53 @@ def compare_sub_supra_within(data, behavior_filter=None, genotype="WT", comparis
     axes_flat = axes.flatten()
     for variable, ax in zip(variables, axes_flat):
         ppt.boxplot(ax, threshold_trials[variable], non_threshold_trials[variable], ylabel=variable, paired=True, title="", ylim=[],
-                    colors=colors_dict[genotype], det_marker=False, force_markers_identity=False)
+                    colors=sty.color_dict[genotype], det_marker=False, force_markers_identity=False)
     fig.suptitle(f"Comparison in {genotype} of threshold trials and {comparison} trials"
                  f"\n[behavior filter={behavior_filter}] n={len(non_threshold_trials)}", fontsize=20)
     title = f"comp_{genotype}_threshold_{comparison}_{behavior_filter}"
     fig.canvas.manager.set_window_title(title)
-    if save_fig:
+    # if save_fig:
         # plt.savefig(f"{server_address}Threshold_analysis/{title}.pdf")
     plt.show()
 
 
 def compare_sub_supra_between(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo", gp1_amps="sub", gp2_amps="sub",
-                              colors=[ppt.wt_color, ppt.hypo_color]):
+                              colors=[sty.wt_color, sty.hypo_color]):
+    """
+    Compare neuronal features between two genotypes at threshold or non-threshold amplitudes.
+    The function extracts trials for each genotype based on specified amplitude conditions,
+    aligns them, and visualizes comparisons of feature distributions across groups.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        DataFrame containing trial-level features. Must include columns:
+        `ID`, `Genotype`, `amplitude`, `threshold`, `bounded_x0`, and optionally `behavior`,
+        along with feature columns to be compared
+    behavior_filter : bool or None, default=None
+        If provided, keep only trials matching the specified behavior.
+        If None, all behaviors are included
+    gp1 : str, default="WT"
+        Name of the first genotype to compare
+    gp2 : str, default="KO-Hypo"
+        Name of the second genotype to compare
+    gp1_amps : {"threshold", "sub", "supra", "rounded_mean_genotype", "real_mean_genotype",
+                "rounded_median_genotype", "real_median_genotype"} or list of int, default="sub"
+        Amplitude selection rule for the first genotype (see `get_sub_supra_threshold` for details)
+    gp2_amps : {"threshold", "sub", "supra", "gp1_threshold",
+                "rounded_mean_genotype", "real_mean_genotype",
+                "rounded_median_genotype", "real_median_genotype"} or list of int, default="sub"
+        Amplitude selection rule for the second genotype. If `"gp1_threshold"`, uses the amplitude
+        selected for gp1
+    colors : list of str, default=[sty.wt_color, sty.hypo_color]
+        Colors used to represent the two genotypes in the boxplots
+
+    Returns
+    -------
+    tuple of (pd.DataFrame, pd.DataFrame)
+        - data_gp1 : DataFrame of selected trials for the first genotype
+        - data_gp2 : DataFrame of selected trials for the second genotype
+    """
     data = data.drop(columns=["Trial"])
     gp1_threshold, gp1_non_threshold = get_sub_supra_threshold(data, behavior_filter=behavior_filter, genotype=gp1, comparison=gp1_amps if gp1_amps != "threshold" else "sub")
     if (gp1_amps in ["rounded_mean_genotype", "real_mean_genotype", "rounded_median_genotype", "real_median_genotype"] and gp2_amps == "gp1_threshold"):
@@ -215,9 +367,39 @@ def compare_sub_supra_between(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo
     return data_gp1, data_gp2
 
 
+# Not used in the final paper
 def compare_sub_supra_deltas(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo", delta="both"):
-    """Comparing the raw values of sub and supra trials to the threshold may not be the best way to assess a broad
-    threshold. Instead, comparison of the delta between threshold and sub/supra or delta sub/supra between both groups"""
+    """
+    Compare feature differences (deltas) between threshold, sub-threshold, and supra-threshold trials
+    across two genotypes. Instead of comparing raw trial values, this function computes the absolute
+    difference between conditions (sub–threshold, supra–threshold, or sub–supra) and visualizes them
+    for each feature.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        DataFrame containing trial-level features. Must include columns:
+        `ID`, `Genotype`, `amplitude`, `threshold`, `bounded_x0`, and optionally `behavior`,
+        along with feature columns to be compared
+    behavior_filter : bool or None, default=None
+        If provided, keep only trials matching the specified behavior.
+        If None, all behaviors are included
+    gp1 : str, default="WT"
+        Name of the first genotype to compare
+    gp2 : str, default="KO-Hypo"
+        Name of the second genotype to compare
+    delta : {"sub", "supra", "both"}, default="both"
+        Type of delta to compare:
+            - "sub"   : difference between sub-threshold and threshold trials
+            - "supra" : difference between supra-threshold and threshold trials
+            - "both"  : difference between supra-threshold and sub-threshold trials
+
+    Returns
+    -------
+    tuple of (pd.DataFrame, pd.DataFrame)
+        - delta1 : DataFrame of absolute deltas for the first genotype
+        - delta2 : DataFrame of absolute deltas for the second genotype
+    """
     # Retrieving the data from threshold, sub (and supra threshold) for both groups
     gp1_threshold, gp1_sub = get_sub_supra_threshold(data, behavior_filter=behavior_filter, genotype=gp1, comparison="sub")
     _, gp1_supra = get_sub_supra_threshold(data, behavior_filter=behavior_filter, genotype=gp1, comparison="supra")
@@ -242,7 +424,7 @@ def compare_sub_supra_deltas(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo"
     diff_both2 = gp2_supra.subtract(gp2_sub).reset_index().abs()
 
     # Plotting the deltas
-    color_dict = {"WT": ppt.wt_color, "KO-Hypo": ppt.hypo_color, "KO": ppt.ko_color}
+    color_dict = {"WT": sty.wt_color, "KO-Hypo": sty.hypo_color, "KO": sty.ko_color}
     if delta == "both":
         delta1 = diff_both1
         delta2 = diff_both2
@@ -267,12 +449,40 @@ def compare_sub_supra_deltas(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo"
 
 
 def compare_det_undet(data_df, genotype="WT", amplitude="all"):
-    colors_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color],
-                   "KO": [ppt.ko_color, ppt.ko_light_color],
-                   "WT-DMSO": [ppt.wt_color, ppt.wt_light_color], "KO-DMSO": [ppt.hypo_color, ppt.hypo_light_color],
-                   "WT-BMS": [ppt.wt_bms_color, ppt.wt_bms_light_color], "KO-BMS": [ppt.hypo_bms_color, ppt.hypo_bms_light_color],
-                   "DMSO_det": [ppt.wt_color, ppt.hypo_color], "DMSO_undet": [ppt.wt_light_color, ppt.hypo_light_color],
-                   "BMS_det": [ppt.wt_bms_color, ppt.hypo_bms_color], "BMS_undet": [ppt.wt_bms_light_color, ppt.hypo_bms_light_color]}
+    """
+    Compare feature values between detected and undetected trials, either within a single genotype
+    or across WT vs KO under pharmacological conditions (DMSO/BMS). Trials can be filtered by amplitude
+    before computing group-level averages and paired/unpaired comparisons are performed depending on
+    the genotype specification.
+
+    Parameters
+    ----------
+    data_df : pd.DataFrame
+        DataFrame containing trial-level features. Must include columns:
+        `ID`, `Genotype`, `behavior`, `amplitude`, `threshold`, and `bounded_x0`,
+        along with feature columns to be compared
+    genotype : str, default="WT"
+        Defines the comparison to perform:
+            - If set to a simple genotype (e.g. "WT", "KO", "KO-Hypo"), compares detected vs undetected
+              trials within that group (paired comparison across matching IDs)
+            - If set to a condition with suffix "det" or "undet" (e.g. "DMSO_det", "BMS_undet"),
+              compares WT vs KO for detected or undetected trials under that pharmacological condition
+              (unpaired comparison)
+    amplitude : str or numeric, default="all"
+        Amplitude filter applied to trials before averaging.
+        Passed directly to `filter_amplitude`
+
+    Returns
+    -------
+    tuple of (pd.DataFrame, pd.DataFrame)
+        - gp1 : DataFrame of detected (or WT detected) trials
+        - gp2 : DataFrame of undetected (or KO detected) trials
+    """
+    colors_dict = sty.color_dict.copy()
+    colors_dict.update({"DMSO_det": [sty.wt_color, sty.hypo_color],
+                        "DMSO_undet": [sty.wt_light_color, sty.hypo_light_color],
+                        "BMS_det": [sty.wt_bms_color, sty.hypo_bms_color],
+                        "BMS_undet": [sty.wt_bms_light_color, sty.hypo_bms_light_color]})
     grouping_cols = ["Genotype", "ID", "behavior"]
     data = data_df.drop(columns=["Trial"]).copy()
     # Filtering the amplitude
@@ -343,10 +553,35 @@ def compare_det_undet(data_df, genotype="WT", amplitude="all"):
     # plt.show()
     return gp1, gp2
 
-def compare_det_undet_between(data_df, gp1="WT", gp2="KO-Hypo", amplitude="all", behavior="all"):
-    colors_dict = {"WT": {"all": ppt.wt_color, "hit": ppt.wt_color, "miss": ppt.wt_light_color},
-                   "KO-Hypo": {"all": ppt.hypo_color, "hit": ppt.hypo_color, "miss": ppt.hypo_light_color},
-                   "KO": {"all": ppt.ko_color, "hit": ppt.ko_color, "miss": ppt.ko_light_color}}
+
+def compare_det_undet_between(data_df, gp1="WT", gp2="KO-Hypo", amplitude="all", behavior_filter=None):
+    """
+    Compare feature values between two genotypes (gp1 vs gp2) for either all trials, only detected
+    (hits), or only undetected (misses). Trials are filtered by amplitude and averaged per subject
+    before unpaired comparisons are plotted.
+
+    Parameters
+    ----------
+    data_df : pd.DataFrame
+        DataFrame containing trial-level features. Must include columns:
+        `ID`, `Genotype`, `behavior`, `amplitude`, `threshold`, and `bounded_x0`,
+        along with feature columns to be compared.
+    gp1 : str, default="WT"
+        First genotype group (e.g. "WT", "KO", "KO-Hypo").
+    gp2 : str, default="KO-Hypo"
+        Second genotype group to compare against gp1.
+    amplitude : str or numeric, default="all"
+        Amplitude filter applied to trials before averaging.
+        Passed directly to `filter_amplitude`.
+    behavior_filter : bool or None, default=None
+        If provided, keep only trials matching the specified behavior.
+        If None, all behaviors are included
+
+    Returns
+    -------
+    tuple of (str, str)
+        The genotype identifiers (`gp1`, `gp2`) used in the comparison.
+    """
     grouping_cols = ["Genotype", "ID", "behavior"]
     data = data_df.drop(columns=["Trial"]).copy()
     # Filtering the amplitude
@@ -358,14 +593,15 @@ def compare_det_undet_between(data_df, gp1="WT", gp2="KO-Hypo", amplitude="all",
     gp2_all = filter_amplitude(gp2_full_data, amplitude=amplitude, no_go=False).groupby(grouping_cols, as_index=False).mean()
     gp2_hit = gp2_all[gp2_all["behavior"] == True].copy()
     gp2_miss = gp2_all[gp2_all["behavior"] == False].copy()
-    gp_dict = {"all": [gp1_all, gp2_all], "hit": [gp1_hit, gp2_hit], "miss": [gp1_miss, gp2_miss]}
+    gp_dict = {None: [gp1_all, gp2_all], True: [gp1_hit, gp2_hit], False: [gp1_miss, gp2_miss]}
     # Plotting the comparisons
     not_variables = ["ID", "Genotype", "behavior", "amplitude", "threshold", "bounded_x0"]
     variables = [col for col in data.columns if col not in not_variables]
     variables = [var for var in variables if var.split("_")[-1] != "auc"]
     fig, axes = plt.subplots(nrows=3, ncols=6, figsize=(36, 24), constrained_layout=True)
     axes_flat = axes.flatten()
-    det_marker = True if behavior in (["all", "hit"]) else False
+    det_marker = True if behavior_filter in ([None, True]) else False
+    color_behavior_id = 0 if behavior_filter in ([None, True]) else 1
     for i, (variable, ax) in enumerate(zip(variables, axes_flat)):
         if variable.split("_")[-1] == "perc":
             ylim = [-10, 80]
@@ -374,14 +610,14 @@ def compare_det_undet_between(data_df, gp1="WT", gp2="KO-Hypo", amplitude="all",
         elif variable.split("_")[-1] in ["amp", "auc"]:
             ylim = [-5, 5]
         if variable.split("_")[-1] != "auc":
-            ppt.boxplot(ax, gp_dict[behavior][0][variable].values, gp_dict[behavior][1][variable].values,
+            ppt.boxplot(ax, gp_dict[behavior_filter][0][variable].values, gp_dict[behavior_filter][1][variable].values,
                         ylabel=variable, paired=False, title="", ylim=ylim,
-                        colors=[colors_dict[gp1][behavior], colors_dict[gp2][behavior]], det_marker=det_marker, force_markers_identity=False)
+                        colors=[sty.color_dict[gp1][color_behavior_id], sty.color_dict[gp2][color_behavior_id]], det_marker=det_marker, force_markers_identity=False)
     used = len(variables)
     for extra_ax in axes_flat[used:]:
         extra_ax.set_axis_off()
-    fig.suptitle(f"Comparison of {behavior} trials between {gp1} and {gp2}\n[amplitude filter={amplitude}]", fontsize=15)
-    title = f"comp_{gp1}_{gp2}_det_undet_{amplitude}_{behavior}"
+    fig.suptitle(f"Comparison of {"all" if behavior_filter is None else behavior_filter} trials between {gp1} and {gp2}\n[amplitude filter={amplitude}]", fontsize=15)
+    title = f"comp_{gp1}_{gp2}_det_undet_{amplitude}_{behavior_filter}"
     fig.canvas.manager.set_window_title(title)
     # if save_fig:
     # plt.savefig(f"{server_address}stimulus_encoding/{title}.pdf")
@@ -389,45 +625,36 @@ def compare_det_undet_between(data_df, gp1="WT", gp2="KO-Hypo", amplitude="all",
     return gp1, gp2
 
 
+# Not used, previous version
 def group_comp_param(recs, parameter, ko_hypo_only=False, stim_ampl="all", ylim=[]):
     """
-    Compare a given parameter between WT and KO groups across neuron types and response types.
-
-    This function generates boxplots to compare a specified neuronal parameter across different
-    conditions, including neuron type (EXC, INH), response type (-1, 1), and stimulus detection status
-    (detected vs. undetected). The results are plotted in a 2x4 subplot figure.
+    Compare a neuronal parameter between WT and KO groups across neuron and response types,
+    separately for detected and undetected stimuli.
 
     Parameters
     ----------
     recs : dict
-        Dictionary containing recording data, where keys are identifiers and values are recording objects.
+        Dictionary of recording objects. Each object must provide:
+        - `genotype` (str): recording genotype ("WT", "KO", "KO-Hypo").
+        - `matrices` (dict): nested dict with neuronal parameters and responsivity.
+        - `stim_ampl_filter` (callable): function to filter trials by amplitude.
+        - `detected_stim` (np.ndarray): boolean mask of detected stimuli.
     parameter : str
-        The neuronal parameter to analyze (e.g., "Peak_delay", "Peak_amplitude").
-    ko_hypo_only : bool, optional
-        If True, only KO-Hypo data is used for KO comparisons (default is False).
-    stim_ampl : str or list, optional
-        Specifies the stimulation amplitude(s) to include. Can be "all" or a specific value/list of values (default is "all").
-    ylim : list, optional
-        Specifies the y-axis limits for the plots. If an empty list is provided, the limits are determined automatically.
-
-    Notes
-    -----
-    - The function iterates through the dataset, filtering neurons based on genotype and response type.
-    - It computes the mean value of the given parameter for detected and undetected stimuli.
-    - Boxplots are generated to compare WT and KO groups.
-    - The function assumes the presence of external plotting utilities from `ppt` (e.g., `ppt.boxplot`).
+        Parameter name to analyze (e.g., "Peak_delay", "Peak_amplitude").
+        Must exist in `rec.matrices[neuron_type][parameter]`.
+    ko_hypo_only : bool, default=False
+        If True, restrict KO comparisons to KO-Hypo. Otherwise pool KO and KO-Hypo.
+    stim_ampl : str or list, default="all"
+        Stimulation amplitude(s) to include. Passed to `stim_ampl_filter`.
+    ylim : list, default=[]
+        Y-axis limits for plots. If empty, determined automatically.
+        For inhibitory response types with negative values, limits are inverted.
 
     Returns
     -------
     None
-        The function displays a matplotlib figure with boxplots and saves it as a PDF if `save_figure` is enabled.
-
-    Raises
-    ------
-    AttributeError
-        If `recs` does not contain the expected attributes (`genotype`, `matrices`, `stim_ampl_filter`, etc.).
-    KeyError
-        If the requested `parameter` is not found in `recs.matrices`.
+        Displays a matplotlib figure (2x4 subplots) with WT vs KO boxplots,
+        comparing detected and undetected responses across EXC/INH neurons.
     """
     fig, axs = plt.subplots(2, 4, figsize=(24, 16), constrained_layout=True)
     for i, neuron_type in enumerate(["EXC", "INH"]):
@@ -438,12 +665,12 @@ def group_comp_param(recs, parameter, ko_hypo_only=False, stim_ampl="all", ylim=
             wt_det, wt_undet, ko_det, ko_undet = [], [], [], []
             if ko_hypo_only:
                 ko_type = "KO-Hypo"
-                color_ko = ppt.hypo_color
-                light_color_ko = ppt.hypo_light_color
+                color_ko = sty.hypo_color
+                light_color_ko = sty.hypo_light_color
             else:
                 ko_type = "(KO + KO-Hypo)"
-                color_ko = ppt.all_ko_color
-                light_color_ko = ppt.all_ko_light_color
+                color_ko = sty.all_ko_color
+                light_color_ko = sty.all_ko_light_color
 
             for rec in recs.values():
                 if ko_hypo_only and rec.genotype == "KO":
@@ -470,8 +697,8 @@ def group_comp_param(recs, parameter, ko_hypo_only=False, stim_ampl="all", ylim=
                     else:
                         ko_det.append(np.nanmean(np.nanmean(det, axis=1)))
                         ko_undet.append(np.nanmean(np.nanmean(undet, axis=1)))
-            ppt.boxplot(axs[i, 2*j], wt_det, ko_det, paired=False, ylabel=f"{parameter}", ylim=auto_ylim, colors=[ppt.wt_color, color_ko], det_marker=True)
-            ppt.boxplot(axs[i, 2*j+1], wt_undet, ko_undet, paired=False, ylabel=f"{parameter}", ylim=auto_ylim, colors=[ppt.wt_light_color, light_color_ko], det_marker=False)
+            ppt.boxplot(axs[i, 2*j], wt_det, ko_det, paired=False, ylabel=f"{parameter}", ylim=auto_ylim, colors=[sty.wt_color, color_ko], det_marker=True)
+            ppt.boxplot(axs[i, 2*j+1], wt_undet, ko_undet, paired=False, ylabel=f"{parameter}", ylim=auto_ylim, colors=[sty.wt_light_color, light_color_ko], det_marker=False)
             axs[i, 2*j].set_title(f"Det {neuron_type}({response_type})")
             axs[i, 2*j+1].set_title(f"Undet {neuron_type}({response_type})")
     title = f"{parameter}[WT_{ko_type}]_{stim_ampl}_amp"
@@ -480,44 +707,35 @@ def group_comp_param(recs, parameter, ko_hypo_only=False, stim_ampl="all", ylim=
     plt.show()
 
 
+# Not used, previous version
 def det_comp_param(recs, parameter, stim_ampl="all", ylim=[]):
     """
-    Compare a given neuronal parameter between detected and undetected stimuli.
-
-    This function generates boxplots to analyze the differences in a specified neuronal parameter
-    across detected and undetected stimuli, considering neuron types (EXC, INH) and response types (-1, 1).
-    Comparisons are performed across WT, KO (including KO-Hypo), and KO-Hypo groups.
+    Compare a neuronal parameter between detected and undetected stimuli,
+    across WT, KO (WT + KO-Hypo), and KO-Hypo groups.
 
     Parameters
     ----------
     recs : dict
-        Dictionary containing recording data, where keys are identifiers and values are recording objects.
+        Dictionary of recording objects. Each object must provide:
+        - `genotype` (str): recording genotype ("WT", "KO", "KO-Hypo").
+        - `matrices` (dict): nested dict with neuronal parameters and responsivity.
+        - `stim_ampl_filter` (callable): function to filter trials by amplitude.
+        - `detected_stim` (np.ndarray): boolean mask of detected stimuli.
     parameter : str
-        The neuronal parameter to analyze (e.g., "Peak_delay", "Peak_amplitude").
-    stim_ampl : str or list, optional
-        Specifies the stimulation amplitude(s) to include. Can be "all" or a specific value/list of values (default is "all").
-    ylim : list, optional
-        Specifies the y-axis limits for the plots. If an empty list is provided, the limits are determined automatically.
-
-    Notes
-    -----
-    - The function filters data based on stimulus detection status.
-    - It computes the mean parameter values for detected and undetected stimuli.
-    - Boxplots compare detected vs. undetected stimuli within WT, KO (KO + KO-Hypo), and KO-Hypo groups.
-    - Results are saved as CSV files if required.
-    - The function assumes the presence of external plotting utilities from `ppt` (e.g., `ppt.boxplot`).
+        Parameter name to analyze (e.g., "Peak_delay", "Peak_amplitude").
+        Must exist in `rec.matrices[neuron_type][parameter]`.
+    stim_ampl : str or list, default="all"
+        Stimulation amplitude(s) to include. Passed to `stim_ampl_filter`.
+    ylim : list, default=[]
+        Y-axis limits for plots. If empty, determined automatically.
+        For inhibitory response types with negative values, limits are inverted.
 
     Returns
     -------
     None
-        The function displays a matplotlib figure with boxplots and saves it as a PDF if `save_figure` is enabled.
-
-    Raises
-    ------
-    AttributeError
-        If `recs` does not contain the expected attributes (`genotype`, `matrices`, `stim_ampl_filter`, etc.).
-    KeyError
-        If the requested `parameter` is not found in `recs.matrices`.
+        Displays a matplotlib figure (2x6 subplots) with paired boxplots
+        comparing detected vs. undetected responses across neuron types (EXC/INH),
+        response types (-1/1), and genotypes (WT, KO, KO-Hypo).
     """
     fig, axs = plt.subplots(2, 6, figsize=(36, 16), constrained_layout=True)
     for i, neuron_type in enumerate(["EXC", "INH"]):
@@ -553,13 +771,13 @@ def det_comp_param(recs, parameter, stim_ampl="all", ylim=[]):
                     hypo_undet.append(np.nanmean(np.nanmean(undet, axis=1)))
             ppt.boxplot(axs[i, 3 * j], wt_det, wt_undet, ylabel=parameter, paired=True,
                         title=f"WT {neuron_type}({response_type})", ylim=auto_ylim,
-                        colors=[ppt.wt_color, ppt.wt_light_color])
+                        colors=[sty.wt_color, sty.wt_light_color])
             ppt.boxplot(axs[i, 3 * j + 1], ko_det, ko_undet, ylabel=parameter, paired=True,
                         title=f"KO + KO-Hypo {neuron_type}({response_type})", ylim=auto_ylim,
-                        colors=[ppt.all_ko_color, ppt.all_ko_light_color])
+                        colors=[sty.all_ko_color, sty.all_ko_light_color])
             ppt.boxplot(axs[i, 3 * j + 2], hypo_det, hypo_undet, ylabel=parameter, paired=True,
                         title=f"KO-Hypo {neuron_type}({response_type})", ylim=auto_ylim,
-                        colors=[ppt.hypo_color, ppt.hypo_light_color])
+                        colors=[sty.hypo_color, sty.hypo_light_color])
             # excel_df_WT = pd.DataFrame(data={"WT Det": wt_det, "WT Undet": wt_undet})
             # excel_df_KO = pd.DataFrame(data={"Hypo Det": hypo_det, "Hypo Undet": hypo_undet})
             # excel_df_WT.to_csv(f"{server_address}data/det_{parameter}_{neuron_type}_{stim_ampl}_{response_type}_WT.csv", sep=",")
@@ -571,18 +789,51 @@ def det_comp_param(recs, parameter, stim_ampl="all", ylim=[]):
 
 
 def nogo_fa_cr(recs, condition=None):
+    """
+    Compare neuronal recruitment between genotypes during no-go trials, distinguishing False Alarms (FA) from Correct Rejections (CR).
+    No-go trials are defined as trials with stimulus amplitude 0. A trial is considered a FA if a lick occurs within 75 ms
+    after stimulus onset, otherwise it is a CR. The function computes the percentage of recruited neurons (EXC and INH,
+    activated or inhibited) for each trial, aggregates the data by recording, genotype, and FA/CR outcome,
+    and plots the results as boxplots in a 3x6 figure.
+
+    Parameters
+    ----------
+    recs : list
+        List of recording objects. Each recording must have the following attributes and methods:
+        - filename : str, identifier of the recording
+        - genotype : str, genotype label
+        - stim_ampl : list or np.array, stimulus amplitudes per trial
+        - stim_time : list or np.array, stimulus onset times per trial
+        - lick_time : list or np.array, lick timestamps
+        - get_perc_resp(pattern, n_type) : method returning the percentage of responsive neurons for a given pattern
+          (1 = activation, -1 = inhibition) and neuron type ("EXC" or "INH")
+    condition : str or None, optional
+        Selects the genotype comparison:
+        - None (default) → "WT" vs "KO-Hypo"
+        - "DMSO" → "WT-DMSO" vs "KO-DMSO"
+        - "BMS" → "WT-BMS" vs "KO-BMS"
+
+    Returns
+    -------
+    pd.DataFrame
+        Aggregated data containing mean recruitment metrics per recording, genotype, and FA/CR outcome.
+        Columns include:
+        - ID : str, recording identifier
+        - Genotype : str
+        - FA : bool, True for False Alarm, False for Correct Rejection
+        - act_EXC_perc, inh_EXC_perc, rec_EXC_perc : float, percentage of activated, inhibited, or total responsive excitatory neurons
+        - act_INH_perc, inh_INH_perc, rec_INH_perc : float, percentage of activated, inhibited, or total responsive inhibitory neurons
+    """
     if condition is None:
         wt_geno = "WT"
         ko_geno = "KO-Hypo"
-        colors = [ppt.wt_color, ppt.hypo_color]
     elif condition == "DMSO":
         wt_geno = "WT-DMSO"
         ko_geno = "KO-DMSO"
-        colors = [ppt.wt_color, ppt.hypo_color]
     elif condition == "BMS":
         wt_geno = "WT-BMS"
         ko_geno = "KO-BMS"
-        colors = [ppt.wt_bms_color, ppt.hypo_bms_color]
+    colors = [sty.color_dict[wt_geno][0], sty.color_dict[ko_geno][0]]
     rows = []
     for rec in recs:
         licks = rec.lick_time
@@ -626,28 +877,54 @@ def nogo_fa_cr(recs, condition=None):
 
 def delta_hit_miss_comp(feature_df, threshold_only=False, wt_threshold=False, condition=None):
     """
-    Compares the delta in recruited neurons (hit-miss) between genotypes.
+    Compute and compare the delta in neuronal recruitment and amplitude between hit and miss trials,
+    as well as hit and no-go trials, across genotypes.
+
+    The function calculates the difference (Δ) for each metric between hits and misses and between hits and
+    no-go trials, aggregates by recording and genotype, and plots boxplots for visual comparison.
+    Metrics include both recruitment percentages and mean amplitudes for excitatory (EXC) and inhibitory (INH) neurons.
 
     Parameters
     ----------
-    feature_df
+    feature_df : pd.DataFrame
+        DataFrame containing trial-level features for each recording, including:
+        - 'ID' : str, recording identifier
+        - 'Genotype' : str
+        - 'behavior' : bool, True for hit, False for miss
+        - 'amplitude' : float, stimulus amplitude
+        - recruitment and amplitude metrics for EXC and INH neurons (e.g., 'act_EXC_perc', 'inh_INH_amp', etc.)
+    threshold_only : bool, optional
+        If True, only threshold trials are used for hit-miss comparisons (default is False).
+    wt_threshold : bool, optional
+        If True and threshold_only is True, WT threshold is set to 4 instead of using the session threshold (default is False).
+    condition : str or None, optional
+        Selects the genotype comparison:
+        - None → 'WT' vs 'KO-Hypo'
+        - 'DMSO' → 'WT-DMSO' vs 'KO-DMSO'
+        - 'BMS' → 'WT-BMS' vs 'KO-BMS'
 
     Returns
     -------
+    pd.DataFrame
+        DataFrame containing delta metrics for each recording and genotype. Columns include:
+        - 'ID' : str, recording identifier
+        - 'Genotype' : str
+        - 'Δ<metric>' : float, difference between hit and miss trials for each metric
+        - 'Δ<metric>_nogo' : float, difference between hit and no-go trials for each metric
 
+    This function also generates boxplots for each metric showing Δ Hit–Miss and Δ Hit–NoGo
+    for WT vs KO, facilitating comparison of neuronal recruitment and amplitude changes.
     """
     if condition is None:
         wt_geno = "WT"
         ko_geno = "KO-Hypo"
-        colors = [ppt.wt_color, ppt.hypo_color]
     elif condition == "DMSO":
         wt_geno = "WT-DMSO"
         ko_geno = "KO-DMSO"
-        colors = [ppt.wt_color, ppt.hypo_color]
     elif condition == "BMS":
         wt_geno = "WT-BMS"
         ko_geno = "KO-BMS"
-        colors = [ppt.wt_bms_color, ppt.hypo_bms_color]
+    colors = [sty.color_dict[wt_geno][0], sty.color_dict[ko_geno][0]]
     # Filtering out no go trials
     if threshold_only:
         if wt_threshold:
@@ -686,10 +963,10 @@ def delta_hit_miss_comp(feature_df, threshold_only=False, wt_threshold=False, co
             ko_nogo = delta[delta['Genotype'] == ko_geno][f'Δ{m}_nogo']
             ppt.boxplot(ax1, wt, ko, ylabel=m, title='Δ Hit–Miss',
                         colors=colors, paired=False, ylim=ylim)
-                        # colors=[ppt.wt_color, ppt.hypo_color], paired=False, ylim=[-4, 4])
+                        # colors=[sty.wt_color, sty.hypo_color], paired=False, ylim=[-4, 4])
             ppt.boxplot(ax2, wt_nogo, ko_nogo, ylabel=m, title='Δ Hit–NoGo',
                         colors=colors, paired=False, ylim=ylim)
-                        # colors=[ppt.wt_color, ppt.hypo_color], paired=False, ylim=[-4, 4])
+                        # colors=[sty.wt_color, sty.hypo_color], paired=False, ylim=[-4, 4])
     fig.suptitle(f"Delta in recruitment and amplitude of neurons ({wt_geno} vs. {ko_geno})\n[Only threshold={threshold_only} (WT={wt_threshold})]")
     # fig.suptitle(f"Delta in peak delay of neurons (WT vs. KO-Hypo)\n[Only threshold={threshold_only} (WT={wt_threshold})]")
     fig.canvas.manager.set_window_title(f"Recruitment Delta (cond={condition})[threshold={threshold_only}_WT={wt_threshold}]")
@@ -702,6 +979,37 @@ def delta_hit_miss_comp(feature_df, threshold_only=False, wt_threshold=False, co
 # endregion ============================================================================================================
 # region ======================================== Responsivity =========================================================
 def nb_neurons(recs):
+    """
+    Compute and compare the number and percentage of excitatory (EXC) and inhibitory (INH) neurons
+    across WT and KO genotypes.
+
+    The function iterates through all recordings, counts the number of EXC and INH neurons, calculates
+    their respective percentages, aggregates results into a DataFrame, and generates boxplots comparing
+    WT and KO (KO + KO-Hypo) for both absolute counts and percentages.
+
+    Parameters
+    ----------
+    recs : list
+        List of recording objects. Each recording object is expected to have the following attributes:
+        - 'filename' : str, recording identifier
+        - 'genotype' : str, genotype of the subject ('WT', 'KO', 'KO-Hypo')
+        - 'zscore_exc' : np.ndarray, data for excitatory neurons
+        - 'zscore_inh' : np.ndarray, data for inhibitory neurons
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame containing, for each recording:
+        - 'ID' : str, recording identifier
+        - 'Genotype' : str
+        - 'n_EXC' : int, number of excitatory neurons
+        - 'n_INH' : int, number of inhibitory neurons
+        - 'perc_EXC' : float, percentage of excitatory neurons
+        - 'perc_INH' : float, percentage of inhibitory neurons
+
+    The function also produces a 2x2 grid of boxplots comparing WT vs KO across neuron type (EXC, INH)
+    and metric type (absolute number and percentage).
+    """
     rows = []
     for rec in recs:
         n_EXC = rec.zscore_exc.shape[0]
@@ -717,317 +1025,60 @@ def nb_neurons(recs):
             ko = data[data["Genotype"].isin(["KO", "KO-Hypo"])][f"{metric}_{n_type}"].values
             ylim = [0, 100] if metric == "perc" else [0, 150]
             ppt.boxplot(ax[i, j], wt, ko, ylabel=f"{n_type} neurons ({metric})", paired=False, title="", ylim=ylim,
-                        colors=[ppt.wt_color, ppt.all_ko_color], det_marker=True, force_markers_identity=False)
+                        colors=[sty.wt_color, sty.all_ko_color], det_marker=True, force_markers_identity=False)
     fig.suptitle("Comparison between WT and Fmr1KO of the number and percentage of neurons in the field of view", fontsize=10)
     fig.canvas.manager.set_window_title("Nb neurons FOV")
     plt.show()
     return data
 
 
-def fraction_resp(pattern, n_type, ko_hypo_only=True, stim_ampl="all", no_go_normalize=True):
-    """
-    Compute the fraction of responsive neurons based on a given response pattern.
-
-    This function calculates the percentage of neurons responding to detected and undetected stimuli
-    for a specified neuron type (EXC or INH). The response is computed for WT, KO-Hypo, and optionally KO groups.
-
-    Parameters
-    ----------
-    pattern : int
-        The response pattern to analyze. If 0, the function considers any nonzero response as activation.
-    n_type : str
-        The neuron type to analyze ("EXC" for excitatory, "INH" for inhibitory).
-    ko_hypo_only : bool, optional
-        If True, only KO-Hypo data is included for KO comparisons (default is True).
-    stim_ampl : str or list, optional
-        Specifies the stimulation amplitude(s) to include. Can be "all" or a specific value/list of values (default is "all").
-    no_go_normalize : bool, optional
-        If True, normalizes the response rates by subtracting the number of responsive neurons in no-go trials (default is True).
-
-    Returns
-    -------
-    wt_det : np.ndarray
-        Array of percentages of detected responsive neurons in the WT group.
-    ko_det : np.ndarray
-        Array of percentages of detected responsive neurons in the KO group (or KO-Hypo if `ko_hypo_only=True`).
-    wt_undet : np.ndarray
-        Array of percentages of undetected responsive neurons in the WT group.
-    ko_undet : np.ndarray
-        Array of percentages of undetected responsive neurons in the KO group (or KO-Hypo if `ko_hypo_only=True`).
-
-    Notes
-    -----
-    - Responses are extracted from the "Responsivity" matrix of the recording data.
-    - Responses are filtered based on stimulation amplitude and whether the stimulus was detected.
-    - If `pattern == 0`, all nonzero responses are treated as recruitment (binary response).
-    - If `no_go_normalize=True`, responses are adjusted by subtracting the average number of responsive neurons in no-go trials.
-    - The total number of neurons is used to compute response percentages.
-
-    Raises
-    ------
-    AttributeError
-        If `recs` does not contain expected attributes (`genotype`, `matrices`, `stim_ampl_filter`, etc.).
-    KeyError
-        If `n_type` is not found in `recs.matrices` or if the `pattern` does not exist.
-    """
-    wt_det, wt_undet, ko_det, ko_undet = [], [], [], []
-    for rec in recs.values():
-        resp_mat = np.array(rec.matrices[n_type]["Responsivity"])
-        no_go_filter = rec.stim_ampl_filter(stim_ampl=[0], include_no_go=True)
-        ampl_filter = rec.stim_ampl_filter(stim_ampl=stim_ampl, include_no_go=False)
-        ampl_det_filt = np.logical_and(rec.detected_stim, ampl_filter)
-        ampl_undet_filt = np.logical_and(np.invert(rec.detected_stim), ampl_filter)
-        # detected
-        trials_no_go = resp_mat[:, no_go_filter]
-        trials_detected = resp_mat[:, ampl_det_filt]
-        trials_undetected = resp_mat[:, ampl_undet_filt]
-        if pattern == 0:
-            trials_detected[trials_detected != 0] = 1
-            trials_undetected[trials_undetected != 0] = 1
-            trials_no_go[trials_no_go != 0] = 1
-        else:
-            trials_detected[trials_detected != pattern] = 0
-            trials_undetected[trials_undetected != pattern] = 0
-            trials_no_go[trials_no_go != pattern] = 0
-        # The total number of neurons is computed
-        total_n = rec.zscore_exc.shape[0] if n_type == "EXC" else rec.zscore_inh.shape[0]
-        # Computation of the number of responsive neurons
-        recruited_det = np.mean(np.count_nonzero(trials_detected, axis=0))
-        recruited_undet = np.mean(np.count_nonzero(trials_undetected, axis=0))
-        # Normalization by the number of responsive neurons for no-go trials
-        if no_go_normalize:
-            recruited_no_go = np.mean(np.count_nonzero(trials_no_go, axis=0))
-            recruited_det -= recruited_no_go
-            recruited_undet -= recruited_no_go
-            recruited_det = 0 if recruited_det < 0 else recruited_det
-            recruited_undet = 0 if recruited_undet < 0 else recruited_undet
-        # Computation of the percentage of responsive neurons
-        perc_n_det = (recruited_det / total_n) * 100
-        perc_n_undet = (recruited_undet / total_n) * 100
-        # Storing the computed percentage in the corresponding list
-        if rec.genotype == "WT":
-            wt_det.append(perc_n_det)
-            wt_undet.append(perc_n_undet)
-        elif rec.genotype == "KO-Hypo":
-            ko_det.append(perc_n_det)
-            ko_undet.append(perc_n_undet)
-        elif rec.genotype == "KO" and not ko_hypo_only:
-            ko_det.append(perc_n_det)
-            ko_undet.append(perc_n_undet)
-    return np.array(wt_det), np.array(ko_det), np.array(wt_undet), np.array(ko_undet)
-
-
-def plot_neuron_frac_wt_ko(pattern, ko_hypo_only=True, stim_ampl="all", ylim=[], no_go_normalize=True):
-    """
-    Plot the fraction of responsive neurons in WT vs. KO groups.
-
-    This function visualizes the percentage of neurons responding to detected and undetected stimuli
-    for both excitatory (EXC) and inhibitory (INH) neuron types. It compares WT and KO (or KO-Hypo) groups
-    using boxplots.
-
-    Parameters
-    ----------
-    pattern : int
-        The response pattern to analyze. If 0, the function considers both activation (1) and inhibition (-1).
-        If 1, only activated neurons are considered. If -1, only inhibited neurons are considered.
-    ko_hypo_only : bool, optional
-        If True, only KO-Hypo data is used for KO comparisons (default is True).
-    stim_ampl : str or list, optional
-        Specifies the stimulation amplitude(s) to include. Can be "all" or a specific value/list of values (default is "all").
-    ylim : list, optional
-        Specifies the y-axis limits for the plots. If an empty list is provided, the limits are determined automatically.
-    no_go_normalize : bool, optional
-        If True, normalizes the response rates by subtracting the number of responsive neurons in no-go trials (default is True).
-
-    Returns
-    -------
-    None
-        The function displays a matplotlib figure with boxplots and saves it as a PDF if `save_figure` is enabled.
-
-    Notes
-    -----
-    - The function calls `fraction_resp()` to compute the percentage of responsive neurons.
-    - Boxplots are generated for detected and undetected stimuli across neuron types (EXC, INH).
-    - The KO group can include either KO-Hypo only or both KO and KO-Hypo depending on `ko_hypo_only`.
-    - The function assumes external plotting utilities from `ppt` (e.g., `ppt.boxplot`).
-
-    Raises
-    ------
-    ValueError
-        If `pattern` is not 0, 1, or -1.
-    AttributeError
-        If `fraction_resp()` fails due to missing attributes in `recs`.
-    """
-    if ko_hypo_only:
-        ko_type = "KO-Hypo"
-        color_ko = ppt.hypo_color
-        light_color_ko = ppt.hypo_light_color
-    else:
-        ko_type = "(KO + KO-Hypo)"
-        color_ko = ppt.all_ko_color
-        light_color_ko = ppt.all_ko_light_color
-    fig, axs = plt.subplots(2, 2, figsize=(12, 16), constrained_layout=True)
-    for y_index, n_type in enumerate(["EXC", "INH"]):
-        wt_det, ko_det, wt_undet, ko_undet = fraction_resp(pattern=pattern, n_type=n_type, ko_hypo_only=ko_hypo_only,
-                                                           stim_ampl=stim_ampl, no_go_normalize=no_go_normalize)
-        ppt.boxplot(axs[y_index, 0], wt_det, ko_det, paired=False, ylabel="Neurons(%)", title=f"{n_type} Detected",
-                    ylim=ylim,
-                    colors=[ppt.wt_color, color_ko], det_marker=True)
-        ppt.boxplot(axs[y_index, 1], wt_undet, ko_undet, paired=False, ylabel="Neurons(%)",
-                    title=f"{n_type} Undetected", ylim=ylim,
-                    colors=[ppt.wt_light_color, light_color_ko], det_marker=False)
-    t_pattern = "recruited (1 and -1)" if pattern == 0 else ("activated (1)" if pattern == 1 else "inhibited (-1)")
-    fig.suptitle(
-        f"Percentage of neurons {t_pattern} during hit and miss trials (amplitude: {stim_ampl}) - WT vs. {ko_type}",
-        fontsize=5)
-    plt.show()
-
-
-def plot_neuron_frac_det_undet(pattern, ko_hypo_only=True, stim_ampl="all", ylim=[], no_go_normalize=True):
-    """
-    Compare the fraction of responsive neurons between detected and undetected stimuli.
-
-    This function visualizes the percentage of neurons responding to detected and undetected stimuli
-    for both excitatory (EXC) and inhibitory (INH) neuron types. It compares WT and KO (or KO-Hypo) groups
-    using boxplots.
-
-    Parameters
-    ----------
-    pattern : int
-        The response pattern to analyze. If 0, both activation (1) and inhibition (-1) are included.
-        If 1, only activated neurons are considered. If -1, only inhibited neurons are considered.
-    ko_hypo_only : bool, optional
-        If True, only KO-Hypo data is used for KO comparisons (default is True).
-    stim_ampl : str or list, optional
-        Specifies the stimulation amplitude(s) to include. Can be "all" or a specific value/list of values (default is "all").
-    ylim : list, optional
-        Specifies the y-axis limits for the plots. If an empty list is provided, the limits are determined automatically.
-    no_go_normalize : bool, optional
-        If True, normalizes the response rates by subtracting the number of responsive neurons in no-go trials (default is True).
-
-    Returns
-    -------
-    None
-        The function displays a matplotlib figure with boxplots and saves it as a PDF if `save_figure` is enabled.
-
-    Notes
-    -----
-    - The function calls `fraction_resp()` to compute the percentage of responsive neurons.
-    - Boxplots compare detected vs. undetected stimuli within WT and KO (KO-Hypo) groups.
-    - The KO group can include either KO-Hypo only or both KO and KO-Hypo depending on `ko_hypo_only`.
-    - The function assumes external plotting utilities from `ppt` (e.g., `ppt.boxplot`).
-    - Results are saved as CSV files if needed.
-
-    Raises
-    ------
-    ValueError
-        If `pattern` is not 0, 1, or -1.
-    AttributeError
-        If `fraction_resp()` fails due to missing attributes in `recs`.
-    """
-    if ko_hypo_only:
-        ko_type = "KO-Hypo"
-        color_ko = ppt.hypo_color
-        light_color_ko = ppt.hypo_light_color
-    else:
-        ko_type = "(KO + KO-Hypo)"
-        color_ko = ppt.all_ko_color
-        light_color_ko = ppt.all_ko_light_color
-
-    fig, axs = plt.subplots(2, 2, figsize=(12, 16), constrained_layout=True)
-    for y_index, n_type in enumerate(["EXC", "INH"]):
-        wt_det, ko_det, wt_undet, ko_undet = fraction_resp(pattern=pattern, n_type=n_type, ko_hypo_only=ko_hypo_only,
-                                                           stim_ampl=stim_ampl, no_go_normalize=no_go_normalize)
-        ppt.boxplot(axs[y_index, 0], wt_det, wt_undet, paired=True, ylabel="Neurons(%)", title=f"{n_type} - WT",
-                    ylim=ylim,
-                    colors=[ppt.wt_color, ppt.wt_light_color])
-        ppt.boxplot(axs[y_index, 1], ko_det, ko_undet, paired=True, ylabel="Neurons(%)", title=f"{n_type} - {ko_type}",
-                    ylim=ylim,
-                    colors=[color_ko, light_color_ko])
-        # excel_df_WT = pd.DataFrame(data={"WT Det": wt_det, "WT Undet": wt_undet})
-        # excel_df_KO = pd.DataFrame(data={"Hypo Det": hypo_det, "Hypo Undet": hypo_undet})
-        # excel_df_WT.to_csv(f"{server_address}data/frac_{n_type}_{stim_ampl}_{pattern}_WT.csv", sep=",")
-        # excel_df_KO.to_csv(f"{server_address}data/frac_{n_type}_{stim_ampl}_{pattern}_KO.csv", sep=",")
-    t_pattern = "recruited (1 and -1)" if pattern == 0 else ("activated (1)" if pattern == 1 else "inhibited (-1)")
-    fig.suptitle(
-        f"Comparison of neurons {t_pattern} between hit and miss trials (amplitude: {stim_ampl}) - WT & {ko_type} [No-go norm={no_go_normalize}]",
-        fontsize=5)
-    title = f"n_resp_({pattern})_{stim_ampl}_amp_[WT_{ko_type}]"
-    fig.canvas.manager.set_window_title(title)
-    plt.show()
-
-
-def resp_contrast(pattern="recruited", stim_ampl="all", method="ratio", ylim=[]):
-    """
-    Compare the contrast in neuronal responses between detected and undetected trials.
-
-    This function computes and visualizes the contrast (either as a ratio or delta) of responsive neurons
-    between detected and undetected stimuli for excitatory (EXC) and inhibitory (INH) neurons. WT and KO-Hypo
-    groups are compared using boxplots.
-
-    Parameters
-    ----------
-    pattern : str, optional
-        Specifies the type of neuronal response to analyze. Must be one of:
-        - `"recruited"` (both activation and inhibition, default)
-        - `"activated"` (only activation)
-        - `"inhibited"` (only inhibition)
-    stim_ampl : str or list, optional
-        Specifies the stimulation amplitude(s) to include. Can be `"all"` or a specific value/list of values (default is `"all"`).
-    method : str, optional
-        The method used to compute response contrast. Must be one of:
-        - `"ratio"` (ratio of detected to undetected response, default)
-        - `"delta"` (difference between detected and undetected response)
-    ylim : list, optional
-        Specifies the y-axis limits for the plots. If an empty list is provided, the limits are determined automatically.
-
-    Returns
-    -------
-    None
-        The function displays a matplotlib figure with boxplots and saves it as a PDF if `save_figure` is enabled.
-
-    Notes
-    -----
-    - Calls `fraction_resp()` to compute the percentage of responsive neurons.
-    - Boxplots compare detected vs. undetected trials across neuron types (EXC, INH).
-    - The contrast is computed either as a ratio (`detected / undetected`) or as a difference (`detected - undetected`).
-    - The function assumes external plotting utilities from `ppt` (e.g., `ppt.boxplot`).
-    - Results can be saved as CSV files if needed.
-
-    Raises
-    ------
-    ValueError
-        If `pattern` is not `"recruited"`, `"activated"`, or `"inhibited"`, or if `method` is not `"ratio"` or `"delta"`.
-    AttributeError
-        If `fraction_resp()` fails due to missing attributes in `recs`.
-    """
-    pat_dict = {"recruited": 0, "activated": 1, "inhibited": -1}
-    fig, axs = plt.subplots(1,2,figsize=(12,8), constrained_layout=True)
-    for i, type in enumerate(["EXC", "INH"]):
-        wt_det, ko_det, wt_undet, ko_undet = fraction_resp(pattern=pat_dict[pattern], n_type=type, ko_hypo_only=True, stim_ampl=stim_ampl)
-        if method == "ratio":
-            wt_nan = np.logical_and(wt_det>0, wt_undet>0)
-            ko_nan = np.logical_and(ko_det>0, ko_undet>0)
-            wt_det, ko_det, wt_undet, ko_undet = wt_det[wt_nan], ko_det[ko_nan], wt_undet[wt_nan], ko_undet[ko_nan]
-            wt = wt_det/wt_undet
-            ko = ko_det/ko_undet
-        elif method == "delta":
-            wt = wt_det - wt_undet
-            ko = ko_det - ko_undet
-        ppt.boxplot(axs[i], wt, ko, ylabel=f"{method} nb neuron Hit/Miss", title=type, paired=False, ylim=ylim)
-        fig.suptitle(f"Comparaison of {method} of {pattern} neurons between detected and undetected trials for {stim_ampl} stimulus", fontsize=10)
-        # excel_df_WT = pd.DataFrame(data={"WT": wt})
-        # excel_df_KO = pd.DataFrame(data={"Hypo": ko})
-        # excel_df_WT.to_csv(f"{server_address}data/{method}_{type}_{stim_ampl}_{pattern}_WT.csv", sep=",")
-        # excel_df_KO.to_csv(f"{server_address}data/{method}_{type}_{stim_ampl}_{pattern}_KO.csv", sep=",")
-        title = f"{method}({pattern})_{stim_ampl}_amp"
-        fig.canvas.manager.set_window_title(title)
-    plt.show()
-
-
 def plot_neuron_perc_amp(recs, pattern="recruited", detected_trials=True, undetected_trials=True, nogo_norm=False, ylim=[],
                          transformation=None, normality=[False, False], homogeneity=[False, False], qq_show=True,
-                         colors=["#c57c9a", "firebrick", "#326993"]):
+                         colors=[sty.ko_color, sty.hypo_color, sty.wt_color]):
+    """
+    Plot the percentage of responsive neurons as a function of stimulation amplitude.
+
+    This function computes and visualizes the proportion of excitatory (EXC) and inhibitory (INH) neurons
+    recruited across stimulation amplitudes. Neurons can be analyzed for detected, undetected, or both trial types.
+    Percentages are computed relative to the total number of neurons in each recording, with optional normalization
+    against no-go trials. Results are plotted as amplitude–response curves using `ppt.curveplot`.
+
+    Parameters
+    ----------
+    recs : list
+        List of recording objects containing neuronal activity and metadata.
+    pattern : str, optional
+        Type of neuronal response to analyze. Must be one of:
+        - "recruited" (both activation and inhibition, default)
+        - "activated" (only activation)
+        - "inhibited" (only inhibition)
+    detected_trials : bool, optional
+        If True, includes detected trials in the analysis (default is True).
+    undetected_trials : bool, optional
+        If True, includes undetected trials in the analysis (default is True).
+    nogo_norm : bool, optional
+        If True, subtracts the number of recruited neurons in no-go trials for normalization (default is False).
+    ylim : list, optional
+        Y-axis limits for the plots. If empty, limits are determined automatically.
+    transformation : str or None, optional
+        Statistical transformation applied to the data (default is None).
+    normality : list of bool, optional
+        Whether to consider normality for each neuron type [EXC, INH] in statistical tests (default is [False, False]).
+    homogeneity : list of bool, optional
+        Whether to consider variance homogeneity for each neuron type [EXC, INH] (default is [False, False]).
+    qq_show : bool, optional
+        If True, displays QQ-plots for normality diagnostics (default is True).
+    colors : list, optional
+        List of colors for plotting different genotypes. Default is `[sty.ko_color, sty.hypo_color, sty.wt_color]`.
+
+    Returns
+    -------
+    dict
+        A dictionary containing per-neuron-type results:
+        - "data_EXC"/"data_INH" : DataFrame with percentages per amplitude and genotype
+        - "test_EXC"/"test_INH" : Results of the statistical test
+        - "post_EXC"/"post_INH" : Post-hoc test results
+    """
     pat_dict = {"recruited": 0, "activated": 1, "inhibited": -1}
     assert pattern in pat_dict.keys()
     assert detected_trials or undetected_trials
@@ -1085,9 +1136,39 @@ def plot_neuron_perc_amp(recs, pattern="recruited", detected_trials=True, undete
     return results
 
 
+# Not used in the final paper
 def plot_response_variance(features_df, variable="act_EXC_perc"):
-    """Plot the variance in the number of activated pyramidal neurons according to the amplitude of stimulation for the 3 genotypes"""
-    color_dict = {"WT": ppt.wt_color, "KO": ppt.ko_color, "KO-Hypo": ppt.hypo_color}
+    """
+    Plot the variance of neuronal responses as a function of stimulation amplitude.
+
+    For each recording, this function computes the variance of a specified feature
+    (e.g., percentage of activated excitatory neurons) across trials, aligned by
+    the difference between stimulation amplitude and the threshold of the recording.
+    Amplitudes are sampled from -10 to +10 µm relative to threshold in steps of 2 µm.
+    Variance values are also normalized by the maximum variance within the recording
+    to yield relative variance. The function generates two plots: one for raw variance
+    and one for relative variance, displaying both individual curves and genotype
+    averages.
+
+    Parameters
+    ----------
+    features_df : pandas.DataFrame
+        DataFrame containing extracted neuronal features with at least the columns:
+        "ID", "Genotype", "threshold", "amplitude", and the specified `variable`.
+    variable : str, optional
+        Column name of the feature for which to compute variance
+        (default is "act_EXC_perc").
+
+    Returns
+    -------
+    pandas.DataFrame
+        A DataFrame with one row per recording, containing:
+        - "ID" : Recording identifier
+        - "Genotype" : Genotype label
+        - "Threshold" : Stimulation threshold of the recording
+        - "Variance" : List of variances per amplitude relative to threshold
+        - "Relative_Variance" : List of normalized variances (divided by maximum variance)
+    """
     gp_data = features_df.drop(columns=["bounded_x0", "behavior"]).groupby(["ID", "Genotype", "threshold", "amplitude"], as_index=False).std()
     rows = []
     for rec_id in gp_data["ID"].unique():
@@ -1106,10 +1187,10 @@ def plot_response_variance(features_df, variable="act_EXC_perc"):
     # Plotting
     fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(20, 10), constrained_layout=True)
     for _, rec_row in var_data.iterrows():
-        ax[0].scatter(np.arange(-10, 11, 2), rec_row["Variance"], color=color_dict[rec_row["Genotype"]], lw=2, alpha=0.5, s=5)
-        ax[0].plot(np.arange(-10, 11, 2), rec_row["Variance"], color=color_dict[rec_row["Genotype"]], lw=2, alpha=0.5)
-        ax[1].scatter(np.arange(-10, 11, 2), rec_row["Relative_Variance"], color=color_dict[rec_row["Genotype"]], lw=2, alpha=0.5, s=5)
-        ax[1].plot(np.arange(-10, 11, 2), rec_row["Relative_Variance"], color=color_dict[rec_row["Genotype"]], lw=2, alpha=0.5)
+        ax[0].scatter(np.arange(-10, 11, 2), rec_row["Variance"], color=sty.color_dict[rec_row["Genotype"]][0], lw=2, alpha=0.5, s=5)
+        ax[0].plot(np.arange(-10, 11, 2), rec_row["Variance"], color=sty.color_dict[rec_row["Genotype"]][0], lw=2, alpha=0.5)
+        ax[1].scatter(np.arange(-10, 11, 2), rec_row["Relative_Variance"], color=sty.color_dict[rec_row["Genotype"]][0], lw=2, alpha=0.5, s=5)
+        ax[1].plot(np.arange(-10, 11, 2), rec_row["Relative_Variance"], color=sty.color_dict[rec_row["Genotype"]][0], lw=2, alpha=0.5)
     for ax_id in range(2):
         ax[ax_id].set_xlabel("Amplitude difference to threshold (in µm)", fontsize=10)
         ax[ax_id].set_xticks(np.arange(-10, 11, 2))
@@ -1122,15 +1203,44 @@ def plot_response_variance(features_df, variable="act_EXC_perc"):
         rel_var_array = np.stack(geno_subset["Relative_Variance"].values)
         mean_var = np.nanmean(var_array, axis=0)
         rel_mean_var = np.nanmean(rel_var_array, axis=0)
-        ax[0].plot(np.arange(-10, 11, 2), mean_var, color=color_dict[geno], lw=4, alpha=0.75)
-        ax[1].plot(np.arange(-10, 11, 2), rel_mean_var, color=color_dict[geno], lw=4, alpha=0.75)
+        ax[0].plot(np.arange(-10, 11, 2), mean_var, color=sty.color_dict[geno][0], lw=4, alpha=0.75)
+        ax[1].plot(np.arange(-10, 11, 2), rel_mean_var, color=sty.color_dict[geno][0], lw=4, alpha=0.75)
     fig.suptitle(f"Variance in {variable} across amplitude of stimulation", fontsize=12)
     fig.canvas.manager.set_window_title(f"Var_{variable}_ampl")
     plt.show()
     return var_data
 
 
+# Not used in the final paper
 def get_perc_non_recruited_neurons_trials(rec, amplitude_filter=None, n_type="EXC"):
+    """
+    Compute the percentage of neurons that show no recruitment across trials.
+
+    This function extracts the responsivity matrix for a given neuron type and
+    computes the proportion of neurons that remain non-recruited (no activation
+    or inhibition across all selected trials). The trials can be filtered either
+    by a specific stimulation amplitude or by the session threshold.
+
+    Parameters
+    ----------
+    rec : object
+        Recording object containing neuronal data, with attributes:
+        - `stim_ampl` : array of stimulation amplitudes
+        - `session_threshold` : threshold amplitude for the session
+        - `matrices` : dictionary containing responsivity matrices per neuron type.
+    amplitude_filter : {"threshold", int, None}, optional
+        Defines which trials to include:
+        - `"threshold"` : select trials at the session threshold
+        - `int` : select trials at a specific amplitude
+        - `None` (default) : include all trials
+    n_type : {"EXC", "INH"}, optional
+        Neuron type to analyze (default is `"EXC"`).
+
+    Returns
+    -------
+    float
+        Percentage of neurons that are non-recruited across the selected trials.
+    """
     resp = rec.matrices[n_type]["Responsivity"]
     # Filtering the trials of desired amplitude
     if amplitude_filter == "threshold":
@@ -1143,26 +1253,41 @@ def get_perc_non_recruited_neurons_trials(rec, amplitude_filter=None, n_type="EX
     return (np.all(resp == 0, axis=1).sum() / resp.shape[0]) * 100
 
 
-def recr_stability_across_trials(features_df):
-    pass
-    # data = features_df.drop(columns=features_df.col)
-
 
 
 # endregion ============================================================================================================
 # region ===================================== Neuronal clusters =======================================================
 
+# Not used in the final paper
 def get_concat_act(rec, n_type="EXC", zscore=True, pre_stim=False):
     """
-    Returns an array of the concatenated activity for all trials for the provided rec.
+    Concatenate neuronal activity across all trials for a given recording.
+
+    This function extracts either z-scored or raw fluorescence traces from
+    excitatory or inhibitory neurons, aligns them to the stimulation onset,
+    and concatenates them trial by trial into a single array. Optionally,
+    a fixed pre-stimulation period can be included.
+
     Parameters
     ----------
-    rec
-    zscore
+    rec : object
+        Recording object containing neuronal activity, with attributes:
+        - `zscore_exc` / `zscore_inh` : z-scored activity matrices
+        - `df_f_exc` / `df_f_inh` : raw fluorescence activity matrices
+        - `stim_time` : list or array of stimulation onset frames
+        - `stim_durations` : list or array of stimulation durations (in frames).
+    n_type : {"EXC", "INH"}, optional
+        Neuron type to analyze (default is `"EXC"`).
+    zscore : bool, optional
+        Whether to use z-scored activity (`True`, default) or raw fluorescence (`False`).
+    pre_stim : bool, optional
+        If `True`, shifts the window 15 frames before the stimulation onset
+        for each trial (default is `False`).
 
     Returns
     -------
-
+    np.ndarray
+        Concatenated activity array of shape `(n_neurons, total_frames)` for all trials.
     """
     if n_type == "EXC":
         activity = rec.zscore_exc if zscore else rec.df_f_exc
@@ -1179,16 +1304,45 @@ def get_concat_act(rec, n_type="EXC", zscore=True, pre_stim=False):
     return np.concatenate(frames_trials, axis=1)
 
 
+# Not used in the final paper
 def pca_neurons(recs, n_type="EXC", min_trials=5, pre_stim=False):
     """
-    Try to cluster neurons based on their activity.
+    Perform PCA on neuronal activity to explore clustering of neurons.
+
+    This function extracts neuronal activity across trials, performs a principal
+    component analysis (PCA), and visualizes neurons in a 3D PCA space. Neurons
+    are colored according to their recruitment pattern: activated (1, red), inhibited
+    (-1, blue), both activated and inhibited (2, purple), or non-recruited (0, gray).
+    Recruitment is defined by having at least `min_trials` activations and/or inhibitions.
+    PCA is performed with 3 components using `svd_solver="arpack"` and whitening enabled.
+
+    Parameters
+    ----------
+    recs : list
+        List of recording objects, each containing:
+        - `matrices[n_type]["Responsivity"]` : responsivity matrix
+        - `stim_time` : stimulation onset frames
+        - `stim_durations` : stimulation durations
+        - `zscore_exc` / `zscore_inh` or `df_f_exc` / `df_f_inh` : neuronal activity
+        - `filename`, `genotype`, `threshold` : metadata for plotting and output.
+    n_type : {"EXC", "INH"}, optional
+        Neuron type to analyze (default is `"EXC"`).
+    min_trials : int, optional
+        Minimum number of trials required for a neuron to be considered recruited
+        (default is 5).
+    pre_stim : bool, optional
+        If `True`, include 15 frames before stimulation onset when extracting activity
+        (default is `False`).
 
     Returns
     -------
-
+    pd.DataFrame
+        Summary table with one row per recording, including:
+        - `Genotype`
+        - `ID` (filename)
+        - `Threshold`
+        - Variance explained by `PC1` and `PC2`.
     """
-    color_dict = {"WT": [ppt.wt_color, ppt.wt_light_color, "gray"], "KO": [ppt.ko_color, ppt.ko_light_color, "gray"],
-                  "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color, "gray"]}
     pattern_color = {-1: "blue", 0: "gray", 1: "red", 2: "purple"}
     rows = []
     fig, axs = plt.subplots(nrows=4, ncols=6, figsize=(24, 12), sharex=True, constrained_layout=True, subplot_kw={'projection': '3d'})
@@ -1215,7 +1369,7 @@ def pca_neurons(recs, n_type="EXC", min_trials=5, pre_stim=False):
         ax[ax_id].set_ylabel(f"PC2 ({explained_var[1]:.1%})", fontsize=10)
         ax[ax_id].set_zlabel(f"PC3 ({explained_var[2]:.1%})", fontsize=10)
         ax[ax_id].tick_params(axis='both', labelsize=10)
-        ax[ax_id].set_title(f"{rec.filename} ({rec.genotype})", color=color_dict[rec.genotype][0], fontsize=10)
+        ax[ax_id].set_title(f"{rec.filename} ({rec.genotype})", color=sty.color_dict[rec.genotype][0], fontsize=10)
         rows.append({"Genotype": rec.genotype, "ID": rec.filename, "Threshold": rec.threshold,
                      "PC1": explained_var[0], "PC2": explained_var[1]})
     for extra_ax in ax[len(recs):]:
@@ -1226,10 +1380,40 @@ def pca_neurons(recs, n_type="EXC", min_trials=5, pre_stim=False):
     return pd.DataFrame(rows)
 
 
+# Not used in the final paper
 def compare_pca_trial_vs_concat(recs, n_type="EXC"):
+    """
+    Compare PCA projections of neuronal activity between individual trials and concatenated trials.
+
+    For each recording, this function separates threshold-level trials into hit and miss groups,
+    extracts neuronal activity, and performs a PCA on each trial individually as well as on the
+    concatenated trials. Neurons are plotted in a 2D PCA space, with their response pattern encoded
+    by different markers: activated (1, "^"), inhibited (-1, "s"), or non-responsive (0, "o"). Colors
+    are assigned uniquely to neurons to facilitate tracking across trials. This visualization highlights
+    whether trial-by-trial PCA embeddings differ from the global structure observed when concatenating
+    all trials of the same behavioral outcome.
+
+    Parameters
+    ----------
+    recs : list
+        List of recording objects, each containing:
+        - `zscore_exc` / `zscore_inh` : activity matrices.
+        - `matrices[n_type]["Responsivity"]` : responsivity matrix per trial.
+        - `stim_ampl` : stimulation amplitudes.
+        - `stim_time` : stimulation onset frames.
+        - `stim_durations` : duration of each stimulation.
+        - `session_threshold` : threshold amplitude for behavior.
+        - `detected_stim` : trial-by-trial detection outcome.
+        - `filename`, `genotype` : metadata for labeling plots.
+    n_type : {"EXC", "INH"}, optional
+        Neuron type to analyze (default is `"EXC"`).
+
+    Returns
+    -------
+    None
+        The function generates PCA plots for each recording and displays them.
+    """
     cmap = plt.get_cmap("rainbow")
-    color_dict = {"WT": [ppt.wt_color, ppt.wt_light_color], "KO": [ppt.ko_color, ppt.ko_light_color],
-                  "KO-Hypo": [ppt.hypo_color, ppt.hypo_light_color]}
     marker_map = {-1: "s", 0: "o", 1: "^"}
     for rec in recs:
         activity = rec.zscore_exc if n_type == "EXC" else rec.zscore_inh
@@ -1269,7 +1453,7 @@ def compare_pca_trial_vs_concat(recs, n_type="EXC"):
                 ax[counts + trial_id].set_xlabel(f"PC1 ({explained_var[0]:.1%})", fontsize=10)
                 ax[counts + trial_id].set_ylabel(f"PC2 ({explained_var[1]:.1%})", fontsize=10)
                 ax[counts + trial_id].tick_params(axis='both', labelsize=10)
-                ax[counts + trial_id].set_title(f"{behavior} n°{trial_id}", color=color_dict[rec.genotype][0 if behavior == "Hit" else 1], fontsize=10)
+                ax[counts + trial_id].set_title(f"{behavior} n°{trial_id}", color=sty.color_dict[rec.genotype][0 if behavior == "Hit" else 1], fontsize=10)
             # PCA on the concatenated trials
             pca = PCA(n_components=2, svd_solver="auto", whiten=False)
             X_pca_concat = pca.fit_transform(type_activity)
@@ -1279,7 +1463,7 @@ def compare_pca_trial_vs_concat(recs, n_type="EXC"):
             ax[counts + trial_id + 1].set_xlabel(f"PC1 ({explained_var[0]:.1%})", fontsize=10)
             ax[counts + trial_id + 1].set_ylabel(f"PC2 ({explained_var[1]:.1%})", fontsize=10)
             ax[counts + trial_id + 1].tick_params(axis='both', labelsize=10)
-            ax[counts + trial_id + 1].set_title(f"{behavior} (concatenated)", color=color_dict[rec.genotype][0 if behavior == "Hit" else 1], fontsize=10)
+            ax[counts + trial_id + 1].set_title(f"{behavior} (concatenated)", color=sty.color_dict[rec.genotype][0 if behavior == "Hit" else 1], fontsize=10)
             counts += trial_id + 2
         # Setting the unused axes off
         for ax_id in ax[counts:]:
@@ -1289,18 +1473,43 @@ def compare_pca_trial_vs_concat(recs, n_type="EXC"):
         plt.show()
 
 
+# Not used in the final paper
 def hit_tuned_neurons(recs, normalize=True):
     """
-    Compares the numbers of neurons that are significantly tuned to detection between genotypes.
-    Normalization parameter is used to know if we have more reliable responders because we have more responders or just
-    if we really have a greater proportion of reliable responders no matter the number of responders during hits.
+    Compare the proportion of neurons significantly tuned to hit detection across genotypes.
+
+    For each recording, this function computes the fraction of excitatory and inhibitory neurons
+    that are reliably activated or inhibited during hit trials. If `normalize=True`, the number
+    of tuned neurons is expressed relative to the pool of neurons that were responsive during
+    detected trials, which accounts for differences in overall responsivity. If `normalize=False`,
+    tuning proportions are calculated relative to the total number of neurons of each type,
+    which highlights global group-level differences but ignores the variability in the number
+    of recruited neurons across recordings. The results are summarized in a DataFrame and
+    illustrated with boxplots comparing WT, KO-Hypo, and KO genotypes.
 
     Parameters
     ----------
-    recs
+    recs : dict
+        Dictionary of recording objects, each containing:
+        - `matrices["EXC"/"INH"]["Responsivity"]` : responsivity matrix per trial.
+        - `detected_stim` : Boolean mask for detected trials.
+        - `hit_tuned_exc` / `hit_tuned_inh` : tuning classification per neuron
+          (-1 = inhibited, 0 = non-tuned, 1 = activated).
+        - `zscore_exc` / `zscore_inh` : activity matrices (to get neuron counts).
+        - `genotype`, `filename` : metadata for grouping and labeling.
+    normalize : bool, optional
+        Whether to normalize the counts of hit-tuned neurons by the number of responsive
+        neurons in detected trials (`True`) or by the total number of neurons of each type (`False`).
+        Default is `True`.
 
     Returns
     -------
+    pd.DataFrame
+        Summary of tuning proportions per recording, including:
+        - `"exc_activated"`, `"exc_inhibited"`, `"inh_activated"`, `"inh_inhibited"`
+          : normalized proportions.
+        - `"_perc"` versions of the above, computed relative to the total neuron count.
+        - `"Genotype"`, `"ID"` : recording metadata.
 
     """
     rows = []
@@ -1339,13 +1548,13 @@ def hit_tuned_neurons(recs, normalize=True):
         ko_perc = data[data["Genotype"] == "KO"][f"{cluster}_perc"].values
 
         ppt.boxplot(ax[0, col_id], wt, hypo, paired=False, ylabel=f"n {cluster}", title=f"WT/KO-Hypo",
-                    ylim=[], colors=[ppt.wt_color, ppt.hypo_color])
+                    ylim=[], colors=[sty.wt_color, sty.hypo_color])
         ppt.boxplot(ax[1, col_id], wt_perc, hypo_perc, paired=False, ylabel=f"% {cluster}", title=f"WT/KO-Hypo",
-                    ylim=[], colors=[ppt.wt_color, ppt.hypo_color])
+                    ylim=[], colors=[sty.wt_color, sty.hypo_color])
         ppt.boxplot(ax[2, col_id], wt, ko, paired=False, ylabel=f"n {cluster}", title=f"WT/KO",
-                    ylim=[], colors=[ppt.wt_color, ppt.ko_color])
+                    ylim=[], colors=[sty.wt_color, sty.ko_color])
         ppt.boxplot(ax[3, col_id], wt_perc, ko_perc, paired=False, ylabel=f"% {cluster}", title=f"WT/KO",
-                    ylim=[], colors=[ppt.wt_color, ppt.ko_color])
+                    ylim=[], colors=[sty.wt_color, sty.ko_color])
     fig.suptitle(f"Comparison between genotypes of the number of Hit tuned neurons\n[Normalization by recruited = {normalize}]", fontsize=12)
     fig.canvas.manager.set_window_title(f"Hit tuned neurons_norm={normalize}")
     # plt.savefig(f"Z:/Current_members/Ourania_Semelidou/2p/Figures_paper & submissions/Figures_april_2025/Hit_tuned_neurons_{normalize}.pdf")
@@ -1353,18 +1562,34 @@ def hit_tuned_neurons(recs, normalize=True):
     return data
 
 
+# Not used in the final paper
 def plot_hit_amp_tuned(recs):
     """
-    Plots a graph representing the hit tuned and amplitude tuned neurons for each mouse.
+    Visualize and summarize hit-tuned and amplitude-tuned neurons for each recording.
+
+    For each mouse, this function plots side-by-side heatmaps showing the tuning
+    classification of excitatory (EXC) and inhibitory (INH) neurons with respect to
+    hit detection and amplitude discrimination. Neurons are color-coded according
+    to their tuning category (-1 = inhibited, 0 = non-tuned, 1 = activated). The
+    function also returns a DataFrame summarizing the raw tuning arrays for each
+    recording.
+
     Parameters
     ----------
-    recs
+    recs : list
+        List of recording objects, each containing:
+        - `hit_tuned_exc`, `amp_tuned_exc` : arrays of tuning classification for EXC neurons.
+        - `hit_tuned_inh`, `amp_tuned_inh` : arrays of tuning classification for INH neurons.
+        - `genotype`, `filename` : metadata for labeling and grouping.
 
     Returns
     -------
-
+    pd.DataFrame
+        Summary table with one row per recording, containing:
+        - `"Hit tuned EXC"`, `"Amp tuned EXC"`,
+        - `"Hit tuned INH"`, `"Amp tuned INH"`,
+        along with `"Genotype"` and `"ID"`.
     """
-    color_dict = {"WT": ppt.wt_color, "KO": ppt.ko_color, "KO-Hypo": ppt.hypo_color}
     rows = []
     fig, ax = plt.subplots(nrows=2, ncols=22, figsize=(22, 12), gridspec_kw={'height_ratios': [3, 1]},
                            constrained_layout=True)
@@ -1374,13 +1599,13 @@ def plot_hit_amp_tuned(recs):
                      "Hit tuned INH": rec.hit_tuned_inh, "Amp tuned INH": rec.amp_tuned_inh})
         im_exc = ax[0, col].imshow(np.vstack([rec.hit_tuned_exc, rec.amp_tuned_exc]).T, cmap="inferno", aspect='auto',
                                    interpolation='nearest', vmin=-1, vmax=1)
-        ax[0, col].set_title(f"{rec.filename}\nEXC", fontsize=10, fontweight="bold", color=color_dict[rec.genotype])
+        ax[0, col].set_title(f"{rec.filename}\nEXC", fontsize=10, fontweight="bold", color=sty.color_dict[rec.genotype][0])
         ax[0, col].set_yticks([])
         ax[0, col].set_xticks([0, 1])
         ax[0, col].set_xticklabels(["Hit", "Amp"], fontsize=8, rotation=90)
         im_inh = ax[1, col].imshow(np.vstack([rec.hit_tuned_inh, rec.amp_tuned_inh]).T, cmap="inferno", aspect='auto',
                                    interpolation='nearest', vmin=-1, vmax=1)
-        ax[1, col].set_title(f"{rec.filename}\nINH", fontsize=10, fontweight="bold", color=color_dict[rec.genotype])
+        ax[1, col].set_title(f"{rec.filename}\nINH", fontsize=10, fontweight="bold", color=sty.color_dict[rec.genotype][0])
         ax[1, col].set_yticks([])
         ax[1, col].set_xticks([0, 1])
         ax[1, col].set_xticklabels(["Hit", "Amp"], fontsize=8, rotation=90)
@@ -1391,7 +1616,40 @@ def plot_hit_amp_tuned(recs):
     return tuned_df
 
 
+# Not used in the final paper
 def neurons_hit_consistency(recs):
+    """
+    Evaluate the consistency of hit-tuned neurons across detected trials.
+
+    For each recording and neuron type (EXC, INH), the function calculates how
+    consistently a neuron responds in the same direction (activated or inhibited)
+    across all detected stimuli. Neurons labeled as hit-tuned are categorized as
+    "ON" (activated) or "OFF" (inhibited), and their consistency is expressed as
+    the proportion of trials in which their responsivity matches their tuning
+    label (ON = +1, OFF = -1). Only neurons labeled as hit-tuned are included in
+    the analysis. Results are aggregated per recording and genotype, and a figure
+    (2×2 grid of boxplots) is produced to compare WT and KO-Hypo groups for each
+    neuron type and tuning category.
+
+    Parameters
+    ----------
+    recs : dict
+        Dictionary of recording objects, where each object must provide:
+        - `matrices[n_type]["Responsivity"]` : trial-by-trial responsivity matrix
+          (neurons × trials) with values {-1, 0, 1}.
+        - `detected_stim` : indices of detected trials.
+        - `hit_tuned_exc`, `hit_tuned_inh` : arrays labeling neurons as
+          activated (1), inhibited (-1), or non-tuned (0).
+        - `genotype`, `filename` : metadata for grouping and labeling.
+
+    Returns
+    -------
+    pd.DataFrame
+        Aggregated consistency values with columns:
+        - `"Genotype"`, `"ID"`, `"Type"` (EXC or INH),
+        - `"Label"` (ON or OFF),
+        - `"Consistency"` (mean proportion across neurons).
+    """
     rows = []
     for rec in recs.values():
         for n_type in ["EXC", "INH"]:
@@ -1417,7 +1675,7 @@ def neurons_hit_consistency(recs):
         for col_id, label in enumerate(["OFF", "ON"]):
             ppt.boxplot(ax[row_id, col_id], gp_data[(gp_data["Type"] == n_type) & (gp_data["Label"] == label) & (gp_data["Genotype"] == "WT")]["Consistency"],
                         gp_data[(gp_data["Type"] == n_type) & (gp_data["Label"] == label) & (gp_data["Genotype"] == "KO-Hypo")]["Consistency"],
-                        paired=False, ylabel=f"Consistency", title=f"{n_type} - {label}", ylim=[], colors=[ppt.wt_color, ppt.hypo_color])
+                        paired=False, ylabel=f"Consistency", title=f"{n_type} - {label}", ylim=[], colors=[sty.wt_color, sty.hypo_color])
     fig.suptitle(f"Comparison of the consistency of hit tuned neuron response between WT and KO-Hypo", fontsize=12)
     fig.canvas.manager.set_window_title("Hit tuned consistency")
     plt.show()
@@ -1476,8 +1734,8 @@ if __name__ == '__main__':
     #         for comp in ["sub", "all_sub", "supra", "all_supra"]:
     #             compare_sub_supra_within(data, behavior_filter=filter, genotype=gen, comparison=comp)
     #   --- Between ---
-    # wt, hypo = compare_sub_supra_between(data, behavior_filter=None, gp1="WT-DMSO", gp2="WT-BMS", gp1_amps="real_mean_genotype", gp2_amps="gp1_threshold", colors=[ppt.wt_color, ppt.wt_bms_color])
-    wt, hypo = compare_sub_supra_between(full_data, behavior_filter=None, gp1="WT", gp2="KO-Hypo", gp1_amps="real_mean_genotype", gp2_amps="gp1_threshold", colors=[ppt.wt_color, ppt.hypo_color])
+    # wt, hypo = compare_sub_supra_between(data, behavior_filter=None, gp1="WT-DMSO", gp2="WT-BMS", gp1_amps="real_mean_genotype", gp2_amps="gp1_threshold", colors=[sty.wt_color, sty.wt_bms_color])
+    wt, hypo = compare_sub_supra_between(full_data, behavior_filter=True, gp1="WT-BMS", gp2="KO-BMS", gp1_amps="all", gp2_amps="all", colors=[sty.wt_color, sty.hypo_color])
     #   --- Between (Deltas) ---
     # sub_supra_delta_df = compare_sub_supra_deltas(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo")
     # sub_supra_delta_df_wt, sub_supra_delta_df_hypo = compare_sub_supra_deltas(data, behavior_filter=None, gp1="WT",
@@ -1490,28 +1748,25 @@ if __name__ == '__main__':
     # mean_det = np.mean(det.drop(columns="Genotype"), axis=0)
     # mean_undet = np.mean(undet.drop(columns="Genotype"), axis=0)
 
-    # results = plot_neuron_perc_amp(recs.values(), pattern="recruited", detected_trials=True, undetected_trials=False,
-    #                                nogo_norm=False, ylim=[0, 60], transformation="yeojohnson", normality=[True, False],
-    #                                homogeneity=[False, False], colors=[ppt.hypo_bms_color, ppt.hypo_color, ppt.wt_bms_color, ppt.wt_color])
+    results = plot_neuron_perc_amp(recs.values(), pattern="recruited", detected_trials=True, undetected_trials=True,
+                                   nogo_norm=False, ylim=[0, 60], transformation="yeojohnson", normality=[False, True],
+                                   homogeneity=[False, False], colors=[sty.hypo_bms_color, sty.hypo_color, sty.wt_bms_color, sty.wt_color])
     results = plot_neuron_perc_amp(recs.values(), pattern="recruited", detected_trials=True, undetected_trials=False,
                                    nogo_norm=False, ylim=[0, 60], transformation="yeojohnson", normality=[False, True],
-                                   homogeneity=[False, True], colors=[ppt.ko_color, ppt.hypo_color, ppt.wt_color])
+                                   homogeneity=[False, True], colors=[sty.ko_color, sty.hypo_color, sty.wt_color])
 
     nogo_df = nogo_fa_cr(recs.values(), condition=None)
-    delta_df = delta_hit_miss_comp(full_data, threshold_only=False, wt_threshold=False, condition=None)
+    delta_df = delta_hit_miss_comp(full_data, threshold_only=False, wt_threshold=False, condition="BMS")
     # delta_df = delta_hit_miss_comp(data, threshold_only=False, wt_threshold=False, condition="BMS") #/!\ full_data for all amp and data for threshold analysis
 
 
     # ====== Responsivity ======
     # recs_without_ko = {k: v for k, v in recs.items() if v.genotype != "KO"}
     # neurons = nb_neurons(recs.values())
-    # plot_neuron_frac_wt_ko(pattern=0, ko_hypo_only=True, stim_ampl="all", no_go_normalize=True, ylim=[0, 60])
-    # plot_neuron_frac_det_undet(pattern=-1, ko_hypo_only=True, stim_ampl="session_threshold", no_go_normalize=True, ylim=[0, 60])
-    # resp_contrast(pattern="recruited", stim_ampl="session_threshold", method="delta", ylim=[-10, 30])
     #
     # results = plot_neuron_perc_amp(recs.values(), pattern="activated", detected_trials=True, undetected_trials=True, ylim=[0, 30],
     #                                transformation="yeojohnson", normality=[False, False], homogeneity=[False, False], qq_show=False,
-    #                                colors=[ppt.ko_color, ppt.hypo_color, ppt.wt_color])
+    #                                colors=[sty.ko_color, sty.hypo_color, sty.wt_color])
     # To save the results from ampcurv:
     # test_exc = results['test_EXC']
     # post_exc = results["post_EXC"]

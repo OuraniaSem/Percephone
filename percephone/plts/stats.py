@@ -1,9 +1,3 @@
-"""
-01/11/2024
-Adrien Corniere
-
-Stats related plot functions like boxplot, barplot...
-"""
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from itertools import combinations
@@ -17,83 +11,48 @@ import pingouin as pg
 import statsmodels.api as sm
 from statsmodels.nonparametric.smoothers_lowess import lowess
 
-from percephone.plts.style import *
+import percephone.plts.style as sty
 from percephone.plts.utils import *
 from percephone.utils.math_formulas import inv_transform, arcsin_transform
 
-mpl.rcParams["axes.grid"] = False
-mpl.rcParams['font.size'] = 35
-mpl.rcParams['axes.linewidth'] = 3
-mpl.rcParams['lines.linewidth'] = 5
-# mpl.rcParams['font.size'] = 10
-# mpl.rcParams['axes.linewidth'] = 1
-# mpl.rcParams['lines.linewidth'] = 1
-font_signif = mpl.rcParams['font.size'] / 2
-
-mpl.rcParams["boxplot.whiskerprops.linewidth"] = 5
-mpl.rcParams["boxplot.boxprops.linewidth"] = 5
-mpl.rcParams["boxplot.capprops.linewidth"] = 5
-mpl.rcParams["boxplot.medianprops.linewidth"] = 5
-mpl.rcParams["boxplot.meanprops.linewidth"] = 5
-mpl.rcParams["boxplot.flierprops.linewidth"] = 5
-
-
-mpl.rcParams["xtick.labelsize"] = mpl.rcParams['font.size']
-mpl.rcParams["ytick.labelsize"] = mpl.rcParams['font.size']
-mpl.rcParams["axes.labelsize"] = mpl.rcParams['font.size']
-mpl.rcParams["axes.titlesize"] = 20
-mpl.rcParams["lines.markersize"] = 28
-# mpl.rcParams["axes.titlesize"] = 12
-# mpl.rcParams["lines.markersize"] = 8
-
-mpl.rcParams['svg.fonttype'] = 'none'
-
-mpl.rcParams["xtick.major.width"] = 3
-mpl.rcParams["xtick.minor.width"] = 2
-mpl.rcParams["xtick.major.size"] = 8
-mpl.rcParams["ytick.major.width"] = 3
-mpl.rcParams["ytick.minor.width"] = 2
-mpl.rcParams["ytick.major.size"] = 6
-mpl.rcParams["ytick.left"] = True
-
 mpl.use("Qt5Agg")
 
-wt_color = "#3d6993"
-wt_light_color = "#7aabd2"
-wt_bms_color = "#2bd0f1"
-wt_bms_light_color = "#95e7f8"
 
-all_ko_color = "#CC0000"
-all_ko_light_color = "#ff8080"
-all_ko_bms_color = "#c74375"
-all_ko_bms_light_color = "#e3a1ba"
-
-hypo_color = "firebrick"
-hypo_light_color = "#e18282"
-hypo_bms_color = "#da004a"
-hypo_bms_light_color = "#f17581"
-
-ko_color = "#c57c9a"
-ko_light_color = "#fda7ca"  # I defined this one
-
-
-
-
-@boxplot_style
-def boxplot(ax, gp1, gp2, ylabel, paired=False, title="", ylim=[], colors=[wt_color, hypo_color],
+def boxplot(ax, gp1, gp2, ylabel, paired=False, title="", ylim=[], colors=[sty.wt_color, sty.hypo_color],
             det_marker=True, force_markers_identity=False, force_normality=False):
     """
-    create boxplot for two data groups.
+    Create a customized boxplot comparing two groups, with individual data points, optional paired connections,
+    and significance annotation. Supports flexible styling, custom colors, and normality-enforced statistical testing.
 
     Parameters
     ----------
-    wt : numpy.ndarray, series, list
-        data of the wt group
-    ko : numpy.ndarray, series, list
-        data of the ko group
-    ylabel : string
-        columns names
+    ax : matplotlib.axes.Axes
+        The matplotlib axis object on which the boxplot will be drawn
+    gp1 : list/np.array of float
+        Data points for the first group
+    gp2 : list/np.array of float
+        Data points for the second group
+    ylabel : str
+        Label for the y-axis
+    paired : bool, default=False
+        Whether the two groups are paired (within-subject comparison)
+    title : str, default=""
+        Title of the plot
+    ylim : list of float, default=[]
+        Custom y-axis limits [ymin, ymax]. If empty, limits are set automatically
+    colors : list of str, default=[sty.wt_color, sty.hypo_color]
+        Colors used for the two groups
+    det_marker : bool, default=True
+        Whether to use distinct markers for group means
+    force_markers_identity : bool, default=False
+        If True, forces both groups to share the same marker type
+    force_normality : bool, default=False
+        If True, forces the use of parametric tests even when normality is not satisfied
 
+    Returns
+    -------
+    None
+        Displays the customized boxplot on the provided axis
     """
     if paired:
         gp1_nan = np.array(gp1)[~np.isnan(gp1) & ~np.isnan(gp2)]
@@ -160,7 +119,7 @@ def boxplot(ax, gp1, gp2, ylabel, paired=False, title="", ylim=[], colors=[wt_co
         sig_symbol = symbol_pval(pval)
     else:
         sig_symbol = "n.a"
-    ax.text((x[0] + x[1]) * 0.5, y, sig_symbol, ha='center', va='bottom', c=bar_color, fontsize=font_signif)
+    ax.text((x[0] + x[1]) * 0.5, y, sig_symbol, ha='center', va='bottom', c=bar_color, fontsize=sty.font_signif)
 
     yticks = list(ax.get_yticks())
     ax.set_yticks(sorted(yticks))
@@ -168,8 +127,14 @@ def boxplot(ax, gp1, gp2, ylabel, paired=False, title="", ylim=[], colors=[wt_co
     ax.set_title(title)
     ax.set_ylabel(ylabel) if valid_ylim else ax.set_ylabel(ylabel, fontweight="bold", color="red")
     ax.set_xlabel(None)
+    ax.grid(False)
+    ax.set_facecolor("white")
+    ax.spines[["right", "top", "bottom"]].set_visible(False)
+    ax.spines["left"].set_color("black")
+    ax.tick_params(axis='both', which='major', length=8, width=3, color="black", left=True)
 
 
+# Not used
 def barplot(wt, ko, ylabel):
     """
     create barplot for two data groups.
@@ -193,7 +158,7 @@ def barplot(wt, ko, ylabel):
     print(np.var(ko))
     y = [np.var(wt), np.var(ko)]
     fig, ax = plt.subplots(figsize=(8, 6))
-    ax.bar([1.7, 1.8], width=0.05, height=y, color=[wt_light_color, all_ko_light_color], edgecolor=[wt_color, all_ko_color],
+    ax.bar([1.7, 1.8], width=0.05, height=y, color=[sty.wt_light_color, sty.all_ko_light_color], edgecolor=[sty.wt_color, sty.all_ko_color],
            linewidth=3)
     ax.set_xlim([1.65, 1.9])
 
@@ -213,9 +178,9 @@ def barplot(wt, ko, ylabel):
 
     ax.text((x1 + x2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col)
 
+
 # kept for backwards compatibility
-@boxplot_style
-def paired_boxplot(ax, det, undet, ylabel, title, ylim=[], colors=[all_ko_color, all_ko_light_color], allow_stats_skip=False, variant = False):
+def paired_boxplot(ax, det, undet, ylabel, title, ylim=[], colors=[sty.all_ko_color, sty.all_ko_light_color], allow_stats_skip=False, variant = False):
     """
     create boxplot for two data groups.
 
@@ -280,13 +245,13 @@ def paired_boxplot(ax, det, undet, ylabel, title, ylim=[], colors=[all_ko_color,
         try:
             pval = stat_boxplot(det, undet, ylabel, paired=True)
             sig_symbol = symbol_pval(pval)
-            ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_signif)
+            ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=sty.font_signif)
         except ValueError:
             pass
     else:
         pval = stat_boxplot(det, undet, ylabel, paired=True)
         sig_symbol = symbol_pval(pval)
-        ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=font_signif)
+        ax.text((x_1 + x_2) * 0.5, y, sig_symbol, ha='center', va='bottom', c=col, fontsize=sty.font_signif)
 
     ax.set_xticks([0.15, 0.40], ['', ""])
     ax.tick_params(axis="x", which="both", bottom=False)
@@ -294,8 +259,8 @@ def paired_boxplot(ax, det, undet, ylabel, title, ylim=[], colors=[all_ko_color,
     ax.tick_params(axis='y')
 
 
-@boxplot_style
-def dmso_bms(ax, wt_dmso, wt_bms, ko_dmso, ko_bms, ylabel, title="", ylim=[], colors=[wt_color, wt_bms_color, all_ko_color, all_ko_bms_color], marker="o"):
+# kept for backwards compatibility
+def dmso_bms(ax, wt_dmso, wt_bms, ko_dmso, ko_bms, ylabel, title="", ylim=[], colors=[sty.wt_color, sty.wt_bms_color, sty.all_ko_color, sty.all_ko_bms_color], marker="o"):
     print("Boxplot plotting.")
     wt_dmso_nan = np.array(wt_dmso)[~np.isnan(wt_dmso)]
     wt_bms_nan = np.array(wt_bms)[~np.isnan(wt_bms)]
@@ -348,7 +313,7 @@ def dmso_bms(ax, wt_dmso, wt_bms, ko_dmso, ko_bms, ylabel, title="", ylim=[], co
             sig_symbol = symbol_pval(pval)
         else:
             sig_symbol = "n.a"
-        ax.text((positions[0] + positions[1]) * 0.5, y[0], sig_symbol, ha='center', va='bottom', c=color, fontsize=font_signif)
+        ax.text((positions[0] + positions[1]) * 0.5, y[0], sig_symbol, ha='center', va='bottom', c=color, fontsize=sty.font_signif)
 
     for positions, groups, nan_groups, y in zip([[x_1, x_3], [x_2, x_4]], [[wt_dmso, ko_dmso], [wt_bms, ko_bms]], [[wt_dmso_nan, ko_dmso_nan], [wt_bms_nan, ko_bms_nan]], [[y_dmso, y_dmso], [y_bms, y_bms]]):
         ax.plot(positions, y, lw=mpl.rcParams['axes.linewidth'], c=color)
@@ -357,7 +322,7 @@ def dmso_bms(ax, wt_dmso, wt_bms, ko_dmso, ko_bms, ylabel, title="", ylim=[], co
             sig_symbol = symbol_pval(pval)
         else:
             sig_symbol = "n.a."
-        ax.text((positions[0] + positions[1]) * 0.5, y[0], sig_symbol, ha='center', va='bottom', c=color, fontsize=font_signif)
+        ax.text((positions[0] + positions[1]) * 0.5, y[0], sig_symbol, ha='center', va='bottom', c=color, fontsize=sty.font_signif)
 
     yticks = list(ax.get_yticks())
     ax.set_yticks(sorted(yticks))
@@ -369,6 +334,7 @@ def dmso_bms(ax, wt_dmso, wt_bms, ko_dmso, ko_bms, ylabel, title="", ylim=[], co
     ax.set_title(title)
 
 
+# Not used
 def boxplot_anova(groups_data, lim_y, label_y, filename, colors, annot_text=[],
                   title="", thickformater=True, show_only_significant=False):
     fig = plt.figure(figsize=(3 * len(groups_data), 8))
@@ -454,13 +420,14 @@ def boxplot_anova(groups_data, lim_y, label_y, filename, colors, annot_text=[],
     fig.tight_layout()
 
 
+# Not used
 def boxplot_3_conditions(group1_data, group2_data, cond_labels=["A", "B", "C"],
                          title="",
                          lim_y="auto",
                          label_y=None,
                          y_percent=False,
-                         color1=wt_color,
-                         color2=all_ko_color,
+                         color1=sty.wt_color,
+                         color2=sty.all_ko_color,
                          legend_labels=None,
                          filename=None):
     """
@@ -522,7 +489,7 @@ def boxplot_3_conditions(group1_data, group2_data, cond_labels=["A", "B", "C"],
         max_d = np.concatenate([np.concatenate(group1_data), np.concatenate(group2_data)]).max()
         y, h, col = max_d + abs(0.10 * max_d), 0.025 * abs(max_d), 'k'
         axs[i].plot([x1, x1, x2, x2], [y, y + h, y + h, y], lw=3, c=col)
-        axs[i].text((x1 + x2) * .5, y + h, sig_symbol, ha='center', va='bottom', color=col, fontsize=font_signif)
+        axs[i].text((x1 + x2) * .5, y + h, sig_symbol, ha='center', va='bottom', color=col, fontsize=sty.font_signif)
 
     axs[0].set_ylabel(label_y)
     axs[0].tick_params(axis='y')
@@ -532,8 +499,8 @@ def boxplot_3_conditions(group1_data, group2_data, cond_labels=["A", "B", "C"],
     axs[0].tick_params(which='major', length=10, width=4)
 
     if legend_labels is not None:
-        hB, = ax.plot([1, 1], wt_color)
-        hR, = ax.plot([1, 1], ko_color)
+        hB, = ax.plot([1, 1], sty.wt_color)
+        hR, = ax.plot([1, 1], sty.ko_color)
         ax.legend((hB, hR), legend_labels)
         hB.set_visible(False)
         hR.set_visible(False)
@@ -873,6 +840,25 @@ def normality_check(data, title="variable", plot=True):
 
 
 def homogeneity_check(predicted, residuals, title="variable"):
+    """
+    Assess the homogeneity of variance (homoscedasticity) in residuals of a regression model by generating a
+    scale-location plot. The plot displays the square root of the absolute standardized residuals against the
+    predicted values, with a Lowess smoothing line to highlight potential trends.
+
+    Parameters
+    ----------
+    predicted : list/np.array of float
+        The fitted values obtained from the regression model
+    residuals : list/np.array of float
+        The residuals of the regression model
+    title : str
+        A brief description of the variable being analyzed
+
+    Returns
+    -------
+    None
+        Displays the scale-location plot
+    """
     standard_resid = (residuals - residuals.mean()) / residuals.std()
     sqrt_standard_resid = np.sqrt(np.abs(standard_resid))
     # Create a separate figure for the scale-location plot
@@ -897,13 +883,13 @@ if __name__ == "__main__":
     cond = [["WT", "DMSO"], ["WT", "BMS"], ["KO", "BMS"], ["KO", "DMSO"]]
     labs = ["Genotype", "Treatment"]
     fig, ax = plt.subplots(nrows=2, ncols=4, figsize=(24, 16), constrained_layout=True)
-    boxplot(ax[0, 0], ko_dmso, ko_bms, "ylabel", paired=True, title="WT", ylim=[], colors=[wt_color, wt_light_color])
-    boxplot(ax[1, 0], ko_dmso, ko_bms, "ylabel", paired=True, title="WT [BMS]", ylim=[], colors=[wt_bms_color, wt_bms_light_color])
-    boxplot(ax[0, 1], ko_dmso, ko_bms, "ylabel", paired=True, title="All KO", ylim=[], colors=[all_ko_color, all_ko_light_color])
-    boxplot(ax[1, 1], ko_dmso, ko_bms, "ylabel", paired=True, title="All KO [BMS]", ylim=[], colors=[all_ko_bms_color, all_ko_bms_light_color])
-    boxplot(ax[0, 2], ko_dmso, ko_bms, "ylabel", paired=True, title="KO-Hypo", ylim=[], colors=[hypo_color, hypo_light_color])
-    boxplot(ax[1, 2], ko_dmso, ko_bms, "ylabel", paired=True, title="KO-Hypo [BMS]", ylim=[], colors=[hypo_bms_color, hypo_bms_light_color])
-    boxplot(ax[0, 3], ko_dmso, ko_bms, "ylabel", paired=True, title="KO", ylim=[], colors=[ko_color, ko_light_color])
+    boxplot(ax[0, 0], ko_dmso, ko_bms, "ylabel", paired=True, title="WT", ylim=[], colors=[sty.wt_color, sty.wt_light_color])
+    boxplot(ax[1, 0], ko_dmso, ko_bms, "ylabel", paired=True, title="WT [BMS]", ylim=[], colors=[sty.wt_bms_color, sty.wt_bms_light_color])
+    boxplot(ax[0, 1], ko_dmso, ko_bms, "ylabel", paired=True, title="All KO", ylim=[], colors=[sty.all_ko_color, sty.all_ko_light_color])
+    boxplot(ax[1, 1], ko_dmso, ko_bms, "ylabel", paired=True, title="All KO [BMS]", ylim=[], colors=[sty.all_ko_bms_color, sty.all_ko_bms_light_color])
+    boxplot(ax[0, 2], ko_dmso, ko_bms, "ylabel", paired=True, title="KO-Hypo", ylim=[], colors=[sty.hypo_color, sty.hypo_light_color])
+    boxplot(ax[1, 2], ko_dmso, ko_bms, "ylabel", paired=True, title="KO-Hypo [BMS]", ylim=[], colors=[sty.hypo_bms_color, sty.hypo_bms_light_color])
+    boxplot(ax[0, 3], ko_dmso, ko_bms, "ylabel", paired=True, title="KO", ylim=[], colors=[sty.ko_color, sty.ko_light_color])
     ax[1, 3].set_axis_off()
     plt.show()
     # gp1 = [[1, 2, np.nan, 3], [1, np.nan, 3, 5], [1, 2, 3, 5]]
