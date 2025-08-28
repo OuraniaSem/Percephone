@@ -1678,10 +1678,45 @@ def temporal_correlation_neuron(frame_df):
 # endregion ============================================================================================================
 # region ======================================== Pre-stimulus =========================================================
 
+# Not used in the final paper
 def filter_stim_recruited_neurons(activity_df, det_filter=None, amplitude_filter=None, recruitment_filter="activated",
                                   n_type_filter=None, get_opposite=False):
-    """Filter the activity dataframe to keep only the neurons that exhibits the specified pattern at least once during
-    specified trials."""
+    """
+    Filter the activity DataFrame to retain only neurons that exhibit (or never exhibit, if get_opposite=True)
+    a specified response pattern at least once during selected trials.
+    Filtering can be based on neuron type, stimulus amplitude, behavioral outcome, and recruitment category.
+
+    Parameters
+    ----------
+    activity_df : pd.DataFrame
+        DataFrame of neuronal activity with at least the following columns:
+        ['ID', 'Neuron', 'Amplitude', 'Threshold', 'Behavior', 'Resp'].
+    det_filter : bool or None, optional
+        If True or False, keep only trials matching that behavioral detection outcome.
+        If None (default), no filtering is applied on behavior.
+    amplitude_filter : {"threshold", list of int/float} or None, optional
+        If "threshold", keep only trials where amplitude equals the trial’s threshold.
+        If a list, keep only trials with amplitude in the list.
+        If None (default), no amplitude filtering is applied.
+    recruitment_filter : {"activated", "inhibited", "recruited", "non_resp", "all"}, default="activated"
+        Defines which neuronal recruitment pattern to retain, based on "Resp" values:
+        - "activated": neurons with Resp = 1
+        - "inhibited": neurons with Resp = -1
+        - "recruited": neurons with Resp ∈ {-1, 1}
+        - "non_resp": neurons with Resp = 0
+        - "all": keep all neurons regardless of Resp
+    n_type_filter : {"EXC", "INH"} or None, optional
+        If specified, keep only excitatory ("EXC") or inhibitory ("INH") neurons.
+        If None (default), all neuron types are included.
+    get_opposite : bool, default=False
+        If False, keep neurons that match the recruitment pattern at least once.
+        If True, keep neurons that never match the specified pattern.
+
+    Returns
+    -------
+    filtered_df : pd.DataFrame
+        Subset of the original activity_df containing only the valid neurons and trials after filtering.
+    """
     recruitment_dict = {"activated": [1], "inhibited": [-1], "recruited": [-1, 1], "non_resp": [0], "all": [-1, 0, 1]}
     # Filtering the neuron type
     df = activity_df.copy()
@@ -1713,17 +1748,28 @@ def filter_stim_recruited_neurons(activity_df, det_filter=None, amplitude_filter
     return filtered_df
 
 
+# Not used in the final paper
 def prestim_comp(activity_df):
     """
-    Compares the raw pre-stimulus activity between WT and KO groups, averaging all trials and then by behavioral label.
-    Is the global pre-stimulus higher or more variable in KO ?
+    Compare the raw pre-stimulus activity between WT and KO-Hypo groups.
+    The function computes both the mean and standard deviation of pre-stimulus activity,
+    first across all trials globally and then split by behavioral outcome (Hit vs. Miss).
+    It visualizes these comparisons with boxplots.
+
     Parameters
     ----------
-    activity_df
+    activity_df : pd.DataFrame
+        DataFrame containing trial-level neuronal activity with at least the following columns:
+        ['Genotype', 'ID', 'Trial', 'Amplitude', 'Behavior', 'Neuron', 'Resp', 'Prestim_mean', 'Prestim_std'].
 
     Returns
     -------
-
+    gp_mean : pd.DataFrame
+        Genotype- and ID-level averages of pre-stimulus activity across all trials.
+    gp_hit : pd.DataFrame
+        Genotype- and ID-level averages of pre-stimulus activity restricted to Hit trials.
+    gp_miss : pd.DataFrame
+        Genotype- and ID-level averages of pre-stimulus activity restricted to Miss trials.
     """
     gp_mean = activity_df.drop(columns=["Trial", "Amplitude", "Behavior", "Neuron", "Resp"]).groupby(["Genotype", "ID"],
                                                                                                      as_index=False).mean()
@@ -1749,17 +1795,26 @@ def prestim_comp(activity_df):
     return gp_mean, gp_hit, gp_miss
 
 
+# Not used in the final paper
 def snr_comp(activity_df):
     """
-    Compares the difference between the stimulus and its pre-stimulus. Is the SNR higher during hit compared to miss
-    trials ?
+    Compare the signal-to-noise ratio (SNR) between Hit and Miss trials for each genotype.
+    The SNR is approximated by the difference between stimulus and pre-stimulus activity (mean level)
+    and by the ratio of their standard deviations. The function computes averages at the genotype and ID
+    level and visualizes the comparison with paired boxplots.
+
     Parameters
     ----------
-    activity_df
+    activity_df : pd.DataFrame
+        DataFrame containing trial-level neuronal activity with at least the following columns:
+        ['Genotype', 'ID', 'Trial', 'Amplitude', 'Behavior', 'Neuron', 'Resp',
+         'Diff_mean', 'Ratio_std'].
+        Trials with Amplitude = 0 are excluded from the analysis.
 
     Returns
     -------
-
+    gp_data : pd.DataFrame
+        Genotype-, ID-, and behavior-level averages of SNR metrics (Diff_mean, Ratio_std).
     """
     data = activity_df[activity_df["Amplitude"] != 0]
     gp_data = data.drop(columns=["Trial", "Amplitude", "Neuron", "Resp"]).groupby(["Genotype", "ID", "Behavior"],
@@ -1782,19 +1837,28 @@ def snr_comp(activity_df):
     return gp_data
 
 
+# Not used in the final paper
 def compare_to_wt_threshold(activity_df):
     """
-    Compares the SNR, of KO-Hypo mice to the one of WT mice at an amplitude where we have a difference between stim and
-    pre-stim in WT but not in Hypo (6). And then compares the signal (stim) and the noise (pre-stim). Why don't KO-Hypo
-    mice detects lower amplitude (lower signal or higher noise ?)
+    Compare signal, noise, and signal-to-noise ratio (SNR) metrics between WT and KO-Hypo mice
+    at a stimulus amplitude of 4. This amplitude corresponds to a level where WT mice show
+    a detectable stimulus-prestimulus difference, while KO-Hypo mice do not. The analysis
+    tests whether the reduced detectability in KO-Hypo mice is due to weaker stimulus-evoked
+    responses (signal) or increased pre-stimulus variability (noise).
 
     Parameters
     ----------
-    activity_df
+    activity_df : pd.DataFrame
+        DataFrame containing trial-level neuronal activity with at least the following columns:
+        ['Genotype', 'ID', 'Trial', 'Amplitude', 'Neuron', 'Resp', 'Behavior',
+         'Abs_Diff_mean', 'Abs_Ratio_std', 'Stim_mean', 'Prestim_mean', 'Stim_std', 'Prestim_std'].
 
     Returns
     -------
-
+    wt : pd.DataFrame
+        Subject-level averages of signal, noise, and SNR metrics for WT mice at amplitude 4.
+    hypo : pd.DataFrame
+        Subject-level averages of signal, noise, and SNR metrics for KO-Hypo mice at amplitude 4.
     """
     data = activity_df[activity_df["Amplitude"] == 4]
     gp_data = data.drop(columns=["Trial", "Amplitude", "Neuron", "Resp", "Behavior"]).groupby(["Genotype", "ID"],
@@ -1822,18 +1886,26 @@ def compare_to_wt_threshold(activity_df):
     return wt, hypo
 
 
+# Not used in the final paper
 def prestim_influence_neuron_activation(activity_df):
     """
-    Comparison of the pre-stimulus activity of stimulus activated neurons between trials when they are activated or not
-    activated. Comparison of the mean value of prestimulus across all trials where the neurons were activated to the mean
-    value of pre-stimulus across all trials where the neuron was not activated.
+    Compare the influence of pre-stimulus activity on neuronal activation during stimulus presentation.
+    For each neuron, trials are split into those where the neuron was activated (Resp = 1) and those where it
+    was not activated (Resp = 0). The function compares the average pre-stimulus activity, stimulus activity,
+    and absolute stimulus-prestimulus difference between these two conditions.
+
     Parameters
     ----------
-    activity_df
+    activity_df : pd.DataFrame
+        DataFrame containing trial-level neuronal activity with at least the following columns:
+        ['Genotype', 'ID', 'Neuron', 'Trial', 'Amplitude', 'Threshold', 'Resp',
+         'Prestim_mean', 'Stim_mean', 'Abs_Diff_mean'].
 
     Returns
     -------
-
+    gp_mouse : pd.DataFrame
+        Mouse-level averages of pre-stimulus, stimulus, and absolute difference measures,
+        grouped by genotype and response category (activated vs non-activated).
     """
     data = activity_df[activity_df["Amplitude"] != 0]
     gp_neuron = data.drop(columns=["Trial", "Amplitude", "Behavior", "Threshold"]).groupby(
@@ -1864,18 +1936,29 @@ def prestim_influence_neuron_activation(activity_df):
     return gp_mouse
 
 
+# Not used in the final paper
 def prestim_activated_neurons(activity_df):
     """
-    Plot, for each neuron, the significance of the difference in prestim between the trials where the neuron is
-    activated and the trials where the neuron is not responsive.
+    For each neuron, test whether pre-stimulus activity differs between trials where the neuron is activated
+    (Resp = 1) and trials where it is not responsive (Resp = 0). The analysis is restricted to EXC neurons that
+    are activated at least once during detected (hit) trials at threshold stimulation. Significance values are
+    computed for prestimulus mean, prestimulus variability, and stimulus-prestimulus differences. Results are
+    visualized with bar plots showing neuron-level significance (p-values).
 
     Parameters
     ----------
-    df
+    activity_df : pd.DataFrame
+        Trial-level activity data containing at least the following columns:
+        ['Genotype', 'ID', 'Neuron', 'Amplitude', 'Threshold', 'Behavior', 'Resp',
+         'Prestim_mean', 'Prestim_std', 'Diff_mean', 'Diff_std'].
 
     Returns
     -------
-
+    results : pd.DataFrame
+        A DataFrame with one row per neuron containing:
+        ['Genotype', 'ID', 'Neuron', 'Raw_Mean', 'Raw_Std', 'Diff_Mean', 'Diff_Std'],
+        where each column reports the significance value (p-value) of the test comparing
+        activated vs non-activated trials.
     """
     neurons_sets = []
     rows = []
@@ -1927,18 +2010,45 @@ def prestim_activated_neurons(activity_df):
     return pd.DataFrame(rows)
 
 
+# Not used in the final paper
 def prestim_act_vector(activity_df, metric=None, hit_activated_only=False):
     """
-    Compute the cosine similarity between each pair of trial, then see if there is a difference between within-condition
-    similarity and cross-condition similarity. Working with threshold trials (and neurons that are activated at least
-    once during detected trials).
+    Compute trial-to-trial similarity of prestimulus activity patterns using cosine similarity.
+
+    For each recording:
+      - Only EXC neurons are considered.
+      - Data is restricted to a fixed amplitude (currently hardcoded at 4; originally threshold trials).
+      - Optionally, restricts to neurons that are activated at least once during detected (hit) trials
+        if `hit_activated_only=True`.
+      - Prestimulus activity (or any provided metric) is arranged into vectors of neurons × trials.
+      - Cosine similarity is computed between all trial pairs, separately for detected (Hit) and
+        non-detected (Miss) trials.
+      - Mean similarity is extracted for:
+          * Hit–Hit trial pairs (within hits)
+          * Miss–Miss trial pairs (within misses)
+          * Hit–Miss trial pairs (between conditions)
+
+    Results are plotted:
+      - Within-genotype comparisons: Hit vs Miss, Hit vs Between, Miss vs Between.
+      - Across-genotype comparisons: WT vs KO-Hypo for each similarity category.
+
     Parameters
     ----------
-    activity_df
+    activity_df : pd.DataFrame
+        Trial-level neural activity data containing at least:
+        ['Genotype', 'ID', 'Neuron', 'Trial', 'Amplitude', 'Behavior', 'Resp', <metric>].
+    metric : str, optional
+        Column name in `activity_df` used to build activity vectors.
+        Defaults to the last column of the DataFrame.
+    hit_activated_only : bool, default=False
+        If True, only neurons that are activated (Resp=1) during at least one detected trial are included.
 
     Returns
     -------
-
+    results : pd.DataFrame
+        DataFrame with one row per recording containing:
+        ['Genotype', 'ID', 'Hit_sim', 'Miss_sim', 'Between_sim'],
+        where values are the mean absolute cosine similarity for each condition.
     """
     if metric is None:
         metric = activity_df.columns[-1]
@@ -2028,19 +2138,43 @@ def prestim_act_vector(activity_df, metric=None, hit_activated_only=False):
 # endregion ============================================================================================================
 # region ======================================== E/I Ratio ============================================================
 
+# Not used in the final paper
 def get_ei_ratio_df(recs):
     """
-    Returns a Dataframe withl each row being the E/I ratio for a specific trial for a specific animal. E/I ratio is
-    defined as the percentage of activated ExC neurons over the percentage of activated INH neurons.
-    TODO: find a better definition of E/I ratio to avoid infinity values
+    Compute excitatory/inhibitory (E/I) ratios on a per-trial basis for each recording.
+
+    By default, the E/I ratio is defined as:
+        EI_ratio = (percentage of activated EXC neurons) / (percentage of activated INH neurons)
 
     Parameters
     ----------
-    recs
+    recs : list
+        List of recording objects. Each recording must provide:
+        - rec.detected_stim : array-like
+            Trial-level behavioral outcomes (e.g., hit/miss).
+        - rec.stim_ampl : array-like
+            Stimulus amplitudes per trial.
+        - rec.get_perc_resp(pattern, n_type) : method
+            Returns trial-wise percentage of responsive neurons of type `n_type` ("EXC" or "INH").
+        - rec.genotype : str
+            Genotype label.
+        - rec.filename : str
+            Identifier for the recording.
+        - rec.session_threshold : float
+            Threshold amplitude for the session.
 
     Returns
     -------
-
+    df : pd.DataFrame
+        DataFrame where each row corresponds to one trial of one recording, with columns:
+        - "Genotype" : str
+        - "ID" : str (filename/recording ID)
+        - "Threshold" : float
+        - "Trial" : int
+        - "Amplitude" : float
+        - "Behavior" : bool
+        - "EI_ratio" : float
+          (percentage EXC / percentage INH for that trial)
     """
     rows = []
     for rec in recs:
@@ -2080,7 +2214,30 @@ def get_ei_ratio_df(recs):
     return pd.DataFrame(rows)
 
 
+# Not used in the final paper
 def plot_ei_variance(ei_df):
+    """
+    Plot the variability (standard deviation across trials) of the excitatory/inhibitory (E/I) ratio.
+
+    The function computes the variance of trial-wise E/I ratios both across all trials and split by
+    behavior (hit vs miss), then compares wild-type (WT) and knockout-hypo (KO-Hypo) genotypes.
+
+    Parameters
+    ----------
+    ei_df : pd.DataFrame
+        DataFrame of trial-wise E/I ratios, as returned by `get_ei_ratio_df`, with at least the columns:
+        - "Genotype" : str
+        - "ID" : str (recording identifier)
+        - "Trial" : int
+        - "Amplitude" : float
+        - "Behavior" : bool
+        - "EI_ratio" : float
+
+    Returns
+    -------
+    common_ids : set
+        Set of recording IDs that contain both hit and miss trials (used for within-animal comparisons).
+    """
     data = ei_df[ei_df["Amplitude"] != 0]
     data = data[np.isfinite(data["EI_ratio"])]
     data_all = data.drop(columns=["Behavior", "Trial", "Amplitude"]).groupby(["Genotype", "ID"], as_index=False).std()
@@ -2116,7 +2273,37 @@ def plot_ei_variance(ei_df):
     return common_ids
 
 
+# Not used in the final paper
 def correlate_behavior(data, column=None):
+    """
+    Compute the correlation between trial-wise behavior (hit/miss) and a given variable.
+
+    Uses point-biserial correlation to assess the relationship between a continuous variable
+    (e.g. E/I ratio, neural activity metric) and the binary behavior outcome.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        DataFrame containing trial-level information with at least the columns:
+        - "ID" : str (recording identifier)
+        - "Genotype" : str
+        - "Threshold" : float
+        - "Behavior" : bool (hit=True, miss=False)
+        - [other columns of interest]
+    column : str, optional
+        Name of the column to correlate with "Behavior".
+        If None (default), the last column of `data` is used.
+
+    Returns
+    -------
+    pd.DataFrame
+        Summary results per recording with columns:
+        - "ID" : recording identifier
+        - "Genotype" : str
+        - "Threshold" : float
+        - "R2" : float, squared point-biserial correlation coefficient
+        - "pval" : float, significance of the correlation
+    """
     if column is None:
         column = data.columns[-1]
     rows = []
@@ -2128,17 +2315,40 @@ def correlate_behavior(data, column=None):
     return pd.DataFrame(rows)
 
 
+# Not used in the final paper
 def compare_ei_ratio(ei_df, gp1="WT", gp2="KO-Hypo", column=None):
     """
-    Plot the comparison of the E/I ratio between detected and non detected trials and between genotypes
+    Compare and visualize E/I ratios between genotypes and behavioral outcomes.
+
+    The function computes the mean E/I ratio per animal at threshold stimulation,
+    split by detection outcome (hit vs miss) and genotype. It then generates
+    paired and unpaired boxplots to compare:
+    - Within-genotype: detected vs non-detected trials.
+    - Across-genotype: detected trials and non-detected trials.
+
     Parameters
     ----------
-    data
-    column
+    ei_df : pd.DataFrame
+        Trial-level DataFrame containing at least:
+        - "Genotype" : str
+        - "ID" : str
+        - "Threshold" : float
+        - "Amplitude" : float
+        - "Behavior" : bool
+        - [E/I ratio columns, e.g. "EI_ratio"]
+    gp1 : str, optional
+        Name of the first genotype to compare (default = "WT").
+    gp2 : str, optional
+        Name of the second genotype to compare (default = "KO-Hypo").
+    column : str, optional
+        Name of the E/I ratio column to use. If None, the last column
+        in `ei_df` is selected.
 
     Returns
     -------
-
+    pd.DataFrame
+        DataFrame averaged by ["Genotype", "ID", "Threshold", "Behavior"],
+        containing the values used for plotting.
     """
     if column is None:
         column = ei_df.columns[-1]
@@ -2165,7 +2375,57 @@ def compare_ei_ratio(ei_df, gp1="WT", gp2="KO-Hypo", column=None):
 
 
 def population_EI_ratio(recs, pyr_inhibition=False, amp="threshold", test_INH=False, gp1="WT", gp2="KO-Hypo"):
-    """ Computes the averaged population E/I ratio in hit and miss trials for both genotypes and compare them"""
+    """
+    Compute and compare population-level E/I ratios across genotypes and trial outcomes.
+
+    This function estimates the population excitatory/inhibitory (E/I) ratio for each
+    recording session, defined as the fraction of responsive excitatory neurons divided
+    by the fraction of responsive inhibitory neurons. Ratios are computed separately for:
+    - All trials at a given amplitude.
+    - Hit (detected) trials.
+    - Miss (non-detected) trials.
+
+    Different methods for computing inhibition can be selected (pyramidal inhibition,
+    interneuron activation, or EXC inhibition vs INH activation). Results are aggregated
+    per recording and plotted as boxplots to compare between genotypes and within
+    genotype (hit vs miss).
+
+    Parameters
+    ----------
+    recs : list
+        List of recording objects, each containing:
+        - rec.zscore_exc, rec.zscore_inh : arrays (neurons × trials)
+        - rec.stim_ampl : array of stimulation amplitudes
+        - rec.session_threshold : float, behavioral threshold
+        - rec.detected_stim : boolean array (trial detection outcome)
+        - rec.matrices["EXC" or "INH"]["Responsivity"] : (neurons × trials) array of response labels
+        - rec.filename, rec.genotype : metadata
+    pyr_inhibition : bool, optional
+        If True, inhibition is estimated from the fraction of inhibited pyramidal neurons
+        instead of activated interneurons. Default = False.
+    amp : {"threshold", "wt_threshold", "all"}, optional
+        Stimulus amplitude(s) to include:
+        - "threshold" : use each session’s behavioral threshold
+        - "wt_threshold" : use a fixed amplitude (4)
+        - "all" : include all amplitudes
+    test_INH : bool, optional
+        If True, computes E/I ratio as (% inhibited EXC) / (% activated INH).
+        Overrides the `pyr_inhibition` setting. Default = False.
+    gp1 : str, optional
+        Label of the first genotype (default = "WT").
+    gp2 : str, optional
+        Label of the second genotype (default = "KO-Hypo").
+
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame with one row per recording, containing:
+        - "ID" : recording identifier
+        - "Genotype" : str
+        - "EI_all" : float, ratio over all trials
+        - "EI_hit" : float, ratio over detected trials
+        - "EI_miss" : float, ratio over missed trials
+    """
     rows = []
     for rec in recs:
         n_exc = rec.zscore_exc.shape[0]
@@ -2245,6 +2505,44 @@ def population_EI_ratio(recs, pyr_inhibition=False, amp="threshold", test_INH=Fa
 
 
 def correlate_ntn_ei(ntn_df, ei_df, corr_threshold_ei=False):
+    """
+    Correlate population E/I ratio with network trajectory metrics.
+
+    This function examines the relationship between the excitatory/inhibitory
+    balance (E/I ratio) computed across all trials and measures of population
+    neural trajectory (NTN). For each genotype and across all data, a linear
+    regression is performed between `EI_all` and either behavioral threshold
+    or mean trajectory similarity, depending on the setting. Correlation strength
+    is reported (r² and p-value) and regression lines are visualized.
+
+    Parameters
+    ----------
+    ntn_df : pandas.DataFrame
+        DataFrame containing network trajectory metrics. Must include:
+        - "ID" : recording identifier
+        - "Behavior" : trial category ("All", "Hit", "Miss")
+        - "Threshold" : float, behavioral threshold
+        - "mean_cos_sim" : float, mean trajectory cosine similarity
+    ei_df : pandas.DataFrame
+        DataFrame containing E/I ratio estimates. Must include:
+        - "ID" : recording identifier
+        - "Genotype" : str, group label
+        - "EI_all", "EI_hit", "EI_miss" : floats
+    corr_threshold_ei : bool, optional
+        If True, correlate E/I ratio with behavioral threshold.
+        If False, correlate E/I ratio with mean trajectory similarity.
+        Default = False.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Merged DataFrame combining E/I and NTN metrics, containing:
+        - "ID"
+        - "Genotype"
+        - "EI_all"
+        - "Threshold"
+        - "mean_cos_sim"
+    """
     variable = "Threshold" if corr_threshold_ei else "mean_cos_sim"
     ntn = ntn_df[ntn_df["Behavior"] == "All"][["ID", "Threshold", "mean_cos_sim"]]
     data = ei_df.merge(ntn, on="ID", how="left").drop(columns=["EI_hit", "EI_miss"])
@@ -2284,7 +2582,39 @@ def correlate_ntn_ei(ntn_df, ei_df, corr_threshold_ei=False):
 
 
 def correlation_gaba_act_pyr_inh(recs):
-    """Correlates the number of activated GABAergic neurons with the number of inhibited Pyramidal neurons"""
+    """
+    Correlate GABAergic activation with pyramidal inhibition at threshold-level stimulation.
+
+    For each recording, this function computes:
+    - the mean percentage of pyramidal (excitatory) neurons inhibited,
+    - the mean percentage of GABAergic interneurons activated,
+    considering only trials at the session threshold amplitude.
+    These values are then correlated within each genotype group using
+    linear regression (r² and p-value are reported). Results are visualized
+    with scatter plots and regression lines.
+
+    Parameters
+    ----------
+    recs : list
+        List of recording objects. Each must contain:
+        - rec.zscore_exc : array-like, z-scored responses of excitatory neurons
+        - rec.zscore_inh : array-like, z-scored responses of inhibitory neurons
+        - rec.stim_ampl : array-like, stimulus amplitudes
+        - rec.session_threshold : float, threshold amplitude for that session
+        - rec.matrices["EXC"]["Responsivity"] : 2D array, responsivity of excitatory neurons
+        - rec.matrices["INH"]["Responsivity"] : 2D array, responsivity of inhibitory neurons
+        - rec.filename : str, recording identifier
+        - rec.genotype : str, group label
+
+    Returns
+    -------
+    pandas.DataFrame
+        Table with one row per recording, containing:
+        - "ID" : recording identifier
+        - "Genotype" : group label
+        - "pyr_inh" : mean % inhibited pyramidal neurons (at threshold trials)
+        - "gaba_act" : mean % activated GABAergic neurons (at threshold trials)
+    """
     rows = []
     for rec in recs:
         n_exc = rec.zscore_exc.shape[0]
@@ -2323,17 +2653,51 @@ def correlation_gaba_act_pyr_inh(recs):
 # endregion ============================================================================================================
 # region ========================================== Noise ==============================================================
 
+# Not used in the final paper
 def baseline_and_SNR(recruitment_df):
     """
-    Compares the baseline activity and the SNR between WT and KO-Hypo
+    Compare baseline activity and signal-to-noise ratio (SNR) across genotypes and trial outcomes.
+
+    This function analyzes recruitment data to assess:
+
+    1. Baseline vs threshold-level recruitment:
+       - Baseline activity is defined as trials with amplitude = 0 (no-go trials).
+       - Threshold trials are those where amplitude == session threshold.
+       - For each genotype, the percentage of recruited neurons
+         (EXC/INH, activated/inhibited) at baseline is compared
+         to threshold hit trials (behavior=True) and miss trials (behavior=False).
+       - Comparisons are performed within each genotype (paired)
+         and across genotypes (unpaired).
+       - Results are displayed as paired/unpaired boxplots.
+
+    2. Signal-to-noise ratio (SNR):
+       - For each neuron population, SNR is computed separately for hit and miss trials as:
+         SNR = (value at threshold trial) / (value at baseline).
+       - This provides a normalized measure of trial-evoked recruitment relative to baseline activity.
+       - SNR values are compared between hits and misses, and between genotypes.
+       - Results are displayed as boxplots.
 
     Parameters
     ----------
-    activity_df
+    recruitment_df : pandas.DataFrame
+        Long-format dataframe containing at least the following columns:
+        - "Genotype"   : str, genotype label (e.g., "WT", "KO-Hypo")
+        - "ID"         : str, recording identifier
+        - "threshold"  : float, threshold amplitude for that session
+        - "behavior"   : bool, trial outcome (True = hit, False = miss)
+        - "amplitude"  : float, stimulus amplitude
+        - "act_EXC_perc", "inh_EXC_perc" : % of activated/inhibited excitatory neurons
+        - "act_INH_perc", "inh_INH_perc" : % of activated/inhibited inhibitory neurons
+        - additional columns for baseline SNR metrics (last 6 columns assumed to be SNR-related)
 
     Returns
     -------
-
+    tuple of pandas.DataFrame
+        - bsl      : subset dataframe with baseline (no-go) trials
+        - hit      : subset dataframe with threshold hit trials
+        - miss     : subset dataframe with threshold miss trials
+        - hit_snr  : dataframe of hit trial SNR values (per ID, per genotype)
+        - miss_snr : dataframe of miss trial SNR values (per ID, per genotype)
     """
     grouped = recruitment_df.groupby(["Genotype", "ID", "threshold", "behavior", "amplitude"], as_index=False).mean()
     bsl = grouped[grouped["amplitude"] == 0]
@@ -2402,8 +2766,63 @@ def baseline_and_SNR(recruitment_df):
     plt.show()
     return bsl, hit, miss, hit_snr, miss_snr
 
+
+# Not used in the final paper
 def compare_prestim(mean_activity_df, threshold_only=False):
-    """Compare the pre-stimulus period between WT and KO mice"""
+    """
+    Compare pre-stimulus activity (AUC measures) between WT and KO mice across trial types and genotypes.
+
+    This function evaluates whether differences in pre-stimulus activity (baseline dynamics before
+    stimulus onset) can explain behavioral outcomes (Hit vs Miss, FA vs CR) and whether these
+    patterns differ between genotypes.
+
+    The analysis proceeds as follows:
+    - Pre-stimulus activity is quantified using cumulative AUC (`cum_AUC_pre`, `cum_AUC_fixpre`)
+      and negative AUC (`neg_AUC_fixpre`).
+    - The difference between stimulus and pre-stimulus cumulative AUC is computed as
+      `cum_AUC_diff = cum_AUC - cum_AUC_pre`.
+    - No-go trials (Amplitude == 0) are separated into False Alarms (FA, Behavior=True)
+      and Correct Rejections (CR, Behavior=False).
+    - For go trials:
+        * If `threshold_only=True`, only trials at the session threshold are included.
+          Hit and Miss trials are compared within each genotype.
+        * If `threshold_only=False`, all amplitudes are included. Data is aggregated across amplitudes,
+          and behavior-specific averages (Hit vs Miss) are computed per recording and genotype.
+
+    Comparisons performed (each displayed as paired/unpaired boxplots):
+    - Within-genotype:
+        * Hit vs Miss (WT, KO-Hypo)
+        * FA vs CR (WT, KO-Hypo)
+    - Between-genotypes:
+        * All trials (WT vs KO-Hypo)
+        * Hit trials (WT vs KO-Hypo)
+        * Miss trials (WT vs KO-Hypo)
+        * ΔHit–Miss (WT vs KO-Hypo)
+
+    Parameters
+    ----------
+    mean_activity_df : pandas.DataFrame
+        Dataframe containing trial-averaged neural activity. Expected columns:
+        - "Genotype"   : str, genotype label ("WT", "KO-Hypo")
+        - "ID"         : str, recording/session identifier
+        - "Threshold"  : float, threshold amplitude for that session
+        - "Amplitude"  : float, stimulus amplitude
+        - "Behavior"   : bool, behavioral outcome for go trials (True = Hit, False = Miss)
+        - "FA"         : bool, behavioral outcome for no-go trials (True = FA, False = CR)
+        - "cum_AUC", "cum_AUC_pre", "cum_AUC_fixpre", "neg_AUC_fixpre" : pre-stimulus activity metrics
+        - "Neuron", "Resp" : trial-level information (dropped during grouping)
+
+    threshold_only : bool, optional (default=False)
+        If True, restricts analysis to trials at the session threshold.
+        If False, includes all amplitudes and aggregates across them.
+
+    Returns
+    -------
+    all_grouped : pandas.DataFrame
+        Aggregated dataframe containing per-ID and per-genotype averages
+        of pre-stimulus and AUC-derived activity measures,
+        used for plotting and group comparisons.
+    """
     activity_df = mean_activity_df.copy()
     activity_df["cum_AUC_diff"] = activity_df["cum_AUC"] - activity_df["cum_AUC_pre"]
     no_go = activity_df[activity_df.Amplitude == 0]
@@ -2472,11 +2891,59 @@ def compare_prestim(mean_activity_df, threshold_only=False):
     plt.show()
     return all_grouped
 
-# prestim_auc_df = compare_prestim(activity_long_df[activity_long_df.ID != 4456], threshold_only=False)
-#prestim_auc_df = compare_prestim(activity_long_dff, threshold_only=False)
 
+# Not used in the final paper
 def diff_AUC_stim_prestim(mean_activity_df):
-    """Is there a difference in how (AUC) the responsive neurons respond between trial outcome and genotypes"""
+    """
+    Compare stimulus–pre-stimulus AUC differences (cum_AUC_diff) between trial outcomes
+    (Hit vs Miss) and genotypes (WT vs KO-Hypo).
+
+    The main measure of interest is `cum_AUC_diff = cum_AUC - cum_AUC_pre`, which quantifies
+    how much stronger the neural response is during the stimulus compared to the pre-stimulus
+    baseline. Larger values indicate greater stimulus-driven activity relative to baseline.
+
+    Analysis procedure:
+    1. Compute `cum_AUC_diff` for each trial.
+    2. Filter out non-responsive neurons (`Resp == 0`) and no-go trials (`Amplitude == 0`).
+    3. Aggregate activity:
+       - `grouped_behavior`: mean activity per (Genotype, ID, Behavior)
+       - `grouped_all`: mean activity per (Genotype, ID)
+    4. Define comparison groups:
+       - WT: Hit, Miss, and ΔHit–Miss
+       - KO-Hypo: Hit, Miss, and ΔHit–Miss
+    5. Generate paired/unpaired comparisons via boxplots:
+       - All trials (WT vs KO-Hypo)
+       - ΔHit–Miss (WT vs KO-Hypo)
+       - WT Hit vs Miss
+       - KO-Hypo Hit vs Miss
+       - Hit: WT vs KO-Hypo
+       - Miss: WT vs KO-Hypo
+
+    Paired boxplots are used when within-subject comparisons are possible (Hit vs Miss),
+    while unpaired boxplots are used when comparing independent groups (WT vs KO-Hypo).
+    The generated figure has a 2 × 3 layout of comparisons:
+        Row 0: All trials, WT Hit/Miss, Hit (WT vs KO-Hypo)
+        Row 1: ΔHit–Miss, KO-Hypo Hit/Miss, Miss (WT vs KO-Hypo)
+
+    Parameters
+    ----------
+    mean_activity_df : pandas.DataFrame
+        Dataframe containing trial-averaged neural activity. Expected columns include:
+        - "Genotype"   : str, genotype label ("WT", "KO-Hypo")
+        - "ID"         : str, recording/session identifier
+        - "Amplitude"  : float, stimulus amplitude
+        - "Behavior"   : bool, go-trial outcome (True = Hit, False = Miss)
+        - "Resp"       : int, responsive neuron indicator (0 = non-responsive)
+        - "cum_AUC"    : float, cumulative activity during stimulus
+        - "cum_AUC_pre": float, cumulative activity during pre-stimulus
+        - Additional trial-level info: "Trial", "Neuron", "FA" (dropped during filtering)
+
+    Returns
+    -------
+    wt_hit : pandas.DataFrame
+        Subset of grouped behavioral data for WT Hit trials, indexed by session ID.
+        Returned for downstream analysis (e.g., direct access to per-trial averages).
+    """
     activity_df = mean_activity_df.copy()
     activity_df["cum_AUC_diff"] = activity_df["cum_AUC"] - activity_df["cum_AUC_pre"]
     # Filtering out the non-responsive neurons
@@ -2518,11 +2985,54 @@ def diff_AUC_stim_prestim(mean_activity_df):
     plt.show()
     return wt_hit
 
-# diff_AUC_prestim_df = diff_AUC_stim_prestim(activity_long_df[activity_long_df.ID != 4456])
 
-
+# Not used in the final paper
 def population_SNR(mean_activity_df):
-    """Is the SNR the same across trials, is there a change in SNR between hits and miss trials that could explain the detection"""
+    """
+    Compute trial-by-trial population-level signal-to-noise ratio (SNR) by quantifying
+    the distance of stimulus-evoked activity patterns from no-go (baseline) trials, and
+    compare these distances across behavioral outcomes (Hit vs Miss) and genotypes.
+
+    For each recording:
+    1. Select excitatory neurons ("EXC") only.
+    2. Construct a trial × neuron matrix with "Stim_mean" activity as entries.
+    3. Define the baseline distribution from no-go trials (Amplitude = 0):
+       - Mean activity vector (mu)
+       - Standard deviation (std)
+       - Covariance matrix (cov), regularized and inverted
+    4. For each go-trial (Amplitude > 0), compute:
+       - Mahalanobis distance of trial vector from baseline (captures multivariate deviation)
+       - Adjusted Euclidean distance: mean absolute deviation normalized by baseline std
+    5. Collect results into a dataframe with trial-level metadata.
+
+    Visualization:
+    - For each recording: boxplots comparing Hit vs Miss distances.
+    - At the group level:
+        * Paired Hit vs Miss comparisons within WT and KO-Hypo
+        * WT vs KO-Hypo comparisons for Hit, Miss, and ΔHit–Miss
+        * Mean distances per animal and per amplitude
+    - Curves across amplitudes are also plotted for Hit trials.
+
+    Parameters
+    ----------
+    mean_activity_df : pandas.DataFrame
+        Long-format dataframe of neuronal activity per trial. Expected columns include:
+        - "ID"        : str, recording/session identifier
+        - "Genotype"  : str, genotype label ("WT", "KO-Hypo")
+        - "Threshold" : float, session threshold amplitude
+        - "Neuron"    : str, neuron identifier (prefixed with "EXC" for excitatory)
+        - "Trial"     : int, trial index
+        - "Amplitude" : float, stimulus amplitude
+        - "Behavior"  : bool, trial outcome (True = Hit, False = Miss)
+        - "Stim_mean" : float, mean activity during stimulus
+        - "FA"        : (unused; dropped)
+
+    Returns
+    -------
+    amp_data : pandas.DataFrame
+        Trial-averaged distances grouped by (ID, Genotype, Threshold, Amplitude, Behavior),
+        containing both Mahalanobis and adjusted Euclidean distances.
+    """
     rows = []
     for rec_id in mean_activity_df.ID.unique():
         # Building a Dataframe with one row per trial and one column per neuron
@@ -2604,18 +3114,72 @@ def population_SNR(mean_activity_df):
     plt.show()
     return amp_data
 
-# pop_snr_df = population_SNR(activity_long_dff)
-
-
-def overall_zscore_comp(mean_activity_df):
-    """Compares the sum of the zscore of all neurons from trial to trial"""
-    pass
-
 
 # endregion ============================================================================================================
 # region ========================================== SNR ==============================================================
 def single_neuron_SNR(activity_df, n_type="EXC", amplitude="all", gp1="WT", gp2="KO-Hypo", filter_out_nr=False):
-    """Computes and plot the SNR at the single neuron level using 2 different methods: prestim or mean NoGo as reference"""
+    """
+    Compute and visualize signal-to-noise ratio (SNR) at the single-neuron level
+    using two reference methods: prestimulus baseline or mean No-Go activity.
+
+    For each neuron in each recording:
+    1. Select a subset of neurons by type (`EXC` or `INH`) and trials by amplitude
+       (`all`, `threshold`, or a list of values).
+    2. Exclude non-responsive neurons (Resp == 0 for all trials).
+    3. Compute reference values from No-Go trials (Amplitude = 0):
+       - Overall mean No-Go activity
+       - Split into False Alarm (FA) and Correct Rejection (CR) means
+    4. Merge these references back into the trial data, then compute SNR values:
+       - `SNR_prestim`: absolute difference from prestimulus baseline (already in input as `Abs_Diff_mean`)
+       - `SNR_NoGo`  : absolute difference from mean No-Go
+       - `SNR_FA`    : absolute difference from FA mean
+       - `SNR_CR`    : absolute difference from CR mean
+    5. Average SNR values across neurons to obtain animal-level measures, both
+       separately for Hits vs Misses and across all trials.
+    6. Detect outlier animals using a modified z-score on mean stimulus responses
+       (median absolute deviation, MAD). Exclude animals exceeding threshold.
+
+    Visualization:
+    - Boxplots comparing gp1 (e.g. WT) vs gp2 (e.g. KO-Hypo) for:
+        * All trials
+        * Hit trials
+        * Miss trials
+        * Paired Hit vs Miss within each genotype
+        * FA and CR trials
+    - Separate panels show `SNR_prestim` and `SNR_NoGo`.
+
+    Parameters
+    ----------
+    activity_df : pandas.DataFrame
+        Long-format dataframe of single-trial neuronal activity. Expected columns:
+        - "ID"        : str, recording/session identifier
+        - "Genotype"  : str, genotype label ("WT", "KO-Hypo")
+        - "Threshold" : float, session threshold amplitude
+        - "Neuron"    : str, neuron identifier (prefix "EXC"/"INH")
+        - "Trial"     : int, trial index
+        - "Amplitude" : float, stimulus amplitude
+        - "Behavior"  : bool, trial outcome (True = Hit, False = Miss)
+        - "Stim_mean" : float, mean stimulus-evoked activity
+        - "Abs_Diff_mean" : float, prestimulus baseline SNR
+        - "Resp"      : int, responsiveness indicator
+        - "FA"        : bool, False Alarm flag for No-Go trials
+    n_type : {"EXC", "INH"}, default="EXC"
+        Neuron type to include.
+    amplitude : {"all", "threshold", list}, default="all"
+        Stimulus amplitude selection.
+    gp1, gp2 : str, default "WT", "KO-Hypo"
+        Genotype labels for between-group comparison.
+    filter_out_nr : bool, default=False
+        (Unused; all non-responsive neurons are filtered out regardless.)
+
+    Returns
+    -------
+    gp_data_all : pandas.DataFrame
+        Animal-level averages across all trials, per genotype and ID.
+    gp_data : pandas.DataFrame
+        Animal-level averages separated by behavioral outcome (Hit/Miss),
+        per genotype and ID.
+    """
     full_data = activity_df.copy()
     # Neuron type selection
     if n_type in ["EXC", "INH"]:
@@ -2733,6 +3297,53 @@ def single_neuron_SNR(activity_df, n_type="EXC", amplitude="all", gp1="WT", gp2=
 
 
 def pop_SNR(activity_df, recruitment_df, amplitude="all", gp1="WT", gp2="KO-Hypo"):
+    """
+    Computes and compares the population signal-to-noise ratio (SNR) of neuronal recruitment
+    between two genotypes/conditions, based on hit/miss and no-go trials.
+
+    The function aligns recruitment data with behavioral outcomes (hit, miss, false alarm, correct rejection)
+    and computes population SNR values by normalizing activity during stimulation (Hit/Miss) relative to
+    activity during No-Go trials. It handles three levels of trial selection:
+    - "all": includes all non-zero amplitudes,
+    - "threshold": includes only threshold-amplitude trials,
+    - list: selects trials matching a given list of amplitudes.
+
+    Population SNRs are computed in three complementary ways:
+    1. Across all trials compared to No-Go,
+    2. Separately for Hit and Miss compared to No-Go,
+    3. Separately for Hit and Miss compared to their matched No-Go subsets (FA/CR).
+
+    The function then generates a grid of boxplots comparing SNR values between the two groups
+    (gp1 vs gp2), across the above trial types, and returns the grouped dataframes.
+
+    Parameters
+    ----------
+    activity_df : pandas.DataFrame
+        Dataframe containing activity metrics with columns including at least ["ID", "Trial", "FA"].
+        FA encodes False Alarms for no-go trials.
+    recruitment_df : pandas.DataFrame
+        Dataframe with recruitment-related variables such as amplitude, threshold, responsivity metrics,
+        and genotype identifiers. Must share ["ID", "Trial"] with `activity_df`.
+    amplitude : str or list, optional
+        Selection of trial amplitudes:
+        - "all": include all non-zero amplitudes,
+        - "threshold": include only trials at the individual session threshold,
+        - list: specific amplitudes to include.
+        Default is "all".
+    gp1 : str, optional
+        First genotype/condition to compare (default = "WT").
+    gp2 : str, optional
+        Second genotype/condition to compare (default = "KO-Hypo").
+
+    Returns
+    -------
+    grouped : pandas.DataFrame
+        Grouped dataframe of mean activity values per ID and genotype, with population SNR columns
+        (trial-averaged SNR across all conditions).
+    grouped_beh_no_go : pandas.DataFrame
+        Grouped dataframe of mean activity values per ID, genotype, and behavior,
+        with population SNR columns (behavior-specific SNRs for Hit/Miss vs No-Go).
+    """
     recruitment = recruitment_df.copy()
     if gp1.split("-")[-1] in ["DMSO", "BMS"]:
         condition = recruitment["Genotype"].astype("string").str.rsplit("-", n=1).str[-1]
@@ -2837,6 +3448,52 @@ def pop_SNR(activity_df, recruitment_df, amplitude="all", gp1="WT", gp2="KO-Hypo
 
 
 def correlate_single_SNR(activity_df, recruitment_df, amplitude="all", gp1="WT", gp2="KO-Hypo", filter_out_nr=False):
+    """
+    Correlates single neuron SNR with population SNR and recruitment percentages for excitatory (EXC)
+    and inhibitory (INH) neurons across different trial outcomes.
+
+    This function computes single-neuron SNRs (both EXC and INH) using `single_neuron_SNR`,
+    computes population-level SNRs using `pop_SNR`, and merges them to produce dataframes
+    for correlation analysis. Correlations are then computed and plotted between:
+      - Single neuron SNR (EXC/INH) and the fraction of recruited neurons,
+      - Single neuron SNR (EXC/INH) and population SNR metrics,
+    separately for all trials, hit trials, and miss trials.
+
+    Correlation plots are generated for the two groups (gp1 and gp2), with linear regression lines
+    and R² values displayed. Outliers and non-responsive neurons can optionally be filtered
+    at the single neuron level.
+
+    Parameters
+    ----------
+    activity_df : pandas.DataFrame
+        Dataframe with neuronal activity per trial and neuron, including columns:
+        ["ID", "Trial", "Neuron", "Resp", "Stim_mean", "FA", "Amplitude", "Threshold", "Behavior"].
+    recruitment_df : pandas.DataFrame
+        Dataframe containing population recruitment metrics per trial and neuron type
+        (e.g., rec_EXC_perc, rec_INH_perc, rec_EXC_perc_SNR, rec_INH_perc_SNR), including
+        ["ID", "Trial", "Genotype", "amplitude", "Threshold"].
+    amplitude : str or list, optional
+        Select trials by amplitude:
+        - "all": all non-zero amplitudes,
+        - "threshold": only trials equal to the threshold,
+        - list: specific amplitudes to include.
+        Default is "all".
+    gp1 : str, optional
+        First genotype/condition for comparison. Default is "WT".
+    gp2 : str, optional
+        Second genotype/condition for comparison. Default is "KO-Hypo".
+    filter_out_nr : bool, optional
+        Whether to filter out non-responsive neurons at the single neuron SNR stage. Default is False.
+
+    Returns
+    -------
+    data_all : pandas.DataFrame
+        Merged dataframe containing single neuron SNR and population recruitment/SNR metrics
+        for all trials.
+    data_beh : pandas.DataFrame
+        Merged dataframe containing single neuron SNR and population recruitment/SNR metrics
+        separated by trial outcome (Hit/Miss).
+    """
     single_all_exc, single_beh_exc = single_neuron_SNR(activity_df, n_type="EXC", amplitude=amplitude, gp1=gp1, gp2=gp2, filter_out_nr=filter_out_nr)
     single_all_inh, single_beh_inh = single_neuron_SNR(activity_df, n_type="INH", amplitude=amplitude, gp1=gp1, gp2=gp2, filter_out_nr=filter_out_nr)
     pop_all, pop_beh = pop_SNR(activity_df, recruitment_df, amplitude=amplitude, gp1=gp1, gp2=gp2)
@@ -2902,7 +3559,7 @@ def correlate_single_SNR(activity_df, recruitment_df, amplitude="all", gp1="WT",
     plt.show()
     return data_all, data_beh
 
-# sing_pop_SNR_corr = correlate_single_SNR(activity_long_df, recruitment_df, amplitude="all", gp1="WT", gp2="KO-Hypo", filter_out_nr=True)
+
 # endregion ============================================================================================================
 
 if __name__ == '__main__':
