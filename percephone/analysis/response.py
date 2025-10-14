@@ -59,7 +59,8 @@ def resp_single_neuron(neuron_df_data_, random_timing, rec):
 
     durations = np.zeros(len(rec.stim_time), dtype=int)
     for i, timing in enumerate(rec.stim_time):
-        if rec.detected_stim[i]:
+        # TODO: Here we don't consider the licking for the naive and motivated mice
+        if len(rec.detected_stim) > 0 and rec.detected_stim[i]:
             durations[i] = np.min(np.array(rec.lick_time - timing)[(rec.lick_time - timing) > 0])
         else:
             durations[i] = (int(0.5 * rec.sf))

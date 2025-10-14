@@ -29,16 +29,41 @@ from Figures.stimulus_encoding import get_features
 
 def get_activity_by_frame_df(recs, zscore=True, BMS=False):
     """
-    Generates a pd.DataFrame, each containing the neuronal data for a single neuron 30 frames preceding and following for a single trial.
-    Frame 30 = stim_time.
+    Builds a trial-by-trial DataFrame containing neuronal activity traces aligned to stimulus onset.
+    For each neuron and trial, the function extracts activity values from 30 frames before to 30 frames
+    after the stimulus (with frame 30 corresponding to the stimulus onset). Metadata such as genotype,
+    recording ID, neuron type, trial characteristics, and neuron responsivity are also stored.
+
+    If `zscore=True`, activity traces are taken from z-scored signals (`rec.zscore_exc` and `rec.zscore_inh`);
+    otherwise, ΔF/F traces are used (`rec.df_f_exc` and `rec.df_f_inh`). When `BMS=True`, the recording ID
+    includes the second part of the genotype string.
 
     Parameters
     ----------
-    recs
+    recs : list
+        List of recording objects, each containing neuronal activity arrays and metadata
+        (e.g., filename, genotype, stim_time, stim_ampl, stim_durations, detected_stim, session_threshold).
+    zscore : bool, optional
+        Whether to use z-scored activity (`True`) or raw ΔF/F traces (`False`). Default is True.
+    BMS : bool, optional
+        Whether to append the second part of the genotype string to the recording ID. Default is False.
 
     Returns
     -------
-
+    pandas.DataFrame
+        Long-format DataFrame where each row corresponds to the activity of a single neuron
+        during a single trial. Columns include:
+        - "Genotype": genotype of the recording,
+        - "ID": recording identifier,
+        - "Threshold": session threshold,
+        - "Trial": trial index,
+        - "Amplitude": stimulus amplitude,
+        - "Duration": stimulus duration,
+        - "Behavior": behavioral response label,
+        - "n_type": neuron type ("EXC" or "INH"),
+        - "resp": responsivity label of the neuron in that trial,
+        - "n_ID": neuron index,
+        - integer frame columns from -30 to +29 relative to stimulus onset.
     """
     rows = []
     for rec in recs:
@@ -62,24 +87,35 @@ def get_activity_by_frame_df(recs, zscore=True, BMS=False):
     return pd.DataFrame(rows)
 
 
+# Not used in the final paper
 def sliding_window_average(df, header_cols, window_size, sum=False):
     """
-    Applies a sliding-window average across the numeric columns of a DataFrame.
+    Applies a sliding window operation across the numeric columns of a DataFrame, either averaging
+    or summing values depending on the `sum` flag. The numeric columns are assumed to be labeled
+    consecutively (e.g., 0, 1, 2, …, N-1), while header columns remain unchanged.
 
-    Parameters:
-    - df: pandas.DataFrame containing header columns and numeric columns labeled 0..N-1.
-    - header_cols: list of column names in df that should remain unchanged.
-    - window_size: int, size of the sliding window (must be >= 1).
+    For each numeric column i, the output value is computed over a window of size `window_size`
+    centered at i. If the window would extend beyond the available columns (near the edges),
+    it is truncated and the operation is performed on the available subset (with at least 2 values).
 
-    Returns:
-    - A new DataFrame with the same columns and shape as df.
-      Header columns are copied as-is, and numeric columns are replaced by their windowed averages.
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Input DataFrame containing header columns and numeric columns labeled 0..N-1.
+    header_cols : list of str
+        Names of the columns to be preserved as-is in the output.
+    window_size : int
+        Size of the sliding window (must be >= 1).
+    sum : bool, optional
+        If False (default), computes the mean within each sliding window.
+        If True, computes the sum instead.
 
-    Behavior:
-    - For interior columns, the value at position i is the mean of columns [i - k, ..., i, ..., i + k],
-      where k = window_size // 2.
-    - For edge columns (where a full window would extend beyond 0 or N-1), the window is truncated
-      and only the available columns are averaged (min_periods=2).
+    Returns
+    -------
+    pandas.DataFrame
+        DataFrame with the same columns and shape as the input.
+        Header columns are preserved unchanged, while numeric columns are replaced
+        by their windowed average or sum (depending on `sum`).
     """
     numeric_cols = [col for col in df.columns if col not in header_cols]
     if sum:
@@ -93,11 +129,31 @@ def sliding_window_average(df, header_cols, window_size, sum=False):
     return result_df
 
 
+# Not used in the final paper
 def aggregate_every_3cols(df, header_cols, window_size=3):
     """
-    For a DataFrame with some non-numeric "header" columns and 60 numeric columns,
-    returns a new DataFrame with the same header columns plus one column per
-    consecutive block of 3 numeric columns, each equal to their rowwise mean.
+    Aggregates consecutive groups of numeric columns into their rowwise mean, while
+    preserving the specified header columns. By default, the numeric columns are
+    processed in blocks of 3, but the block size can be adjusted with `window_size`.
+
+    The number of numeric columns must be a multiple of `window_size`. Each new
+    aggregated column is named according to the range of original columns it summarizes
+    (e.g., "0_to_2_mean" for columns [0, 1, 2]).
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Input DataFrame containing header columns and numeric columns.
+    header_cols : list of str
+        Names of the columns to be preserved as-is in the output.
+    window_size : int, optional
+        Number of consecutive numeric columns to aggregate (default is 3).
+
+    Returns
+    -------
+    pandas.DataFrame
+        A DataFrame containing the header columns and one new column per block of
+        `window_size` numeric columns, each holding the rowwise mean of that block.
     """
     # 1) Split off non-numeric headers
     numeric_cols = [col for col in df.columns if col not in header_cols]
@@ -123,16 +179,34 @@ def aggregate_every_3cols(df, header_cols, window_size=3):
 
 def perceptual_magnitude_behavior_corr(recs):
     """
-    Correlates a single parameter witht he behavioral outcome for threshold trials using point biserial corrrelation.
-    Can not be used to correlate all trials because need to include the amplitude as a covariate.
+    Computes the correlation between perceptual magnitude (here: % responsive excitatory neurons)
+    and behavioral outcome (Hit vs Miss) for threshold-level trials using a point-biserial correlation.
+
+    This function restricts the analysis to stimulation trials at the session threshold amplitude
+    in order to avoid bias. It cannot be applied to all trials simultaneously, because amplitude
+    would need to be included as a covariate.
 
     Parameters
     ----------
-    recs
+    recs : list
+        List of recording objects, each expected to provide:
+        - rec.filename (str) : Unique identifier for the recording.
+        - rec.genotype (str) : Genotype label.
+        - rec.session_threshold (float or int) : Threshold amplitude used in the session.
+        - rec.stim_ampl_filter(stim_ampl="all") : Boolean mask for threshold trials.
+        - rec.get_perc_resp(pattern=1, n_type="EXC") : Returns excitatory responsivity vector.
+        - rec.detected_stim : Boolean array of behavioral detection outcomes.
 
     Returns
     -------
-
+    pandas.DataFrame
+        A DataFrame where each row corresponds to a recording, with the following columns:
+        - "ID" : Recording filename.
+        - "Genotype" : Genotype of the animal.
+        - "session_threshold" : Threshold amplitude of the session.
+        - "nb_threshold_trials" : Number of threshold trials included in the correlation.
+        - "R2" : Coefficient of determination (r²) from the point-biserial correlation.
+        - "p_val" : Associated p-value.
     """
     rows = []
     for rec in recs:
@@ -154,16 +228,46 @@ def perceptual_magnitude_behavior_corr(recs):
 
 def correlate_mean_zscore_behavior_frame(frame_data):
     """
-    Builds a DataFrame, each row being a neuron type for a specific animal, and the values of correlation (r and pval)
-    of the vector of zscore at each frame and the vector of behavior.
+    Computes, for each recording ID × neuron type × responsivity group, the correlation between
+    per-frame mean z-scores and behavioral outcome (Hit vs Miss) using point-biserial correlation.
+
+    Each row in the output DataFrame corresponds either to the correlation coefficient ("r") or
+    its associated p-value ("pval") at each frame, for one (ID, Genotype, neuron type, resp) group.
 
     Parameters
     ----------
-    frame_data
+    frame_data : pandas.DataFrame
+        Trial-wise neuronal activity with both header metadata and per-frame z-scores.
+        Expected columns include:
+        - "Genotype" : str, genotype label.
+        - "ID" : str, recording/animal identifier.
+        - "Threshold" : float or int, session threshold amplitude.
+        - "Trial" : int, trial index.
+        - "Amplitude" : float or int, stimulation amplitude.
+        - "Duration" : float or int, stimulation duration.
+        - "Behavior" : bool, behavioral outcome (e.g., Hit=True, Miss=False).
+        - "n_type" : str, neuron type ("EXC" or "INH").
+        - "resp" : int or bool, responsivity of the neuron in the trial.
+        - "n_ID" : int, neuron identifier.
+        - Frame-wise z-scores as numeric columns (0, 1, ..., N).
 
     Returns
     -------
+    pandas.DataFrame
+        Each row corresponds to one correlation metric for a given (Genotype, ID, n_type, resp) group:
+        - "Genotype" : genotype label.
+        - "ID" : recording/animal identifier.
+        - "n_type" : neuron type.
+        - "resp" : responsivity group.
+        - "metric" : "r" (correlation coefficient) or "pval" (associated p-value).
+        - Frame columns : correlation values (r or pval) at each frame.
 
+    Notes
+    -----
+    - The function first averages z-scores across neurons (per (ID, Trial, n_type, resp)),
+      then correlates those per-trial means with the binary behavior vector.
+    - Only groups with more than one trial are included in the correlation.
+    - Output rows come in pairs: one with correlation coefficients ("r"), one with p-values ("pval").
     """
     # Computing the mean zscore per trial
     header_columns = ["Genotype", "ID", "Threshold", "Trial", "Amplitude", "Duration", "Behavior", "n_type", "resp", "n_ID"]
@@ -191,6 +295,39 @@ def correlate_mean_zscore_behavior_frame(frame_data):
 
 
 def plot_frame_correlation(corr_data):
+    """
+    Plots frame-by-frame correlation results (r and p-values) between neuronal activity
+    and behavioral outcome, separated by genotype, neuron type, and responsivity.
+
+    Parameters
+    ----------
+    corr_data : pandas.DataFrame
+        Correlation results produced by `correlate_mean_zscore_behavior_frame`.
+        Expected columns include:
+        - "Genotype" : str, genotype label.
+        - "ID" : str, recording/animal identifier.
+        - "n_type" : str, neuron type ("EXC" or "INH").
+        - "resp" : int or bool, responsivity group.
+        - "metric" : str, correlation metric ("r" or "pval").
+        - Frame columns : correlation values (float) for each frame index.
+
+    Returns
+    -------
+    None
+        Displays a matplotlib figure with subplots:
+        - Rows correspond to correlation metrics ("r", "pval").
+        - Columns correspond to genotypes.
+        - Each line corresponds to one (ID, n_type, resp) group, with color
+          indicating neuron type and responsivity.
+
+        The plot includes the following visual guides:
+        - Vertical dashed lines: stimulus onset (frame 30, red) and offset (frame 45, black).
+        - For p-values, a horizontal green dashed line marks the 0.05 significance threshold.
+        - Color scheme:
+            * EXC: light to dark blue for increasing responsivity levels.
+            * INH: light to dark magenta for increasing responsivity levels.
+        - Figure title: "Frame by frame correlation of zscore with behavior".
+    """
     color_dict = {"EXC": ["skyblue", "blue", "navy"], "INH": ["pink", "magenta", "darkviolet"]}
     fig, ax = plt.subplots(nrows=2, ncols=3, figsize=(18, 12), constrained_layout=True)
     for col, genotype in enumerate(corr_data["Genotype"].unique()):
@@ -218,17 +355,39 @@ def plot_frame_correlation(corr_data):
 # endregion ============================================================================================================
 # region ======================================== Modelling ============================================================
 
+# Not used in the final paper
 def glmm_behavior(data):
     """
-    Aims to model the behavioral outcome using a list of predictors defined as important for stimulus encoding (GLMM).
+    Fits a generalized linear mixed model (GLMM) to explain the behavioral outcome
+    from neuronal predictors and stimulation parameters.
 
     Parameters
     ----------
-    rec
+    data : pandas.DataFrame
+        Long-format dataset containing:
+        - "behavior" : binary outcome (trial detected = 1, not detected = 0).
+        - "Genotype" : categorical factor with levels ["WT", "KO", "KO-Hypo"].
+        - "ID" : subject/recording identifier (random effect).
+        - "amplitude" : stimulus amplitude.
+        - "act_EXC_perc", "inh_EXC_perc", "act_INH_perc", "inh_INH_perc" :
+          trial-level neuronal activity measures used as predictors.
 
     Returns
     -------
+    result : statsmodels.genmod.generalized_linear_model.BinomialBayesMixedGLMResults
+        Fitted GLMM object. A summary of the model is printed to console.
 
+        The model is binomial with a logit link, and uses the following specification:
+        ``behavior ~ amplitude*Genotype
+                     + amplitude:act_EXC_perc*Genotype
+                     + amplitude:inh_EXC_perc*Genotype
+                     + amplitude:act_INH_perc*Genotype
+                     + amplitude:inh_INH_perc*Genotype``
+
+        Random effects are modeled by subject ID, with one variance component per subject.
+        Estimation is done using variational Bayes (`fit_vb`). The function contains
+        commented-out alternatives for fitting a GEE restricted to WT animals or
+        including additional predictors (e.g. amplitude, delay).
     """
     data["Genotype"] = pd.Categorical(data["Genotype"], categories=["WT", "KO", "KO-Hypo"], ordered=True)
     # data["behavior"] = pd.Categorical(data["behavior"], categories=["False", "True"], ordered=True)
@@ -250,20 +409,52 @@ def glmm_behavior(data):
     print(result.summary())
 
 
+# Not used in the final paper
 def frame_model_n_type_avg(frame_data):
     """
-    Return the hit versus miss classification graph.
-    A logistic regression model is trained on for each frame for each animal. CV is used to assess the hit accuracy
-    (True positive) and  miss accuracy (True negative). Under sampling was performed to avoid biases linked to the class
-    unbalance
+    Trains a logistic regression model for each frame and each animal to classify
+    behavioral outcome (hit vs. miss) based on averaged neuronal responses.
+    Cross-validation is used to assess classification accuracy, with undersampling
+    performed to correct class imbalance.
+
+    For each frame, a pivoted dataset is constructed with columns corresponding to
+    (n_type, resp) neuron categories. Trials with amplitude = 0 and inhibited INH
+    neurons are excluded. Missing values are imputed by the per-animal/per-amplitude
+    mean. Logistic regression with L2 regularization is then trained using
+    undersampled training data, and evaluated on a held-out test set.
 
     Parameters
     ----------
-    frame_data
+    frame_data : pandas.DataFrame
+        Long-format trial-level dataset containing:
+        - "Genotype" : animal genotype.
+        - "ID" : animal/session identifier.
+        - "Threshold" : stimulation threshold for that session.
+        - "Trial" : trial index.
+        - "Amplitude" : stimulation amplitude.
+        - "Duration" : stimulation duration.
+        - "Behavior" : binary outcome (hit/miss).
+        - "n_type" : neuron type (EXC or INH).
+        - "resp" : response sign (-1, 0, 1).
+        - "n_ID" : neuron identifier.
+        - plus z-score values across frames.
 
     Returns
     -------
+    results_df : pandas.DataFrame
+        A dataframe where each row corresponds to one animal and one frame.
+        Includes:
+        - "Genotype" : animal genotype.
+        - "ID" : animal/session identifier.
+        - "Threshold" : stimulation threshold.
+        - "Frame" : frame index.
+        - "TPR" : true positive rate (sensitivity/recall).
+        - "FPR" : false positive rate.
+        - "Accuracy" : classification accuracy.
 
+        Logistic regression uses stratified train/test splits, undersampling
+        within the training set, and evaluation on the held-out test set.
+        The confusion matrix is used to compute the reported metrics.
     """
     # Grouping the different neurons
     header_columns = ["Genotype", "ID", "Threshold", "Trial", "Amplitude", "Duration", "Behavior", "n_type", "resp",
@@ -321,24 +512,74 @@ def frame_model_n_type_avg(frame_data):
                    "Threshold": filtered_data["Threshold"].values[0], "Frame": frame, "TPR": tpr, "FPR": fpr, "Accuracy": accuracy}
             rows.append(row)
     return pd.DataFrame(rows)
-    # return frame_data
 
 
 def frame_model(frame_data, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db_cv=True, balancing_method="resampling",
                 sliding_window=None, window_sum=False, window=None):
     """
-    Return the hit versus miss classification graph.
-    A logistic regression model is trained on for each frame for each animal. CV is used to assess the hit accuracy
-    (True positive) and  miss accuracy (True negative). Under sampling was performed to avoid biases linked to the class
-    unbalance
+    Trains logistic regression models to classify behavioral outcome (hit vs. miss)
+    based on neuronal responses across frames. For each frame and each animal,
+    a dataset of neuronal activity is pivoted so that each neuron forms one predictor.
+    Logistic regression is then trained and evaluated either with nested double
+    cross-validation or a train/test split, depending on the `db_cv` flag.
+
+    To handle class imbalance, the user can choose resampling, sample weighting,
+    or no balancing method. Optionally, neuronal activity can be aggregated
+    over time using a sliding window or a fixed-size window. For each animal and frame,
+    the model reports classification metrics including accuracy, sensitivity (TPR),
+    and false positive rate (FPR), along with shuffled controls.
 
     Parameters
     ----------
-    frame_data
+    frame_data : pandas.DataFrame
+        Trial-level dataset containing:
+        - "Genotype" : animal genotype.
+        - "ID" : animal/session identifier.
+        - "Trial" : trial index.
+        - "Amplitude" : stimulation amplitude.
+        - "Duration" : stimulation duration.
+        - "Behavior" : binary outcome (hit/miss).
+        - "n_type" : neuron type (EXC or INH).
+        - "resp" : response sign (-1, 0, 1).
+        - "n_ID" : neuron identifier.
+        - plus z-score values across frames.
+    neuron_type : list of str, default=["EXC", "INH"]
+        Neuron types to include in the analysis.
+    resp_type : list of int, default=[0, 1, -1]
+        Response categories to include (inactive, activated, inhibited).
+    db_cv : bool, default=True
+        If True, performs nested double cross-validation to tune hyperparameters
+        and evaluate generalization. If False, a single train/test split is used.
+    balancing_method : {"resampling", "weights", None}, default="resampling"
+        Strategy to address class imbalance:
+        - "resampling" : undersampling with RandomUnderSampler.
+        - "weights" : class_weight="balanced" in logistic regression.
+        - None : no explicit balancing.
+    sliding_window : int or None, default=None
+        Size of the sliding window (in frames) for temporal averaging of activity.
+        Mutually exclusive with `window`.
+    window_sum : bool, default=False
+        If True and `sliding_window` is provided, sums activity within the window
+        instead of averaging.
+    window : int or None, default=None
+        Size of non-overlapping windows (in frames) for aggregation.
+        Mutually exclusive with `sliding_window`.
 
     Returns
     -------
-
+    frame_model_df : pandas.DataFrame
+        Dataframe where each row corresponds to one animal and one frame,
+        containing:
+        - "Genotype", "ID", "Frame" : identifiers.
+        - "TPR" : true positive rate (sensitivity/recall).
+        - "FPR" : false positive rate.
+        - "Accuracy" : classification accuracy.
+        - "TPR_shuffle", "FPR_shuffle", "Accuracy_shuffle" :
+          performance metrics after label shuffling (baseline control).
+    frame_mean_sem : matplotlib.Figure or tuple
+        Summary plot of classification accuracy over frames, averaged across animals
+        with SEM. Title encodes selected neuron/response types and whether double CV
+        was used.
     """
     data = frame_data.copy()
     assert (sliding_window is None or window is None), "Please choose between each frame, sliding window, and window"
@@ -398,6 +639,32 @@ def frame_model(frame_data, neuron_type=["EXC", "INH"], resp_type=[0, 1, -1], db
 
 
 def get_metrics(y_test, y_pred):
+    """
+    Compute basic binary classification metrics from test labels and predictions.
+    The confusion matrix is constructed with labels ordered as [False, True],
+    so that rows correspond to the true class and columns to the predicted class.
+    From this, true positives (TP), true negatives (TN), false positives (FP),
+    and false negatives (FN) are extracted, and the following metrics are calculated:
+
+    - TPR (True Positive Rate, also called Sensitivity or Recall): TP / (TP + FN).
+    - FPR (False Positive Rate): FP / (TN + FP).
+    - Accuracy: (TP + TN) / (TP + TN + FP + FN).
+
+    Parameters
+    ----------
+    y_test : array-like of shape (n_samples,)
+        Ground truth binary labels (must contain values interpretable as True/False).
+    y_pred : array-like of shape (n_samples,)
+        Predicted binary labels.
+
+    Returns
+    -------
+    metrics : dict
+        Dictionary containing:
+        - "TPR" : True Positive Rate (recall).
+        - "FPR" : False Positive Rate.
+        - "Accuracy" : Overall classification accuracy.
+    """
     metrics = {}
     cm = confusion_matrix(y_test, y_pred, labels=[False, True])
     TP = cm[1, 1]
@@ -413,22 +680,50 @@ def get_metrics(y_test, y_pred):
 def double_cv(X, y, cv_out_fold=5, cv_in_fold=5, param_grid={"C": [0.0001, 0.001, 0.01, 0.1, 1], "penalty": ["l2"]},
               scoring_metric="Accuracy", resampler=RandomUnderSampler(random_state=42), random_state=42, get_df=False):
     """
-    Perform double cross validation
+    Perform nested (double) cross-validation with logistic regression for hyperparameter tuning,
+    class rebalancing, and performance benchmarking against shuffled labels.
+
+    The outer cross-validation loop (cv_out_fold splits) estimates generalization performance,
+    while the inner loop (cv_in_fold splits) selects the best hyperparameters from `param_grid`.
+    A resampling strategy (default: random undersampling) can be applied to address class imbalance.
+    After model fitting, both performance on true labels and a shuffled-label baseline are reported
+    to assess whether classification accuracy is above chance.
+
     Parameters
     ----------
-    X
-    y
-    cv_out_fold
-    cv_in_fold
-    param_grid
-    scoring_metric
-    resampler
-    random_state
-    get_df
+    X : ndarray of shape (n_samples, n_features)
+        Input feature matrix.
+    y : ndarray of shape (n_samples,)
+        Binary labels corresponding to X.
+    cv_out_fold : int, default=5
+        Number of outer folds for performance evaluation.
+    cv_in_fold : int, default=5
+        Number of inner folds for hyperparameter tuning.
+    param_grid : dict, default={"C": [0.0001, 0.001, 0.01, 0.1, 1], "penalty": ["l2"]}
+        Grid of logistic regression hyperparameters to explore.
+    scoring_metric : {"Accuracy", "TPR", "FPR"}, default="Accuracy"
+        Metric used to select the best hyperparameters during the inner CV.
+    resampler : imbalanced-learn resampler or None, default=RandomUnderSampler(random_state=42)
+        Strategy to balance classes. If None, no resampling is applied.
+    random_state : int, default=42
+        Random seed for reproducibility in CV splitting and resampling.
+    get_df : bool, default=False
+        If True, return the full per-fold DataFrame. If False, return the mean metrics.
 
     Returns
     -------
+    results : dict or pandas.DataFrame
+        - If get_df=False: dictionary with mean performance metrics across outer folds, e.g.:
+          {"TPR": ..., "FPR": ..., "Accuracy": ..., "TPR_shuffle": ..., "FPR_shuffle": ..., "Accuracy_shuffle": ...}.
+        - If get_df=True: DataFrame containing results for each outer fold, including best parameters and both
+          true-label and shuffled-label performance.
 
+    Notes
+    -----
+    - True performance is compared against a shuffled-label baseline, highlighting whether the classifier
+      performs better than chance.
+    - Metrics are computed using `get_metrics`, which returns TPR (recall), FPR, and Accuracy.
+    - Logistic regression models are trained with `max_iter=5000` to ensure convergence.
     """
     y_true = []
     y_pred = []
@@ -504,16 +799,49 @@ def double_cv(X, y, cv_out_fold=5, cv_in_fold=5, param_grid={"C": [0.0001, 0.001
 def plot_hit_miss_classif(frame_model_df, title_precision="", shuffle=False, shuffle_frame_significance=False,
                           timescale_division_factor=1):
     """
-    Plot the hit vs miss classification graph from a Dataframe with each line containing infos about TPR and TNR for 1
-    frame for one animal.
+    Plot hit versus miss classification curves from a DataFrame, where each row contains information about TPR and FPR
+    for one frame and one animal. The function averages these values across animals of the same genotype and plots
+    mean ± SEM curves, optionally comparing to shuffled-label baselines.
+
+    The plot includes:
+    - True Positive Rate (TPR, "hit accuracy") and False Positive Rate (FPR, "miss accuracy") across time.
+    - Shuffled-label curves (dotted, semi-transparent) if `shuffle=True`.
+    - Statistical significance markers (horizontal bars) on frames where real vs. shuffled curves differ, if
+      `shuffle_frame_significance=True`.
+    - Vertical dashed lines marking stimulus onset (red, at 30/timescale_division_factor) and offset (black, at
+      45/timescale_division_factor).
+    - A horizontal dashed line at 0.5, representing chance level.
+    - x-axis ticks aligned to -1, -0.5, 0, 0.5, 1 seconds relative to stimulus timing.
 
     Parameters
     ----------
-    frame_model_df
+    frame_model_df : pd.DataFrame
+        Input DataFrame containing columns:
+        - "Genotype": categorical group label for each animal (e.g., "WT", "KO").
+        - "ID": animal identifier.
+        - "Frame": time frame index.
+        - "TPR", "FPR": classification metrics for each animal and frame.
+        Optionally includes "TPR_shuffle" and "FPR_shuffle" if `shuffle=True`.
+
+    title_precision : str, optional
+        Extra string appended to the figure title and window title (default = "").
+
+    shuffle : bool, optional
+        If True, also plot performance curves from shuffled labels for comparison (default = False).
+
+    shuffle_frame_significance : bool, optional
+        If True and `shuffle=True`, performs Wilcoxon signed-rank tests across animals for each frame to
+        mark frames where shuffled vs. real data differ significantly (default = False).
+
+    timescale_division_factor : int, optional
+        Factor dividing the frame index to adjust x-axis scale (useful for plotting at different time resolutions,
+        default = 1).
 
     Returns
     -------
-
+    pd.DataFrame
+        Subset of the input DataFrame corresponding to the last processed genotype, with "Genotype" and "ID" columns
+        dropped.
     """
     draw_style = "default" if timescale_division_factor == 1 else "steps-post"
     fill_style = None if timescale_division_factor == 1 else "post"
@@ -592,6 +920,54 @@ def plot_hit_miss_classif(frame_model_df, title_precision="", shuffle=False, shu
 
 
 def plot_hit_miss_classif_comp(frame_model_df, gp1="WT", gp2="KO-Hypo", title_precision=""):
+    """
+    Compare hit accuracy (TPR) and miss error (FPR) between two genotypes across stimulus-related periods,
+    and evaluate real vs. shuffled performance within each genotype. This function generates two figures:
+
+    1. **Genotype comparison figure (2x4 subplots)**
+       - Top row: boxplots comparing hit accuracy (TPR) between `gp1` and `gp2` across four time windows.
+       - Bottom row: boxplots comparing miss error (FPR) between `gp1` and `gp2`.
+       - Colors follow `sty.color_dict`, different per genotype.
+       - Significance markers can be displayed depending on the boxplot utility function (`ppt.boxplot`).
+
+    2. **Shuffle comparison figure (4x4 subplots)**
+       - For each of the four periods, plots real vs. shuffled TPR and FPR separately for `gp1` (rows 0–1)
+         and `gp2` (rows 2–3).
+       - Uses paired comparisons (real vs. shuffled for the same animals).
+       - Real data colored by genotype, shuffled data in gray.
+       - Significance markers are drawn if differences are detected.
+
+    The time windows analyzed are:
+    - `"stim"`: full stimulus window (frames 30–45).
+    - `"start_stim (250ms)"`: early stimulus subwindow (frames 30–37).
+    - `"end_stim (250ms)"`: late stimulus subwindow (frames 37–45).
+    - `"pre_stim (200ms)"`: baseline window before stimulus onset (frames 24–30).
+
+    Parameters
+    ----------
+    frame_model_df : pd.DataFrame
+        Input DataFrame containing columns:
+        - "Genotype": categorical labels for each animal (e.g., "WT", "KO-Hypo").
+        - "ID": animal identifier.
+        - "Frame": time frame index.
+        - "TPR", "FPR": classification metrics per frame.
+        - "TPR_shuffle", "FPR_shuffle": shuffled baseline metrics for comparison.
+
+    gp1 : str, optional
+        Name of the first genotype group (default = "WT").
+
+    gp2 : str, optional
+        Name of the second genotype group (default = "KO-Hypo").
+
+    title_precision : str, optional
+        Extra string appended to figure and window titles (default = "").
+
+    Returns
+    -------
+    dict of pd.DataFrame
+        Dictionary mapping each analyzed period ("stim", "start_stim (250ms)", "end_stim (250ms)",
+        "pre_stim (200ms)") to the aggregated DataFrame containing mean values per animal and genotype.
+    """
     period_dict = {"stim": [30, 45], "start_stim (250ms)": [30, 37], "end_stim (250ms)": [37, 45], "pre_stim (200ms)": [24, 30]}
     fig, ax = plt.subplots(nrows=2, ncols=4, figsize=(24, 16), constrained_layout=True)
     fig_shuf, ax_shuf = plt.subplots(nrows=4, ncols=4, figsize=(24, 32), constrained_layout=True)
@@ -623,7 +999,36 @@ def plot_hit_miss_classif_comp(frame_model_df, gp1="WT", gp2="KO-Hypo", title_pr
     plt.show()
     return data_dict
 
+
 def anova_accuracy(frame_model_df):
+    """
+    Perform one-way ANOVA on hit accuracy (TPR) and miss error (FPR)
+    between genotypes during the stimulus window.
+
+    The function selects the `"stim"` period (frames 30–45), averages metrics
+    across frames for each animal, and tests for genotype effects using ANOVA.
+    Results are printed to console for both hit accuracy and miss error.
+
+    Time windows available in the dataset (but only `"stim"` is used here):
+    - `"stim"`: full stimulus window (frames 30–45).
+    - `"start_stim (250ms)"`: early stimulus subwindow (frames 30–37).
+    - `"end_stim (250ms)"`: late stimulus subwindow (frames 37–45).
+    - `"pre_stim (200ms)"`: baseline window before stimulus onset (frames 24–30).
+
+    Parameters
+    ----------
+    frame_model_df : pd.DataFrame
+        Input DataFrame containing columns:
+        - "Genotype": categorical labels for each animal (e.g., "WT", "KO-Hypo").
+        - "ID": animal identifier.
+        - "Frame": time frame index.
+        - "TPR", "FPR": classification metrics per frame.
+
+    Returns
+    -------
+    pd.DataFrame
+        Aggregated DataFrame with mean values per animal and genotype across the `"stim"` window.
+    """
     period_dict = {"stim": [30, 45], "start_stim (250ms)": [30, 37], "end_stim (250ms)": [37, 45],
                    "pre_stim (200ms)": [24, 30]}
     start, end = period_dict["stim"]
@@ -636,19 +1041,48 @@ def anova_accuracy(frame_model_df):
     print(aov_miss)
     return data
 
-# anova_data = anova_accuracy(frame_model_df_res)
 
 def compare_accuracy(recs, random=42):
     """
-    Train a logistic regression model with different subsets of neurons and compare the decoding accuracy.
-    The mean neuronal activity during the stimulus period is used to train the model
+    Train logistic regression classifiers on excitatory (EXC), inhibitory (INH),
+    and combined (EXC+INH) neuronal populations to compare decoding accuracy of stimulus detection.
+
+    For each recording, the function extracts mean z-scored activity of EXC and INH neurons
+    during the stimulus period. Logistic regression is trained on balanced subsets of the
+    training data using random undersampling to avoid class imbalance bias.
+    Models are evaluated using 4-fold stratified cross-validation, with accuracies computed for:
+    - All neurons (EXC + INH).
+    - EXC neurons only.
+    - INH neurons only.
+
+    Accuracies are aggregated across folds, compared within and across genotypes,
+    and visualized as boxplots:
+    - Within-genotype comparisons (all vs. EXC, all vs. INH, EXC vs. INH).
+    - Between-genotype comparisons (WT vs. KO-Hypo for each neuron subset).
+
     Parameters
     ----------
-    recs
+    recs : list
+        List of recording objects, each providing:
+        - `.get_estimated_activity(zscore=True, n_type="EXC"/"INH", estimator="mean", real_duration=True)`
+          → matrix of neuronal activity (neurons × time).
+        - `.detected_stim` → binary stimulus detection labels per trial.
+        - `.filename` → identifier for the recording.
+        - `.genotype` → genotype label (e.g., "WT", "KO-Hypo").
+
+    random : int, default=42
+        Random seed for reproducibility in cross-validation splits
+        and random undersampling.
 
     Returns
     -------
-
+    pd.DataFrame
+        Aggregated DataFrame containing mean accuracy values per recording and genotype with columns:
+        - "Genotype": genotype label.
+        - "ID": recording identifier.
+        - "acc_all": accuracy with EXC+INH neurons.
+        - "acc_exc": accuracy with EXC neurons only.
+        - "acc_inh": accuracy with INH neurons only.
     """
     rows = []
     skf = StratifiedKFold(n_splits=4, shuffle=True, random_state=random)
@@ -701,6 +1135,52 @@ def compare_accuracy(recs, random=42):
 
 
 def correlate_nb_accuracy(recs, accuracy_df, threshold="median"):
+    """
+    Correlate decoding accuracy with the number of neurons (EXC, INH, and total)
+    and compare neuron counts between high- and low-performing animals.
+
+    For each recording, the function retrieves the number of excitatory (EXC) and
+    inhibitory (INH) neurons and adds them to the accuracy DataFrame. Linear regression
+    analyses are performed between the number of neurons and decoding accuracy
+    for EXC, INH, and combined populations. The plots include scatter points grouped
+    by genotype, regression lines, and annotations of R² and p-values.
+
+    Additionally, the function splits animals into “low” and “high” performers
+    based on an accuracy threshold (median, mean, middle of the range, or a custom float).
+    Boxplots compare the number of neurons between low- and high-accuracy groups
+    for each metric (acc_exc, acc_inh, acc_all).
+
+    Parameters
+    ----------
+    recs : dict
+        Dictionary mapping recording IDs to recording objects. Each recording object must provide:
+        - `.zscore_exc.shape[0]`: number of excitatory neurons.
+        - `.zscore_inh.shape[0]`: number of inhibitory neurons.
+
+    accuracy_df : pd.DataFrame
+        DataFrame with decoding accuracy results per recording.
+        Must include columns:
+        - "ID": recording identifier (matching keys in `recs`).
+        - "Genotype": genotype label.
+        - "acc_exc": decoding accuracy using EXC neurons.
+        - "acc_inh": decoding accuracy using INH neurons.
+        - "acc_all": decoding accuracy using all neurons.
+
+    threshold : {"median", "mean", "middle"} or float, default="median"
+        Method for splitting recordings into low- and high-accuracy groups:
+        - "median": median accuracy across animals.
+        - "mean": mean accuracy across animals.
+        - "middle": midpoint between min and max accuracy.
+        - float: user-defined threshold value.
+
+    Returns
+    -------
+    pd.DataFrame
+        Updated accuracy DataFrame including new columns:
+        - "n_EXC": number of excitatory neurons per recording.
+        - "n_INH": number of inhibitory neurons per recording.
+        - "n_all": total number of neurons per recording.
+    """
     accuracy_df["n_EXC"] = accuracy_df["ID"].map(lambda id_: recs[id_].zscore_exc.shape[0])
     accuracy_df["n_INH"] = accuracy_df["ID"].map(lambda id_: recs[id_].zscore_inh.shape[0])
     accuracy_df["n_all"] = accuracy_df["n_EXC"] + accuracy_df["n_INH"]
@@ -775,8 +1255,46 @@ def correlate_nb_accuracy(recs, accuracy_df, threshold="median"):
 
 
 def correlate_frame_accuracy_metrics(frame_model_df, features_df, period="stim"):
-    """Correlates the model accuracy during the stim period with various metrics to identify which feature grasp the
-    more information"""
+    """
+    Correlates model accuracy during a specific time period with neuronal features to assess
+    which features carry the most information about decoding performance.
+
+    The function computes the mean model accuracy (TPR, FPR, and overall Accuracy) over
+    a selected period (`stim`, `start`, `end`, or `pre_stim`), then matches these accuracies
+    with averaged neuronal features. Only responsive neurons (amplitude != 0) are considered
+    when extracting features. Two types of feature DataFrames are created:
+      - behavior-specific (features computed separately for hit and miss trials),
+      - global (features aggregated across all trials for each animal).
+    These features are then correlated with model accuracy metrics, both globally and within
+    genotypes (WT and KO-Hypo). Scatter plots with regression lines and R² / p-value annotations
+    are generated for each feature-accuracy pair across trial types (All, Hit, Miss).
+
+    Parameters
+    ----------
+    frame_model_df : pandas.DataFrame
+        DataFrame containing frame-wise model results with columns such as
+        "Frame", "Genotype", "ID", "TPR", "FPR", "Accuracy".
+    features_df : pandas.DataFrame
+        DataFrame containing neuronal features with columns like
+        "ID", "Genotype", "behavior", "bounded_x0", "amplitude", "threshold", etc.
+        Only neurons with nonzero amplitude are considered.
+    period : str, optional
+        The time window over which model accuracy is averaged. Options are:
+        - "stim" (default) : frames 30–45
+        - "start" : frames 30–37
+        - "end"   : frames 37–45
+        - "pre_stim" : frames 24–30
+
+    Returns
+    -------
+    data : pandas.DataFrame
+        Merged DataFrame of averaged features and model accuracy for each animal,
+        with behavior-specific separation where applicable.
+    results : pandas.DataFrame
+        Summary of correlation statistics (R² and p-values) for each feature-accuracy pair,
+        computed globally, for WT only, and for KO-Hypo only. This can be used to identify
+        which neuronal features explain variance in decoding accuracy.
+    """
     # Getting a Dataframe of the model mean accuracy during stim, one row per animal
     period_dict = {"stim": [30, 45], "start": [30, 37], "end": [37, 45], "pre_stim": [24, 30]}
     start, end = period_dict[period]
@@ -841,7 +1359,45 @@ def correlate_frame_accuracy_metrics(frame_model_df, features_df, period="stim")
     return data, results
 
 def correlate_frame_accuracy_ntn_df(frame_model_df, ntn_df, period="stim"):
-    """Correlates the model accuracy during the period with the ntn_cosim"""
+    """
+    Correlates frame-wise model accuracy with neuron-to-neuron cosine similarity (ntn_cosim) metrics.
+
+    For each animal, the mean model accuracy (TPR, FPR, and overall Accuracy) is computed over a
+    specified period (`stim`, `start`, `end`, or `pre_stim`). These accuracies are then merged
+    with the ntn_cosim metrics from `ntn_df`. Data is separated into trial types: "All", "Hit",
+    and "Miss".
+
+    Correlation analyses are performed for each feature in `ntn_df`:
+      - Globally across all animals.
+      - Within WT genotype only.
+      - Within KO-Hypo genotype only.
+    Linear regression lines are plotted, and R² and p-values are annotated for each feature-accuracy pair.
+    Scatter points are colored by genotype.
+
+    Parameters
+    ----------
+    frame_model_df : pandas.DataFrame
+        DataFrame containing frame-wise model results with columns such as
+        "Frame", "Genotype", "ID", "TPR", "FPR", "Accuracy".
+    ntn_df : pandas.DataFrame
+        DataFrame containing neuron-to-neuron cosine similarity metrics, with columns
+        including "ID", "Genotype", "Behavior", and one or more feature columns.
+    period : str, optional
+        Time window over which model accuracy is averaged. Options:
+        - "stim" (default) : frames 30–45
+        - "start" : frames 30–37
+        - "end"   : frames 37–45
+        - "pre_stim" : frames 24–30
+
+    Returns
+    -------
+    data : pandas.DataFrame
+        Merged DataFrame of ntn_cosim features and model accuracy for each animal, separated by
+        trial type.
+    results : pandas.DataFrame
+        Summary of correlation statistics (R² and p-values) for each feature-accuracy pair,
+        computed globally, for WT only, and for KO-Hypo only.
+    """
     # Getting a Dataframe of the model mean accuracy during stim, one row per animal
     period_dict = {"stim": [30, 45], "start": [30, 37], "end": [37, 45], "pre_stim": [24, 30]}
     start, end = period_dict[period]

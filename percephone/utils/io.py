@@ -11,7 +11,7 @@ from multiprocessing import Pool, cpu_count, pool
 # import percephone.core.recording as pc
 
 
-def read_info(folder_name, rois):
+def read_info(folder_name, rois, detection=True):
     """ Extract inhibitory ids and frame rate from rois_info Excel sheet
     with the folder name
 
@@ -27,14 +27,23 @@ def read_info(folder_name, rois):
     date = str(folder_name[:4]) + "-" + str(folder_name[4:6]) + "-" + str(folder_name[6:8])
     row = rois[(rois["Number"] == name) & (rois["Recording number"] == int(n_record)) &
                (rois["Date"] == pd.to_datetime(date))]
+    if len(row) == 0:
+        print(f"No record corresponding to {name} {date} {n_record} in the ROI file")
     inhibitory_ids = eval(f"[{str(row["Inhibitory neurons: ROIs"].values[0])}]")
-    hit_rates = [float(x) for x in row["Stimulus detection"].values[0].split(',')]
-    return (row["Number"].values[0],
-            inhibitory_ids,
-            row["Frame Rate (Hz)"].values[0], row["Genotype"].values[0], row["Threshold"].values[0], row["ITI1 ONLY"].values[0], hit_rates)
+    iti = row["ITI1 ONLY"].values[0]
+    if detection:
+        hit_rates = [float(x) for x in row["Stimulus detection"].values[0].split(',')]
+        threshold = row["Threshold"].values[0]
+        condition = None
+    else:
+        hit_rates = None
+        threshold = None
+        condition = row["Condition"].values[0]
+    return (row["Number"].values[0], inhibitory_ids,
+            row["Frame Rate (Hz)"].values[0], row["Genotype"].values[0], condition, threshold, iti, hit_rates, n_record)
 
 
-def extract_analog_from_mesc(path_mesc, tuple_mesc, frame_rate, analog_fs=20000, savepath=""):
+def extract_analog_from_mesc(path_mesc, tuple_mesc, frame_rate, analog_fs=10000, savepath=""):
     """
     Extract analog from mesc file for ITI curve. Save it as analog.txt in order to be used by percephone
     Parameters
@@ -47,36 +56,51 @@ def extract_analog_from_mesc(path_mesc, tuple_mesc, frame_rate, analog_fs=20000,
         path where to save the analog.txt
     """
     factor = int(analog_fs /10000)
-    print("Analog signal extraction from .mesc file.")
+    print(f"Analog signal extraction from .mesc file (session={tuple_mesc}")
     file = h5py.File(path_mesc)
     dset = file['MSession_' + str(tuple_mesc[0])]
     unit = dset['MUnit_' + str(tuple_mesc[1])]
-    iti = unit['Curve_3']  # 3 in general   # 4 for after 01-2024
+    # Print the different channels and curves
+    for key in unit.keys():
+        try:
+            ds = unit[key]
+            print(f"{key}: shape={ds.shape}, dtype={ds.dtype}")
+        except Exception as e:
+            try:
+                ds = unit[key]['CurveDataYRawData']
+                print(f"{key}/CurveDataYRawData: shape={ds.shape}, dtype={ds.dtype}")
+            except Exception as e:
+                print(f"{key}: not accessible ({e})")
+    iti = unit['Curve_1']  # 3 in general   # 4 for after 01-2024   # 2 or 1 for naive/trained
     iti_curve = np.array(iti['CurveDataYRawData'])
-    timings = unit['Curve_1']  # 1 or 0
-    timing_curve = np.array(timings['CurveDataYRawData'])
+    # timings = unit['Curve_0']  # 1 or 0
+    # timing_curve = np.array(timings['CurveDataYRawData'])
     # if timings.attrs.get("CurveDataYConversionType") == 2:
     #     refvalues = np.array(timings.attrs.get("CurveDataYConversionReferenceValues"))
     #     xp = refvalues[::2]
     #     yp = refvalues[1::2]
     #     timing_curve = np.interp(timing_curve, xp, yp)
     #     print(timing_curve)
-    fig, ax = plt.subplots(1, 1, figsize=(18, 10))
-    ax.plot(iti_curve )
+    fig, ax = plt.subplots(1, 1, figsize=(18, 10), constrained_layout=True)
+    ax.plot(iti_curve)
     ax.set_title("Check if its look like ITI curve!")
     plt.show()
-    end_timings = timing_curve[-1] * np.array(timings.attrs.get("CurveDataYConversionConversionLinearScale"))
-    start_timings = timing_curve[0] * np.array(timings.attrs.get("CurveDataYConversionConversionLinearScale"))
-    fig, ax = plt.subplots(1, 1, figsize=(18, 10))
-    diff_frames = np.diff(timing_curve * np.array(timings.attrs.get("CurveDataYConversionConversionLinearScale")))
-    ax.plot(diff_frames)
-    latency = np.sum(np.subtract(diff_frames, (1/frame_rate)*1000))
-    ax.set_title(f"Check lost frames!  Total latency: {latency:.2f}")
-    plt.show()
-    print(f"Start timings: {start_timings }")
-    print(f"end_timings {end_timings}")
-    end_timings_frames = len(timing_curve)*((1/frame_rate)*1000)
-    print(f"nb frames in mesc: {len(timing_curve)}")
+    # print(f"Timing curve -> start: {timing_curve[0]} - end: {timing_curve[-1]} - len = {len(timing_curve)}")
+    # print(f'ConversionLinearScale: {np.array(timings.attrs.get("CurveDataYConversionConversionLinearScale"))}')
+    # end_timings = timing_curve[-1] * np.array(timings.attrs.get("CurveDataYConversionConversionLinearScale"))
+    # start_timings = timing_curve[0] * np.array(timings.attrs.get("CurveDataYConversionConversionLinearScale"))
+    # # Plotting the ITI curve
+    # fig, ax = plt.subplots(1, 1, figsize=(18, 10))
+    # diff_frames = np.diff(timing_curve * np.array(timings.attrs.get("CurveDataYConversionConversionLinearScale")))
+    # ax.plot(diff_frames)
+    # latency = np.sum(np.subtract(diff_frames, (1/frame_rate)*1000))
+    # ax.set_title(f"Check lost frames!  Total latency: {latency:.2f}")
+    # plt.show()
+    # print(f"Start timings: {start_timings }")
+    # print(f"end_timings {end_timings}")
+    # end_timings_frames = len(timing_curve)*((1/frame_rate)*1000)
+    end_timings_frames = unit['Channel_0'].shape[0]*((1/frame_rate)*1000)
+    # print(f"nb frames in mesc: {len(timing_curve)}")
     print(f"end timing frames: {end_timings_frames}")
     end_timings_iti = len(iti_curve[::factor])/10
     print(f"end timing iti {end_timings_iti}")
@@ -90,7 +114,7 @@ def extract_analog_from_mesc(path_mesc, tuple_mesc, frame_rate, analog_fs=20000,
     analog_np[3] = iti_curve_[:nb_points]
     analog_t = np.transpose(analog_np)
     np.savetxt(savepath + 'analog.txt', analog_t, fmt='%.8g', delimiter="\t")
-    np.save(savepath + 'timestamps_frames.npy', timing_curve * np.array(timings.attrs.get("CurveDataYConversionConversionLinearScale")))
+    # np.save(savepath + 'timestamps_frames.npy', timing_curve * np.array(timings.attrs.get("CurveDataYConversionConversionLinearScale")))
     print(f"len analog : {analog_np.shape}")
     print(f"last analog : {analog_np[:,-1]}")
     print("Analog saved.")

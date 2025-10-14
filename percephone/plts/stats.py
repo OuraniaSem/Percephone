@@ -6,6 +6,7 @@ import warnings
 
 import mplcursors
 import numpy as np
+import pandas as pd
 from scipy.stats import levene, shapiro, mannwhitneyu, yeojohnson, boxcox
 import pingouin as pg
 import statsmodels.api as sm
@@ -133,6 +134,115 @@ def boxplot(ax, gp1, gp2, ylabel, paired=False, title="", ylim=[], colors=[sty.w
     ax.spines["left"].set_color("black")
     ax.tick_params(axis='both', which='major', length=8, width=3, color="black", left=True)
 
+
+def boxplot_df(ax, data_df, group_col, data_col, ylabel="", title="", ylim=[], colors=[], gp_sort=[], force_normality=False):
+    data = data_df.dropna(axis=0, how="any", subset=[data_col], inplace=False)
+    groups_id = sorted(data[group_col].unique())
+    nb_groups = len(groups_id)
+    if gp_sort:
+        assert len(gp_sort) == len(groups_id), f"Please provide a single unique position for each of the following group: \n{groups_id}"
+        assert all(gp in groups_id for gp in gp_sort), "Some elements in gp_sort are not in the data."
+        groups_id = gp_sort
+    # Defining colors if not provided
+    if colors:
+        assert len(colors) == nb_groups, f"Please provide {nb_groups} color(s) for the following group(s): {groups_id}"
+    else:
+        cmap = plt.get_cmap("rainbow")
+        colors = [cmap(i / max(len(groups_id) - 1, 1)) for i in range(nb_groups)]
+    # Defining the positions
+    x = np.linspace(0, 1, nb_groups)
+
+    groups_rows = []
+    for i, gp_id in enumerate(groups_id):
+        groups_rows.append({"Label": gp_id, "x_pos": x[i], "Color": colors[i], "Data": data[data[group_col] == gp_id][data_col].values})
+    groups_df = pd.DataFrame(groups_rows)
+    groups_df["Max"] = groups_df["Data"].apply(lambda x: np.nanmax(x))
+    groups_df["shapiro_p"] = groups_df["Data"].apply(lambda x: shapiro(np.array(x))[1] if len(set(x)) > 1 else np.nan)
+
+
+    for i, group in groups_df.iterrows():
+        # Plot the boxplots
+        ax.boxplot(group["Data"], positions=[group["x_pos"]], patch_artist=True, showfliers=False, widths=1/nb_groups,
+                   meanprops=dict(marker="o", markerfacecolor=group["Color"], markeredgecolor='black'),
+                   boxprops=dict(facecolor='white', color=group["Color"]),
+                   capprops=dict(color=group["Color"]),
+                   whiskerprops=dict(color=group["Color"]),
+                   medianprops=dict(color=group["Color"]))
+        # Plot the data points
+        x_random = np.random.normal(group["x_pos"], 0.02, size=len(group["Data"]))
+        ax.plot(x_random, group["Data"], marker="o", alpha=0.5, ms=14, markerfacecolor="None",
+                linestyle="None", markeredgecolor=group["Color"], markeredgewidth=4)
+
+    # Retrieving the maximum of the data for the ylim and significance
+    max_y_0 = max(data[data_col].values)
+    min_y_0 = min(data[data_col].values)
+    max_y = max_y_0 if np.isfinite(max_y_0) else 1
+    min_y = min_y_0 if np.isfinite(min_y_0) else 0
+
+    # Setting the ylim if specified
+    valid_ylim = True
+    if len(ylim) != 0:
+        if not (ylim[0] <= min_y and ylim[1] >= max_y):
+            warnings.warn("The ylim you have set don't cover the data range.")
+            valid_ylim = False
+            if min_y < ylim[0]:
+                ylabel = "← " + ylabel
+            if max_y > ylim[1]:
+                ylabel = ylabel + " →"
+        ax.set_ylim(ylim)
+    else:
+        y_lim_sup = ax.get_ylim()[1]
+        ax.set_ylim(top=y_lim_sup * (1.2 if y_lim_sup > 0 else 0.8))
+
+    # Plotting the significance bar
+    bar_color = "black"
+    bar_offset = 0.025 * (ax.get_ylim()[1] - ax.get_ylim()[0])
+    y_all = max_y + (nb_groups * (nb_groups - 1) / 2 + 1) * bar_offset
+    ax.plot([x[0], x[-1]], [y_all, y_all], lw=mpl.rcParams['axes.linewidth'], c=bar_color, clip_on=False)
+    # Computing and plotting the significance symbol
+    if all(groups_df["shapiro_p"] > 0.05) or force_normality:
+        normality = True
+    else:
+        normality = False
+    if normality:
+        if pg.homoscedasticity(data=data, dv=data_col, group=group_col)["equal_var"].values[0]:
+            aov_results = pg.anova(data=data, dv=data_col, between=group_col)
+            test = "ANOVA"
+        else:
+            aov_results = pg.welch_anova(data=data, dv=data_col, between=group_col)
+            test = "Welch's ANOVA"
+    else:
+        aov_results = pg.kruskal(data=data, dv=data_col, between=group_col)
+        test = "Kruskal-Wallis test"
+    ax.text(0.05, 0.99, test, ha='left', va='top', c="gray", fontsize=sty.font_signif/2, transform=ax.transAxes)
+    aov_symbol = symbol_pval(aov_results["p-unc"][0])
+    # Plotting the global ANOVA significance
+    ax.text((x[0] + x[-1]) * 0.5, y_all, aov_symbol, ha='center', va='bottom', c=bar_color, fontsize=sty.font_signif)
+    # Computing and plotting each pairwise comparison significance
+    post_hoc = pg.pairwise_tests(data=data, dv=data_col, between=group_col, padjust="bonf", parametric=normality)
+    for i, row in post_hoc.iterrows():
+        x_A = groups_df[groups_df["Label"] == row["A"]]["x_pos"].values[0]
+        x_B = groups_df[groups_df["Label"] == row["B"]]["x_pos"].values[0]
+        p_corr = row["p-corr"]
+        post_hoc_symbol = symbol_pval(p_corr)
+        # y = max([groups_df[groups_df["Label"] == row["A"]]["Max"].values[0],
+        #          groups_df[groups_df["Label"] == row["B"]]["Max"].values[0]]) + (i+1)*0.025*(ax.get_ylim()[1] - ax.get_ylim()[0])
+        y = max_y + (i+1) * bar_offset
+        ax.plot([x_A, x_B], [y, y], lw=mpl.rcParams['axes.linewidth']/2, c=bar_color, clip_on=False)
+        ax.text((x_A + x_B) * 0.5, y, post_hoc_symbol, ha='center', va='bottom', c=bar_color, fontsize=sty.font_signif/2)
+
+    yticks = list(ax.get_yticks())
+    ax.set_yticks(sorted(yticks))
+    ax.set_xticks([])
+    ax.set_title(title)
+    ax.set_ylabel(ylabel) if valid_ylim else ax.set_ylabel(ylabel, fontweight="bold", color="red")
+    ax.set_xlabel(None)
+    ax.grid(False)
+    ax.set_facecolor("white")
+    ax.spines[["right", "top", "bottom"]].set_visible(False)
+    ax.spines["left"].set_color("black")
+    ax.tick_params(axis='both', which='major', length=8, width=3, color="black", left=True)
+    return groups_df, post_hoc
 
 # Not used
 def barplot(wt, ko, ylabel):
@@ -882,16 +992,26 @@ if __name__ == "__main__":
     ko_bms =  [11, 21, 18, 19, 20, 22]           # KO BMS
     cond = [["WT", "DMSO"], ["WT", "BMS"], ["KO", "BMS"], ["KO", "DMSO"]]
     labs = ["Genotype", "Treatment"]
-    fig, ax = plt.subplots(nrows=2, ncols=4, figsize=(24, 16), constrained_layout=True)
-    boxplot(ax[0, 0], ko_dmso, ko_bms, "ylabel", paired=True, title="WT", ylim=[], colors=[sty.wt_color, sty.wt_light_color])
-    boxplot(ax[1, 0], ko_dmso, ko_bms, "ylabel", paired=True, title="WT [BMS]", ylim=[], colors=[sty.wt_bms_color, sty.wt_bms_light_color])
-    boxplot(ax[0, 1], ko_dmso, ko_bms, "ylabel", paired=True, title="All KO", ylim=[], colors=[sty.all_ko_color, sty.all_ko_light_color])
-    boxplot(ax[1, 1], ko_dmso, ko_bms, "ylabel", paired=True, title="All KO [BMS]", ylim=[], colors=[sty.all_ko_bms_color, sty.all_ko_bms_light_color])
-    boxplot(ax[0, 2], ko_dmso, ko_bms, "ylabel", paired=True, title="KO-Hypo", ylim=[], colors=[sty.hypo_color, sty.hypo_light_color])
-    boxplot(ax[1, 2], ko_dmso, ko_bms, "ylabel", paired=True, title="KO-Hypo [BMS]", ylim=[], colors=[sty.hypo_bms_color, sty.hypo_bms_light_color])
-    boxplot(ax[0, 3], ko_dmso, ko_bms, "ylabel", paired=True, title="KO", ylim=[], colors=[sty.ko_color, sty.ko_light_color])
-    ax[1, 3].set_axis_off()
-    plt.show()
+    # fig, ax = plt.subplots(nrows=2, ncols=4, figsize=(24, 16), constrained_layout=True)
+    # boxplot(ax[0, 0], ko_dmso, ko_bms, "ylabel", paired=True, title="WT", ylim=[], colors=[sty.wt_color, sty.wt_light_color])
+    # boxplot(ax[1, 0], ko_dmso, ko_bms, "ylabel", paired=True, title="WT [BMS]", ylim=[], colors=[sty.wt_bms_color, sty.wt_bms_light_color])
+    # boxplot(ax[0, 1], ko_dmso, ko_bms, "ylabel", paired=True, title="All KO", ylim=[], colors=[sty.all_ko_color, sty.all_ko_light_color])
+    # boxplot(ax[1, 1], ko_dmso, ko_bms, "ylabel", paired=True, title="All KO [BMS]", ylim=[], colors=[sty.all_ko_bms_color, sty.all_ko_bms_light_color])
+    # boxplot(ax[0, 2], ko_dmso, ko_bms, "ylabel", paired=True, title="KO-Hypo", ylim=[], colors=[sty.hypo_color, sty.hypo_light_color])
+    # boxplot(ax[1, 2], ko_dmso, ko_bms, "ylabel", paired=True, title="KO-Hypo [BMS]", ylim=[], colors=[sty.hypo_bms_color, sty.hypo_bms_light_color])
+    # boxplot(ax[0, 3], ko_dmso, ko_bms, "ylabel", paired=True, title="KO", ylim=[], colors=[sty.ko_color, sty.ko_light_color])
+    # ax[1, 3].set_axis_off()
+    # plt.show()
     # gp1 = [[1, 2, np.nan, 3], [1, np.nan, 3, 5], [1, 2, 3, 5]]
     # gp2 = [[1, 2, 4, 3], [np.nan, 3, 5, 6], [1, np.NaN, np.NaN, 5]]
     # boxplot_3_conditions(gp1, gp2)
+
+    fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(12, 8), constrained_layout=True)
+    test_df2 = pd.DataFrame({"ID": [4444, 4445, 4446, 4447, 4448, 4449, 4450, 4460, 4461, 4541, 4542, 4543],
+                            "Group": ["A", "A", "A", "B", "B", "B", "C", "C", "C", "D", "D", "D"],
+                            "Data": [10, 11, 12, 10 ,15, 12, 15, 16, 19, 8, 6, 7]})
+    test_df = pd.DataFrame({"ID": [4444, 4445, 4446, 4447, 4448, 4449, 4450, 4460, 4461],
+                            "Group": ["A", "A", "A", "B", "B", "B", "C", "C", "C"],
+                            "Data": [10, 11, 12, 10 ,15, 12, 15, 16, 19]})
+    data_test_3, post_3 = boxplot_df(ax[0], test_df, "Group", "Data", ylabel="Fake Data", title="Test ANOVA plot", ylim=[], colors=[])
+    data_test_4, post_4 = boxplot_df(ax[1], test_df2, "Group", "Data", ylabel="Fake Data", title="Test ANOVA plot", ylim=[], colors=[])

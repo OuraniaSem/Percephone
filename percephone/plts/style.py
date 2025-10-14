@@ -35,7 +35,7 @@ mpl.rcParams["ytick.minor.width"] = 2
 mpl.rcParams["ytick.major.size"] = 6
 mpl.rcParams["ytick.left"] = True
 
-# region === === === Colors === === ===
+# region === === === Tactile Detection === === ===
 # ========== For genotypes ==========
 wt_color = "#3d6993"
 wt_light_color = "#7aabd2"
@@ -72,4 +72,10 @@ exc_color = "#229708"
 inh_color = "#cba61b"
 exc_inh_color = "#859717"
 
+# endregion
+# region === === === Learning and Motivation === === ===
+# ========== For conditions ==========
+naive_color = "#4cc9f0"
+trained_color = "#480ca8"
+motivated_color = "#f72585"
 # endregion

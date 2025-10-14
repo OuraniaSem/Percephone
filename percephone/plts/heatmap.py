@@ -270,13 +270,16 @@ def interactive_heatmap(rec, activity):
     ax.set_ylabel('Neurons')
     tax1.set_title(f"{rec.filename} ({rec.genotype}) - {rec.threshold}")
 
-    durations = np.zeros(len(rec.stim_time), dtype=int)
-    for i, timing in enumerate(rec.stim_time):
-        if rec.detected_stim[i]:
-            durations[i] = np.min(np.array(rec.lick_time - timing)[(rec.lick_time - timing) > 0])
-        else:
-            durations[i] = (int(0.5 * rec.sf))
-    durations[durations > int(0.5 * rec.sf)] = int(0.5 * rec.sf)
+    if len(rec.detected_stim) > 0:
+        durations = np.zeros(len(rec.stim_time), dtype=int)
+        for i, timing in enumerate(rec.stim_time):
+            if rec.detected_stim[i]:
+                durations[i] = np.min(np.array(rec.lick_time - timing)[(rec.lick_time - timing) > 0])
+            else:
+                durations[i] = (int(0.5 * rec.sf))
+        durations[durations > int(0.5 * rec.sf)] = int(0.5 * rec.sf)
+    else:
+        durations = np.full(len(rec.stim_time), int(0.5 * rec.sf))
 
     def on_click(event):
         if event.button is MouseButton.RIGHT:

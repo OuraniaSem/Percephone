@@ -10,7 +10,7 @@ import os
 import matplotlib
 import numpy as np
 import pandas as pd
-import scipy.signal as ss
+import scipy.signal as ssig
 import matplotlib.pyplot as plt
 from percephone.utils.io import read_info, correction_drift_fluo, get_idx_frame_mesc, extract_analog_from_mesc
 from percephone.analysis.response import *
@@ -55,7 +55,7 @@ class Recording:
         Stores the spikes trains for inhibitory neurons at each timestep as a 2D numpy.ndarray (nb neurons * nb frames)
     """
 
-    def __init__(self, input_path, rois_path, mean_f_bsl, cache=True):
+    def __init__(self, input_path, rois_path, mean_f_bsl, cache=True, detection=True):
         """
         Initializes the Recording object with the given input path, the rois file path, and cache parameters.
 
@@ -72,7 +72,7 @@ class Recording:
         # Initialization of the instance attributes by reading the ROIs file
         folder_name = os.path.basename(os.path.normpath(input_path)) + "/"
         rois = pd.read_excel(rois_path)
-        self.filename, inhibitory_ids, self.sf, self.genotype, self.threshold, self.iti1_only, self.hit_rates = read_info(folder_name, rois)
+        self.filename, inhibitory_ids, self.sf, self.genotype, self.condition, self.threshold, self.iti1_only, self.hit_rates, self.session_id = read_info(folder_name, rois, detection=detection)
         try:
             if self.filename == 7554 and self.genotype == "KO-DMSO":
                 _, _, self.x0_psy, self.k_psy = sigmoid_fit(np.arange(start=0, stop=13, step=2), self.hit_rates, p0=[4.0, 1.0])
@@ -113,6 +113,18 @@ class Recording:
         if os.path.exists(input_path + 'matrice_resp_exc.npy') and os.path.exists(input_path + 'matrice_resp_inh.npy'):
             self.matrices["EXC"]["Responsivity"] = np.load(self.input_path + "matrice_resp_exc.npy")
             self.matrices["INH"]["Responsivity"] = np.load(self.input_path + "matrice_resp_inh.npy")
+        if os.path.exists(input_path + 'matrice_resp_exc_dff.npy') and os.path.exists(input_path + 'matrice_resp_inh_dff.npy'):
+            print(f"{self.filename}-{self.condition} → DFF Resp files in th folder")
+            self.matrices["EXC"]["Responsivity_dff"] = np.load(self.input_path + "matrice_resp_exc_dff.npy")
+            self.matrices["INH"]["Responsivity_dff"] = np.load(self.input_path + "matrice_resp_inh_dff.npy")
+
+        # Using the already computed peak delay and amplitude matrices if existing
+        if os.path.exists(input_path + 'matrice_peak_delay_exc.npy') and os.path.exists(input_path + 'matrice_peak_delay_inh.npy'):
+            self.matrices["EXC"]["Peak_delay"] = np.load(self.input_path + "matrice_peak_delay_exc.npy")
+            self.matrices["INH"]["Peak_delay"] = np.load(self.input_path + "matrice_peak_delay_inh.npy")
+        if os.path.exists(input_path + 'matrice_peak_amp_exc.npy') and os.path.exists(input_path + 'matrice_peak_amp_inh.npy'):
+            self.matrices["EXC"]["Peak_amplitude"] = np.load(self.input_path + "matrice_peak_amp_exc.npy")
+            self.matrices["INH"]["Peak_amplitude"] = np.load(self.input_path + "matrice_peak_amp_inh.npy")
 
         # Using the already computed AUC matrices if existing
         if os.path.exists(input_path + 'matrice_auc_exc.npy') and os.path.exists(input_path + 'matrice_auc_inh.npy'):
@@ -133,11 +145,9 @@ class Recording:
         if os.path.exists(input_path + 'matrice_neg_auc_fixpre_exc.npy') and os.path.exists(input_path + 'matrice_neg_auc_fixpre_inh.npy'):
             self.matrices["EXC"]["neg_AUC_fixpre"] = np.load(self.input_path + "matrice_neg_auc_fixpre_exc.npy")
             self.matrices["INH"]["neg_AUC_fixpre"] = np.load(self.input_path + "matrice_neg_auc_fixpre_inh.npy")
-
         if os.path.exists(input_path + 'hit_tuned_exc.npy') and os.path.exists(input_path + 'hit_tuned_inh.npy'):
             self.hit_tuned_exc = np.load(self.input_path + "hit_tuned_exc.npy")
             self.hit_tuned_inh = np.load(self.input_path + "hit_tuned_inh.npy")
-
         if os.path.exists(input_path + 'amp_tuned_exc.npy') and os.path.exists(input_path + 'amp_tuned_inh.npy'):
             self.amp_tuned_exc = np.load(self.input_path + "amp_tuned_exc.npy")
             self.amp_tuned_inh = np.load(self.input_path + "amp_tuned_inh.npy")
@@ -210,7 +220,31 @@ class Recording:
         np.save(save_path, df_f_percen)
         return df_f_percen
 
-    def responsivity(self):
+    def zscore(self, dff):
+        """
+        Computes the standardized zscore from the ΔF/F.
+
+        Parameters
+        ----------
+        dff: numpy.ndarray
+            delta f over f array from inh or exc
+
+        Returns
+        -------
+        zscore: numpy.ndarray
+            zscore for one set of neurons (inh or exc)
+        """
+        data = np.concatenate(np.stack(
+            dff[:,
+            np.linspace(self.stim_time - int(0.5 * self.sf), self.stim_time, num=int(0.5 * self.sf) + 1, dtype=int)],
+            axis=2))
+        mean_bsl = np.mean(data, axis=0)
+        std = np.std(data, axis=0)
+
+        zsc = np.divide(np.subtract(dff, mean_bsl[:, np.newaxis]), std[:, np.newaxis])
+        return zsc
+
+    def responsivity(self, dff=False):
         """
         Compute responsivity matrices for both excitatory and inhibitory neurons. For a given neuron and a given
         stimulation, one integer among the following is added to the matrix :
@@ -223,11 +257,18 @@ class Recording:
         attribute.
         """
         print("Calcul of repsonsivity.")
-        self.matrices["EXC"]["Responsivity"] = np.array(resp_matrice(self, self.zscore_exc))
-        self.matrices["INH"]["Responsivity"] = np.array(resp_matrice(self, self.zscore_inh))
-        np.save(self.input_path + "matrice_resp_exc.npy", self.matrices["EXC"]["Responsivity"])
-        np.save(self.input_path + "matrice_resp_inh.npy", self.matrices["INH"]["Responsivity"])
-
+        if dff:
+            exc_act = self.df_f_exc
+            inh_act = self.df_f_inh
+            suffix = "_dff"
+        else:
+            exc_act = self.zscore_exc
+            inh_act = self.zscore_inh
+            suffix = ""
+        self.matrices["EXC"][f"Responsivity{suffix}"] = np.array(resp_matrice(self, exc_act))
+        self.matrices["INH"][f"Responsivity{suffix}"] = np.array(resp_matrice(self, inh_act))
+        np.save(self.input_path + f"matrice_resp_exc{suffix}.npy", self.matrices["EXC"][f"Responsivity{suffix}"])
+        np.save(self.input_path + f"matrice_resp_inh{suffix}.npy", self.matrices["INH"][f"Responsivity{suffix}"])
 
     def hit_tuned(self):
         self.hit_tuned_exc = classify_neurons(self, n_type="EXC", seed=42, n_shuffles=5000, zscore=False)
@@ -240,7 +281,6 @@ class Recording:
         self.amp_tuned_inh = amp_tuned_neurons(self, n_type="INH", seed=42, n_shuffles=5000, zscore=False)
         np.save(self.input_path + "amp_tuned_exc.npy", self.hit_tuned_exc)
         np.save(self.input_path + "amp_tuned_inh.npy", self.hit_tuned_inh)
-
 
     def delay_onset_map(self):
         """
@@ -298,9 +338,6 @@ class Recording:
         np.save(self.input_path + "matrice_neg_auc_fixpre_exc.npy", self.matrices["EXC"]["neg_AUC_fixpre"])
         np.save(self.input_path + "matrice_neg_auc_fixpre_inh.npy", self.matrices["INH"]["neg_AUC_fixpre"])
 
-
-
-
     def peak_delay_amp(self):
         """
         Calculate the zscore peak delay and peak amplitude for each neuron and each stimulation. The peak is the maximum
@@ -319,6 +356,38 @@ class Recording:
                                                                                                    self.zscore_inh,
                                                                                                    self.matrices["INH"][
                                                                                                        "Responsivity"])
+        np.save(self.input_path + "matrice_peak_delay_exc.npy", self.matrices["EXC"]["Peak_delay"])
+        np.save(self.input_path + "matrice_peak_delay_inh.npy", self.matrices["INH"]["Peak_delay"])
+        np.save(self.input_path + "matrice_peak_amp_exc.npy", self.matrices["EXC"]["Peak_amplitude"])
+        np.save(self.input_path + "matrice_peak_amp_inh.npy", self.matrices["INH"]["Peak_amplitude"])
+
+    def get_perc_resp(self, pattern=1, n_type="EXC", dff_resp=False):
+        """Returns an array of the percentage of responsive neurons per across trials"""
+        assert n_type in ["EXC", "INH"], "Please provide a valid neuron type (EXC or INH)"
+        assert pattern in [-1, 0, 1, 2], "Please provide a valid pattern (-1, 0, 1 or 2)"
+        if dff_resp:
+            resp_mat = np.array(self.matrices[n_type]["Responsivity_dff"])
+        else:
+            resp_mat = np.array(self.matrices[n_type]["Responsivity"])
+        nb_neurons = self.zscore_exc.shape[0] if n_type == "EXC" else self.zscore_inh.shape[0]
+        if pattern == 2:
+            count = np.sum(resp_mat != 0, axis=0)
+        else:
+            count = np.sum(resp_mat == pattern, axis=0)
+        return count/nb_neurons * 100
+
+    def get_mean_param(self, pattern=1, n_type="EXC", parameter="Peak_amplitude"):
+        assert n_type in ["EXC", "INH"], "Please provide a valid neuron type (EXC or INH)"
+        assert pattern in [-1, 0, 1, 2], "Please provide a valid pattern (-1, 0, 1 or 2)"
+        assert parameter in ["Peak_amplitude", "Peak_delay", "AUC", "cum_AUC"], "Please provide a valid parameter (Peak_amplitude or Peak_delay)"
+        resp_mat = np.array(self.matrices[n_type]["Responsivity"])
+        para_mat = np.array(self.matrices[n_type][parameter])
+        if pattern == 2:
+            abs_inh_para_mat = np.absolute(np.where(resp_mat == -1, para_mat, np.nan))
+            filtered_para_mat = np.where(resp_mat == 1, para_mat, np.where(resp_mat == -1, abs_inh_para_mat, np.nan))
+        else:
+            filtered_para_mat = np.where(resp_mat == pattern, para_mat, np.nan)
+        return np.nanmean(filtered_para_mat, axis=0)
 
 
 class RecordingStimulusOnly(Recording):
@@ -335,7 +404,8 @@ class RecordingStimulusOnly(Recording):
     stim_ampl : list[float]
         A list of the stimulation amplitudes.
     """
-    def __init__(self, input_path, inhibitory_ids, sf, correction=True):
+    # def __init__(self, input_path, inhibitory_ids, sf, correction=True): # before modif
+    def __init__(self, input_path, rois_path, mean_f_bsl=False, correction=True):
         """
         This method initializes an instance of the class. It reads the 'analog.txt' file from the input path and checks
         if the "stim_ampl_time.csv" file exists. If it exists, it reads the stimulus time and amplitude data from it.
@@ -352,14 +422,23 @@ class RecordingStimulusOnly(Recording):
         correction : bool, optional
             Whether to perform correction. Default is True.
         """
-        super().__init__(input_path, inhibitory_ids, sf)  # TODO: bad initialization of the instance
+        # super().__init__(input_path, inhibitory_ids, sf)  # TODO: bad initialization of the instance
+
+        super().__init__(input_path, rois_path, mean_f_bsl, cache=True, detection=False)
         self.analog = pd.read_csv(input_path + 'analog.txt', sep="\t")
+        print(f"{self.filename} -> Initialization successful.")
         if os.path.exists(input_path + 'stim_ampl_time.csv'):
-            print('Analog information already computed. Reading stimulus time and amplitude.')
+            print(f"{self.filename} -> Analog information already computed. Reading stimulus time and amplitude.")
             self.stim_time = pd.read_csv(input_path + 'stim_ampl_time.csv', usecols=['stim_time']).values.flatten()
             self.stim_ampl = pd.read_csv(input_path + 'stim_ampl_time.csv', usecols=['stim_ampl']).to_numpy().flatten()
         else:
+            print(f"{self.filename} -> Starting synchronization...")
             self.synchronization_no_iti(correction)
+        self.zscore_exc = self.zscore(self.df_f_exc)
+        self.zscore_inh = self.zscore(self.df_f_inh)
+        self.lick_time = np.array([])
+        self.detected_stim = np.array([])
+        self.stim_durations = np.full_like(self.stim_time, 15, dtype=int)
 
     def synchronization_no_iti(self, correction_shift):
         """
@@ -380,7 +459,7 @@ class RecordingStimulusOnly(Recording):
         """
         print('Obtaining time and amplitude from analog.')
         analog_trace = self.analog.iloc[:, 1].to_numpy()
-        stim_peak_indx, stim_properties = ss.find_peaks(analog_trace, prominence=0.15, distance=200)
+        stim_peak_indx, stim_properties = ssig.find_peaks(analog_trace, prominence=0.15, distance=200)
         peaks_diff = np.diff(stim_peak_indx)
         indices = np.concatenate([[True], peaks_diff > 50000])
         stim_peak_indx = stim_peak_indx[indices]
@@ -389,6 +468,7 @@ class RecordingStimulusOnly(Recording):
         stim_ampl_sort = np.sort(np.unique(stim_ampl_pre))
         stim_ampl = np.zeros(len(stim_ampl_pre))
         convert = {4: [4, 6, 8, 10], 5: [4, 6, 8, 10, 12], 6: [2, 4, 6, 8, 10, 12], 7: [0, 2, 4, 6, 8, 10, 12]}
+        print("Checkpoint 1: OK")
         for i in range(len(stim_ampl_sort)):
             stim_ampl[stim_ampl_pre == stim_ampl_sort[i]] = convert[len(stim_ampl_sort)][i]
 
@@ -407,7 +487,7 @@ class RecordingStimulusOnly(Recording):
         axs[0].plot(stim_onset_idx, analog_trace[stim_onset_idx], 'x')
         plt.show()
         stim_onsets = np.array([int((stim / 1000) * self.sf) for stim in stim_onset_time])
-
+        print("Checkpoint 2: OK")
         def correction(idx):
             """ Perform a frames' correction. 8 is the number of frames that the last stimulus will be shifted before"""
             coeff = ((8 / len(self.df_f_exc[0])) / (stim_onsets[-1] - stim_onsets[0]))
@@ -461,7 +541,7 @@ class RecordingAmplDet(Recording):
         A 2D numpy.ndarray of the zscore of each inhibitory neuron at each frame of the recording
         (nb neurons * nb frames)
     """
-    def __init__(self, input_path, starting_trial, rois_path, tuple_mesc=(0, 0), mean_f=False, correction=False,
+    def __init__(self, input_path, starting_trial, rois_path, tuple_mesc=None, mean_f=False, correction=False,
                  cache=True, iti="ITI2", habituation=False):
         """
         Parameters
@@ -473,15 +553,16 @@ class RecordingAmplDet(Recording):
         rois_path: str
             Path to the Excel ROI file.
         tuple_mesc : tuple, optional
-            Tuple representing the measurements per second (mesc) values for extraction, default is (0, 0).
+            Tuple representing the measurements per second (mesc) values for extraction, default is (0, 0) -> to take the session number from the folder, if cha.
         correction : bool, optional
-            Flag indicating whether to apply correction, default is True.
+            Flag indicating whether to apply correction, default is False.
         cache: bool
             Boolean value indicating whether to use cached files if available.
         analog_sf : int, optional
             Sampling frequency of the analog data, default is 10000.
         """
-        super().__init__(input_path, rois_path, mean_f, cache=cache)
+        detection = not habituation
+        super().__init__(input_path, rois_path, mean_f, cache=cache, detection=detection)
         self.xls = pd.read_excel(input_path + 'bpod.xls', header=None)
         self.stim_time = []
         self.stim_ampl = []
@@ -492,6 +573,8 @@ class RecordingAmplDet(Recording):
         self.detected_stim = []
         self.mlr_labels_exc = {}
         self.mlr_labels_inh = {}
+
+        session_mesc = tuple_mesc if tuple_mesc is not None else (int(self.session_id[0]), int(self.session_id[1]))
 
         with open(input_path + 'params_trial.json', "r") as read_file:
             # a list of dictionaries, 1 per trial (nb, freq, amp, trial_type)
@@ -511,7 +594,7 @@ class RecordingAmplDet(Recording):
             if not os.path.exists(input_path + 'analog.txt'):
                 mesc_file = [file for file in os.listdir(input_path) if file.endswith(".mesc")]
                 if mesc_file:
-                    extract_analog_from_mesc(input_path + mesc_file, tuple_mesc, self.sf, savepath=input_path)
+                    extract_analog_from_mesc(input_path + mesc_file[0], session_mesc, self.sf, savepath=input_path)
 
                 else:
                     print(f"{self.filename}: No analog.txt either mesc file in the folder!")
@@ -523,7 +606,8 @@ class RecordingAmplDet(Recording):
             else:
                 self.analog[0] = (self.analog[0]).astype(int)
                 analog_sf = 1000
-            iti = "ITI1" if self.iti1_only else "ITI2"
+            iti_dict = {True: "ITI1", False: "ITI2", "ITI": "ITI"}
+            iti = iti_dict[self.iti1_only]
             print(f"{self.filename}: {iti}")
             self.synchronization_with_iti(starting_trial, analog_sf, correction, iti, habituation)
 
@@ -531,30 +615,8 @@ class RecordingAmplDet(Recording):
         self.zscore_inh = self.zscore(self.df_f_inh)
         # removing timeout_times that comes after the end of the neuronal record
         self.timeout_time = np.array([i for i in self.timeout_time if i <= self.zscore_exc.shape[1]])
-
-    def zscore(self, dff):
-        """
-        Computes the standardized zscore from the ΔF/F.
-
-        Parameters
-        ----------
-        dff: numpy.ndarray
-            delta f over f array from inh or exc
-
-        Returns
-        -------
-        zscore: numpy.ndarray
-            zscore for one set of neurons (inh or exc)
-        """
-        data = np.concatenate(np.stack(
-            dff[:,
-            np.linspace(self.stim_time - int(0.5 * self.sf), self.stim_time, num=int(0.5 * self.sf) + 1, dtype=int)],
-            axis=2))
-        mean_bsl = np.mean(data, axis=0)
-        std = np.std(data, axis=0)
-
-        zsc = np.divide(np.subtract(dff, mean_bsl[:, np.newaxis]), std[:, np.newaxis])
-        return zsc
+        if max(self.stim_durations) == 0:
+            self.stim_durations = np.full_like(self.stim_time, 15, dtype=int)
 
     def synchronization_with_iti(self, starting_trial, analog_s, correction, iti, habituation):
         """
@@ -642,20 +704,23 @@ class RecordingAmplDet(Recording):
         # Get lists for the reward, timeout and stimulus from the xls calculations for the trials that were recorded
         for icount in range(starting_trial, len(ITI_time_xls)):
             if icount < end_protocol:
-                reward_to_analog.append(reward_time_to_ITI[icount])
-                timeout_to_analog.append(timeout_time_to_ITI[icount])
+                if not habituation:  # TODO here
+                    reward_to_analog.append(reward_time_to_ITI[icount])
+                    timeout_to_analog.append(timeout_time_to_ITI[icount])
                 stimulus_to_analog.append(stimulus_time_to_ITI[icount])
                 licks_to_analog.append(licks[icount])
                 ampl_recording.append(self.json[icount]["amp"])
         ampl_recording_iter = iter(ampl_recording)
         for icount_time in range(len(index_iti_final)):
             ITI_time_analog = self.analog.at[index_iti_final[icount_time], 't']
-            reward_time_analog = ITI_time_analog + reward_to_analog[icount_time]
-            timeout_time_analog = ITI_time_analog + timeout_to_analog[icount_time]
+            if not habituation: #TODO here
+                reward_time_analog = ITI_time_analog + reward_to_analog[icount_time]
+                timeout_time_analog = ITI_time_analog + timeout_to_analog[icount_time]
             stimulus_time_analog = ITI_time_analog + stimulus_to_analog[icount_time]
             licks_time_analog = ITI_time_analog + licks_to_analog[icount_time]
-            index_reward = self.analog.index[self.analog['t'] == reward_time_analog].to_list()
-            index_timeout = self.analog.index[self.analog['t'] == timeout_time_analog].to_list()
+            if not habituation:  # TODO here
+                index_reward = self.analog.index[self.analog['t'] == reward_time_analog].to_list()
+                index_timeout = self.analog.index[self.analog['t'] == timeout_time_analog].to_list()
             index_stimulus = self.analog.index[self.analog['t'] == stimulus_time_analog].to_list()
             for lick in licks_time_analog:
                 index_licks = self.analog.index[self.analog['t'] == lick].to_list()
@@ -665,7 +730,7 @@ class RecordingAmplDet(Recording):
                         lick_time = lick_time - int(((1 / self.sf) * (index_licks[0] / analog_s)) * (1 / 3))
                         # lick_time = get_idx_frame_mesc(index_licks[0], timestamps)
                     self.lick_time.append(lick_time)
-            if len(index_reward) != 0:
+            if not habituation and len(index_reward) != 0: #TODO here
                 index_rew= int((index_reward[0] / analog_s) * self.sf)
                 if correction:
                     self.reward_time.append(
@@ -673,7 +738,7 @@ class RecordingAmplDet(Recording):
                 else:
                     self.reward_time.append(index_rew)
 
-            if len(index_timeout) != 0:
+            if not habituation and len(index_timeout) != 0: #TODO here
                 if len(index_stimulus) == 0:
                     timeout_trial = next(ampl_recording_iter)
                 index_timeo = int((index_timeout[0] / analog_s) * self.sf)
@@ -691,7 +756,7 @@ class RecordingAmplDet(Recording):
                 else:
                     self.stim_time.append(index_stim)
                 self.stim_ampl.append(amp)
-                if len(index_reward) != 0:
+                if not habituation and len(index_reward) != 0: #TODO here
                     self.detected_stim.append(True)
                 else:
                     self.detected_stim.append(False)
@@ -809,31 +874,6 @@ class RecordingAmplDet(Recording):
             pre_time = [time - (i + 1) for i in range(int(no_lick_period_duration * self.sf))]
             mask.append(not any(np.isin(pre_time, self.lick_time)))
         return mask
-
-    def get_perc_resp(self, pattern=1, n_type="EXC"):
-        """Returns an array of the percentage of responsive neurons per across trials"""
-        assert n_type in ["EXC", "INH"], "Please provide a valid neuron type (EXC or INH)"
-        assert pattern in [-1, 0, 1, 2], "Please provide a valid pattern (-1, 0, 1 or 2)"
-        resp_mat = np.array(self.matrices[n_type]["Responsivity"])
-        nb_neurons = self.zscore_exc.shape[0] if n_type == "EXC" else self.zscore_inh.shape[0]
-        if pattern == 2:
-            count = np.sum(resp_mat != 0, axis=0)
-        else:
-            count = np.sum(resp_mat == pattern, axis=0)
-        return count/nb_neurons * 100
-
-    def get_mean_param(self, pattern=1, n_type="EXC", parameter="Peak_amplitude"):
-        assert n_type in ["EXC", "INH"], "Please provide a valid neuron type (EXC or INH)"
-        assert pattern in [-1, 0, 1, 2], "Please provide a valid pattern (-1, 0, 1 or 2)"
-        assert parameter in ["Peak_amplitude", "Peak_delay", "AUC", "cum_AUC"], "Please provide a valid parameter (Peak_amplitude or Peak_delay)"
-        resp_mat = np.array(self.matrices[n_type]["Responsivity"])
-        para_mat = np.array(self.matrices[n_type][parameter])
-        if pattern == 2:
-            abs_inh_para_mat = np.absolute(np.where(resp_mat == -1, para_mat, np.nan))
-            filtered_para_mat = np.where(resp_mat == 1, para_mat, np.where(resp_mat == -1, abs_inh_para_mat, np.nan))
-        else:
-            filtered_para_mat = np.where(resp_mat == pattern, para_mat, np.nan)
-        return np.nanmean(filtered_para_mat, axis=0)
 
     def get_estimated_activity(self, zscore=True, n_type="EXC", estimator="mean", real_duration=True):
         assert n_type in ["EXC", "INH"], "Please provide a valid neuron type (EXC or INH)"

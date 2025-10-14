@@ -17,7 +17,7 @@ import percephone.plts.style as sty
 # endregion ============================================================================================================
 # region ======================================== Response features ====================================================
 
-def get_features(recs, amp_delay=True, auc=False):
+def get_features(recs, amp_delay=True, auc=False, habituation=False, dff_resp=False):
     """
     Extract neuronal response features from multiple recordings and compile them into a structured DataFrame.
     For each trial in each recording, compute the percentage of recruited neurons, optionally their mean peak
@@ -48,18 +48,24 @@ def get_features(recs, amp_delay=True, auc=False):
     # === === Building the DataFrame === ===
     rows = []
     for rec in recs:
-        feature_vectors = {
-            # --- Retrieving the target and covariate ---
-            "behavior": rec.detected_stim,
+        if habituation:
+            feature_vectors = {}
+            id = f"{int(rec.filename)}-{rec.condition}"
+        else:
+            # --- Retrieving the target ---
+            feature_vectors = {"behavior": rec.detected_stim}
+            id = int(rec.filename)
+        feature_vectors.update({
+            # --- Retrieving the covariate ---
             "amplitude": rec.stim_ampl,
             # --- Retrieving the different predictors ---
             # Percentage of recruited neurons
-            "act_EXC_perc": rec.get_perc_resp(pattern=1, n_type="EXC"),
-            "inh_EXC_perc": rec.get_perc_resp(pattern=-1, n_type="EXC"),
-            "rec_EXC_perc": rec.get_perc_resp(pattern=2, n_type="EXC"),
-            "act_INH_perc": rec.get_perc_resp(pattern=1, n_type="INH"),
-            "inh_INH_perc": rec.get_perc_resp(pattern=-1, n_type="INH"),
-            "rec_INH_perc": rec.get_perc_resp(pattern=2, n_type="INH")}
+            "act_EXC_perc": rec.get_perc_resp(pattern=1, n_type="EXC", dff_resp=dff_resp),
+            "inh_EXC_perc": rec.get_perc_resp(pattern=-1, n_type="EXC", dff_resp=dff_resp),
+            "rec_EXC_perc": rec.get_perc_resp(pattern=2, n_type="EXC", dff_resp=dff_resp),
+            "act_INH_perc": rec.get_perc_resp(pattern=1, n_type="INH", dff_resp=dff_resp),
+            "inh_INH_perc": rec.get_perc_resp(pattern=-1, n_type="INH", dff_resp=dff_resp),
+            "rec_INH_perc": rec.get_perc_resp(pattern=2, n_type="INH", dff_resp=dff_resp)})
         if amp_delay:
             feature_vectors.update({
                 # Mean peak amplitude for responsive neurons
@@ -88,9 +94,12 @@ def get_features(recs, amp_delay=True, auc=False):
                     "inh_EXC_cum_auc": rec.get_mean_param(pattern=-1, n_type="EXC", parameter="cum_AUC"),
                     "act_INH_cum_auc": rec.get_mean_param(pattern=1, n_type="INH", parameter="cum_AUC"),
                     "inh_INH_cum_auc": rec.get_mean_param(pattern=-1, n_type="INH", parameter="cum_AUC")})
-        nb_trials = len(feature_vectors["behavior"])
+        nb_trials = len(feature_vectors["amplitude"])
         for trial_id in range(nb_trials):
-            row = {"ID": rec.filename, "Genotype": rec.genotype, "threshold": rec.session_threshold, "bounded_x0": rec.bounded_x0, "Trial": trial_id}
+            if habituation:
+                row = {"ID": id, "Condition": rec.condition, "threshold": rec.session_threshold, "bounded_x0": rec.bounded_x0, "Trial": trial_id}
+            else:
+                row = {"ID": id, "Genotype": rec.genotype, "threshold": rec.session_threshold, "bounded_x0": rec.bounded_x0, "Trial": trial_id}
             for feature, vector in feature_vectors.items():
                 row[feature] = vector[trial_id]
             rows.append(row)
@@ -1699,7 +1708,7 @@ if __name__ == '__main__':
     files = os.listdir(directory)
     files_ = [file for file in files if file.endswith("synchro")]
     def opening_rec(fil, i):
-        rec = pc.RecordingAmplDet(directory + fil + "/", 0, roi_path, cache=True, correction=False)
+        rec = pc.RecordingAmplDet(directory + fil + "/", 0, roi_path, cache=True, correction=False, habituation=False)
         return rec
     workers = cpu_count()
     pool = pool.ThreadPool(processes=workers)
@@ -1735,28 +1744,29 @@ if __name__ == '__main__':
     #             compare_sub_supra_within(data, behavior_filter=filter, genotype=gen, comparison=comp)
     #   --- Between ---
     # wt, hypo = compare_sub_supra_between(data, behavior_filter=None, gp1="WT-DMSO", gp2="WT-BMS", gp1_amps="real_mean_genotype", gp2_amps="gp1_threshold", colors=[sty.wt_color, sty.wt_bms_color])
-    wt, hypo = compare_sub_supra_between(full_data, behavior_filter=True, gp1="WT-BMS", gp2="KO-BMS", gp1_amps="all", gp2_amps="all", colors=[sty.wt_color, sty.hypo_color])
+    # wt, hypo = compare_sub_supra_between(full_data, behavior_filter=True, gp1="WT-BMS", gp2="KO-BMS", gp1_amps="all", gp2_amps="all", colors=[sty.wt_color, sty.hypo_color])
     #   --- Between (Deltas) ---
     # sub_supra_delta_df = compare_sub_supra_deltas(data, behavior_filter=None, gp1="WT", gp2="KO-Hypo")
     # sub_supra_delta_df_wt, sub_supra_delta_df_hypo = compare_sub_supra_deltas(data, behavior_filter=None, gp1="WT",
     #                                                                           gp2="KO-Hypo", delta="sub")
-    btw_wt, btw_hypo = compare_det_undet_between(full_data, gp1="WT", gp2="KO-Hypo", amplitude="all", behavior="miss")
+    # btw_wt, btw_hypo = compare_det_undet_between(full_data, gp1="WT", gp2="KO-Hypo", amplitude="all", behavior="miss")
 
     # --- Hit vs. Miss ---
-    det, undet = compare_det_undet(full_data, genotype="KO-Hypo", amplitude="all") # /!\ full_data for all amp and data for threshold analysis
+    # det, undet = compare_det_undet(full_data, genotype="KO-Hypo", amplitude="all") # /!\ full_data for all amp and data for threshold analysis
 
     # mean_det = np.mean(det.drop(columns="Genotype"), axis=0)
     # mean_undet = np.mean(undet.drop(columns="Genotype"), axis=0)
 
-    results = plot_neuron_perc_amp(recs.values(), pattern="recruited", detected_trials=True, undetected_trials=True,
-                                   nogo_norm=False, ylim=[0, 60], transformation="yeojohnson", normality=[False, True],
-                                   homogeneity=[False, False], colors=[sty.hypo_bms_color, sty.hypo_color, sty.wt_bms_color, sty.wt_color])
-    results = plot_neuron_perc_amp(recs.values(), pattern="recruited", detected_trials=True, undetected_trials=False,
-                                   nogo_norm=False, ylim=[0, 60], transformation="yeojohnson", normality=[False, True],
-                                   homogeneity=[False, True], colors=[sty.ko_color, sty.hypo_color, sty.wt_color])
+    # results = plot_neuron_perc_amp(recs.values(), pattern="recruited", detected_trials=True, undetected_trials=True,
+    #                                nogo_norm=False, ylim=[0, 60], transformation="yeojohnson", normality=[False, True],
+    #                                homogeneity=[False, False], colors=[sty.hypo_bms_color, sty.hypo_color, sty.wt_bms_color, sty.wt_color])
+    wt_recs = {k: v for k, v in recs.items() if getattr(v, "genotype", None) == "WT"}
+    results = plot_neuron_perc_amp(wt_recs.values(), pattern="activated", detected_trials=True, undetected_trials=False,
+                                   nogo_norm=False, ylim=[0, 60], transformation=None, normality=[True, True],
+                                   homogeneity=[True, True], colors=[sty.wt_color])
 
-    nogo_df = nogo_fa_cr(recs.values(), condition=None)
-    delta_df = delta_hit_miss_comp(full_data, threshold_only=False, wt_threshold=False, condition="BMS")
+    # nogo_df = nogo_fa_cr(recs.values(), condition=None)
+    # delta_df = delta_hit_miss_comp(full_data, threshold_only=False, wt_threshold=False, condition="BMS")
     # delta_df = delta_hit_miss_comp(data, threshold_only=False, wt_threshold=False, condition="BMS") #/!\ full_data for all amp and data for threshold analysis
 
 
